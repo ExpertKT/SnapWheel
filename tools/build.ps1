@@ -1,11 +1,11 @@
 ﻿<#
-    SnapWheel 一键构建
+    SnapWheel 一键构建（build.ps1）
 
-    用法（在项目根目录执行）：
-        .\build.ps1               编译两条产品线到 build\
-        .\build.ps1 -Test         编完顺便跑全部测试
-        .\build.ps1 -Package      再打包成分发 zip（含使用说明）
-        .\build.ps1 -Clean        先清空 build\ 再编
+    用法（双击 tools\一键编译.bat 最省事；命令行见下）：
+        .\tools\build.ps1               编译两条产品线到 build\
+        .\tools\build.ps1 -Test         编完顺便跑全部测试
+        .\tools\build.ps1 -Package      再打包成分发 zip（含使用说明）
+        .\tools\build.ps1 -Clean        先清空 build\ 再编
 
     两条产品线来自同一份 SnapWheel.cs：
         完整版     普通编译            -> SnapWheel.exe          含万能键
@@ -19,7 +19,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 脚本在 tools\ 下，项目根目录是它的上一级（也兼容直接放在根目录的情况）
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = $scriptDir
+if (-not (Test-Path (Join-Path $root 'SnapWheel.cs'))) { $root = Split-Path -Parent $scriptDir }
 $src  = Join-Path $root 'SnapWheel.cs'
 $ico  = Join-Path $root 'snapwheel.ico'
 $out  = Join-Path $root $OutDir

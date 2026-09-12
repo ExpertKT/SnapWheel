@@ -60,15 +60,17 @@
 | 不想有那个圆盘，只要多 Wheel + 缩放/锁定 | **v0.2.x 无万能键版** | 其余功能完全一样 |
 
 到 [Releases](https://github.com/ExpertKT/SnapWheel/releases) 选版本下载（完整版是 Latest）；
-也可以直接下 [`build.ps1 -Package`](#从源码构建) 打出来的两个 zip。
+也可以直接下 [`tools\build.ps1 -Package`](#从源码构建) 打出来的两个 zip。
 
 ### 从源码构建
 
+不想碰命令行？**双击 `tools\一键编译.bat`** 就行，编两条线 + 跑全部测试 + 打包，一步到位。
+
 ```powershell
-.\build.ps1                # 一键编译两条线到 build\
-.\build.ps1 -Test          # 顺便跑全部测试
-.\build.ps1 -Package       # 再打包成分发 zip（含使用说明）
-.\build.ps1 -Clean         # 先清空 build\ 再编
+.\tools\build.ps1                # 一键编译两条线到 build\
+.\tools\build.ps1 -Test          # 顺便跑全部测试
+.\tools\build.ps1 -Package       # 再打包成分发 zip（含使用说明）
+.\tools\build.ps1 -Clean         # 先清空 build\ 再编
 ```
 
 输出：
@@ -157,12 +159,17 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 ## 项目结构
 
+根目录只放一个核心源码文件，其余都收在子目录里：
+
 ```
 SnapWheel.cs            单文件源码（约 5100 行，全部逻辑都在这）
 snapwheel.ico           图标
-build.ps1               一键编译两条产品线（-Test 跑测试 / -Package 打包）
-record-version.ps1      版本归档工具（编译两条线 + 快照 + 写说明）
-tests/                  7 套可复跑的测试与工具
+tools/                  构建与发布工具（不想碰命令行，双击里面的 .bat 即可）
+  一键编译.bat            编译两条线 + 跑全部测试 + 打好分发 zip
+  发布新版本.bat          改版本号 + 编译 + 归档到 versions\
+  build.ps1             上面那个 .bat 实际调用的脚本
+  record-version.ps1    版本归档脚本
+tests/                  8 套可复跑的测试与工具
   resize-geometry-test.cs   缩放几何仿真（角度 × 比例 × 四角 × 摆位）
   io-test.cs                图片格式解析 / 导入落盘
   render-smoke.cs           绘制状态矩阵 + 风格组合 + DPI 缩放 + 淡出
@@ -170,15 +177,16 @@ tests/                  7 套可复跑的测试与工具
   probe-test.cs             窗口命中测试探针
   uipi-drag-test.cs         权限隔离（UIPI）拖放复现
   ui-shot.cs                把各状态渲染成 PNG，离线看设计效果
+  promo-shot.cs             生成宣传图（合成假桌面，不泄露真实屏幕）
 docs/                   README 用的界面截图
-dist/使用说明.txt        给用户的说明
+dist/                  给用户的使用说明
 versions/              35 个历史版本快照（源码 + exe + 图标 + 说明）
 CHANGELOG.md           完整更新日志（含两条产品线说明）
 ```
 
 ## 开发
 
-' 平时用 build.ps1 -Test 就够了；下面是单独跑某一套：
+' 平时用 `tools\build.ps1 -Test` 就够了；下面是单独跑某一套：
 
 ```powershell
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
