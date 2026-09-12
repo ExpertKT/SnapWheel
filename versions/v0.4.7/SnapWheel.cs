@@ -2137,11 +2137,17 @@ namespace SnapWheel
             return d * AnimK();
         }
 
-        // 展开（彩虹拉出）
-        public void ExpandWheel()
+        // 展开（彩虹拉出）；fast=true 用于截图流程，快一点
+        public void ExpandWheel() { ExpandWheel(false); }
+
+        public void ExpandWheel(bool fast)
         {
             if (IsExpanded && Visible) { _lastActive = DateTime.Now; return; }
-            if (_settings.IntroAnim) StartIntro();
+            if (_settings.IntroAnim)
+            {
+                StartIntro();
+                if (fast) { _introAt = DateTime.Now; _introDur = RingUnitDur() * 0.55f; }
+            }
             else { _collapsed = false; _collapsing = false; _intro = false; _introT = 1f; ShowWheel(); }
             _lastActive = DateTime.Now;
         }
@@ -2174,7 +2180,7 @@ namespace SnapWheel
             _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
             _ringTo = 0f;
             _introAt = DateTime.Now;
-            _introDur = RingUnitDur() * (fast ? 0.42f : 1f);
+            _introDur = RingUnitDur() * (fast ? 0.25f : 1f);
             _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
             _lastActive = DateTime.Now;
             Render();                       // 立刻出一帧，点了就能看到动
@@ -2350,13 +2356,20 @@ namespace SnapWheel
 
         // 开启动画里每个元素的进度（1 = 完全就位）；delay 越大越晚出场。
         // 收起时 _introT 是往回走的，同一个公式自然就变成倒放。
+        //
+        // delay 是 0..1 的"相对出场顺序"，不是秒！原来写的是秒（最大 0.72s + 0.55s 过渡），
+        // 总时长从 2.15s 压到 1.07s 后，后面的元素根本走不到位 ——
+        // 动画一结束就从半路"啪"地闪到最终位置（按钮、计数胶囊就是这么闪的）。
         float IntroP(float delay)
         {
             if (_collapsed) return 0f;
             if (!_intro) return 1f;
-            float t = _introT * _introDur;             // 秒
-            if (t <= delay) return 0f;
-            return Gfx.EaseOut((t - delay) / 0.55f);
+            const float span = 0.42f;                  // 单个元素自己的过渡长度（占总时长比例）
+            float start = delay * (1f - span);
+            float x = (_introT - start) / span;
+            if (x <= 0f) return 0f;
+            if (x >= 1f) return 1f;
+            return Gfx.EaseOut(x);
         }
 
         // 从屏幕外滑进来的位移（朝角落方向，也就是朝屏幕外）
@@ -3822,15 +3835,25 @@ namespace SnapWheel
             DrawNubs(g, a);      // 展开状态下也画一个"收起"把手（贴着另一条屏幕边）
         }
 
-        // ---- 贴边小把手：收起态画"拉出"，展开态画"收起" ----
+        // ---- 贴边小把手：收起态画"拉出"、展开态画"收起" ----
+        // 两个把手按环的进度交叉淡入淡出（并各自从屏幕边滑出来），不会"啪"地换一个
         void DrawNubs(Graphics g, int a)
         {
-            bool outMode = _collapsed;
+            float k = _collapsed ? 0f : (_intro ? _introT : 1f);    // 0=完全收起，1=完全展开
+            if (k < 0.995f) DrawNubOne(g, a, true, 1f - k);
+            if (k > 0.005f) DrawNubOne(g, a, false, k);
+        }
+
+        void DrawNubOne(Graphics g, int a, bool outMode, float vis)
+        {
+            if (vis <= 0.004f) return;
             RectangleF r = outMode ? NubOutRect() : NubInRect();
-            bool hov = outMode ? _nubOutHover : _nubInHover;
-            float k = _nubHov;
+            bool hov = vis > 0.98f && (outMode ? _nubOutHover : _nubInHover);
+            float k = vis > 0.98f ? _nubHov : 0f;
             Color acc = _accentCur;
-            int alpha = (int)(a * (0.62f + 0.38f * k));
+            int alpha = (int)(a * vis * vis * (0.62f + 0.38f * k));   // vis 平方：淡出更干脆
+            // 出场/退场时贴着屏幕边滑一下（像从边里抽出来）
+            float slide = (1f - vis) * 16f;
 
             // 悬停时稍微长一点、厚一点，像"被拉出来一点"
             float grow = 10f * k;
@@ -3838,6 +3861,8 @@ namespace SnapWheel
             RectangleF rr = vertical
                 ? new RectangleF(r.X, r.Y - grow / 2f, r.Width, r.Height + grow)
                 : new RectangleF(r.X - grow / 2f, r.Y, r.Width + grow, r.Height);
+            if (vertical) rr = new RectangleF(rr.X - (Sx() > 0 ? slide : -slide), rr.Y, rr.Width, rr.Height);
+            else rr = new RectangleF(rr.X, rr.Y + (Sy() > 0 ? slide : -slide), rr.Width, rr.Height);
 
             using (GraphicsPath p = Gfx.Round(rr, Math.Min(rr.Width, rr.Height) / 2f))
             {
@@ -5461,12 +5486,12 @@ namespace SnapWheel
                 StoreItem ni = st.Add(ov.Result);
                 _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
                 // 截完播拉出动画（收起态拉出来最自然；原来是展开的就直接显示）
-                if (_settings.CollapseMode) _wheel.ExpandWheel();
+                if (_settings.CollapseMode) _wheel.ExpandWheel(true);   // 截图流程：拉出也快一点
                 else _wheel.ShowWheel();
             }
             else if (wasExpanded)
             {
-                _wheel.ExpandWheel();            // 取消了截图，也把轮盘拉回来
+                _wheel.ExpandWheel(true);        // 取消了截图，也把轮盘拉回来
             }
         }
 

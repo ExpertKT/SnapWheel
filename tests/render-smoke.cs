@@ -456,6 +456,80 @@ namespace SnapWheel
                     thin ? "OK  " : "FAIL", opaqueCollapsed, opaqueExpanded);
                 if (thin) pass++; else fail++;
 
+                // ---- 动画收尾必须"对位"：不能结束时才闪到最终位置 ----
+                {
+                    MethodInfo ip = wt.GetMethod("IntroP", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo isf = wt.GetMethod("IntroShift", BindingFlags.NonPublic | BindingFlags.Instance);
+                    float[] delays = { 0f, 0.16f, 0.30f, 0.40f, 0.50f, 0.62f, 0.72f };
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f);
+                    float worstEnd = 1f;
+                    for (int k = 0; k < delays.Length; k++)
+                    {
+                        float p = (float)ip.Invoke(f, new object[] { delays[k] });
+                        if (p < worstEnd) worstEnd = p;
+                    }
+                    bool endOk = worstEnd > 0.999f;
+                    // 动画走到 96% 时，所有元素都应该基本到位（偏移 < 4px），否则收尾会"啪"地闪一下
+                    F(f, "_intro", true); F(f, "_introT", 0.96f);
+                    float maxShift = 0f;
+                    for (int k = 0; k < delays.Length; k++)
+                    {
+                        float p = (float)ip.Invoke(f, new object[] { delays[k] });
+                        PointF sh = (PointF)isf.Invoke(f, new object[] { p });
+                        maxShift = Math.Max(maxShift, Math.Max(Math.Abs(sh.X), Math.Abs(sh.Y)));
+                    }
+                    F(f, "_intro", false); F(f, "_introT", 1f);
+                    bool tailOk = maxShift < 4f;
+                    Console.WriteLine("  {0} 动画结束所有元素正好到位（最小的 p={1:F3}）",
+                        endOk ? "OK  " : "FAIL", worstEnd);
+                    if (endOk) pass++; else fail++;
+                    Console.WriteLine("  {0} 动画走到 96% 时最大残留偏移 {1:F1}px（要求 < 4px，否则收尾会闪）",
+                        tailOk ? "OK  " : "FAIL", maxShift);
+                    if (tailOk) pass++; else fail++;
+                }
+
+                // ---- 把手要交叉淡入淡出，不能"啪"地换一个 ----
+                {
+                    MethodInfo nOut = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo nIn = wt.GetMethod("NubInRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo dw3 = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    float uik = (float)wt.GetField("UiK", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f);
+                    Func<RectangleF, int> countIn = delegate(RectangleF rf)
+                    {
+                        int n = 0;
+                        using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                        {
+                            using (Graphics g = Graphics.FromImage(b)) dw3.Invoke(f, new object[] { g, f.Width, f.Height });
+                            int x0 = (int)(rf.X * uik), y0 = (int)(rf.Y * uik);
+                            int x1 = (int)((rf.X + rf.Width) * uik), y1 = (int)((rf.Y + rf.Height) * uik);
+                            x0 = Math.Max(0, x0); y0 = Math.Max(0, y0);
+                            x1 = Math.Min(b.Width - 1, x1); y1 = Math.Min(b.Height - 1, y1);
+                            for (int y = y0; y <= y1; y += 2) for (int x = x0; x <= x1; x += 2)
+                                if (b.GetPixel(x, y).A > 70) n++;
+                        }
+                        return n;
+                    };
+                    RectangleF ro = (RectangleF)nOut.Invoke(f, null), ri = (RectangleF)nIn.Invoke(f, null);
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f);
+                    int eOut = countIn(ro), eIn = countIn(ri);
+                    F(f, "_collapsed", true); F(f, "_intro", false); F(f, "_introT", 0f);
+                    int cOut = countIn(ro), cIn = countIn(ri);
+                    F(f, "_collapsed", false); F(f, "_intro", true); F(f, "_introT", 0.5f);
+                    int mOut = countIn(ro), mIn = countIn(ri);
+                    F(f, "_intro", false); F(f, "_introT", 1f);
+                    // 注意：环的圆弧端点就落在把手位置上，会有几十个"弧"的像素，
+                    // 所以判据用"明显小于另一个把手"而不是严格为 0
+                    bool endState = eIn > 60 && eOut < eIn / 4;     // 展开：只有收起把手
+                    bool colState = cOut > 60 && cIn < cOut / 4;    // 收起：只有拉出把手
+                    bool midState = mOut > 0 && mIn > 0 && mOut < cOut && mIn < eIn;   // 中途：两个都在且都比端点态淡
+                    Console.WriteLine("  {0} 展开态只有「收起」把手（拉出={1} 收起={2}）", endState ? "OK  " : "FAIL", eOut, eIn);
+                    if (endState) pass++; else fail++;
+                    Console.WriteLine("  {0} 收起态只有「拉出」把手（拉出={1} 收起={2}）", colState ? "OK  " : "FAIL", cOut, cIn);
+                    if (colState) pass++; else fail++;
+                    Console.WriteLine("  {0} 切换中途两个把手交叉淡入淡出（拉出={1} 收起={2}）", midState ? "OK  " : "FAIL", mOut, mIn);
+                    if (midState) pass++; else fail++;
+                }
+
                 // ---- 不同分辨率 / 界面缩放下的适配 ----
                 {
                     int[] scales = { 80, 100, 125, 150, 200, 250 };
