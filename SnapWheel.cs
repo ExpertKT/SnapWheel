@@ -60,12 +60,99 @@ namespace SnapWheel
         }
     }
 
+    // 真·毛玻璃（只用在普通窗口上：设置/引导这些对话框）。
+    // 轮盘那种 UpdateLayeredWindow 的窗口不能上 acrylic —— 它会给整个窗口矩形蒙一层灰，
+    // 把屏幕角落糊成一块方块，所以轮盘用"画出来的"玻璃质感代替。
+    static class Blur
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        struct WINCOMPATTRDATA { public int Attribute; public IntPtr Data; public int SizeOfData; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ACCENTPOLICY { public int AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
+
+        [DllImport("user32.dll")]
+        static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINCOMPATTRDATA data);
+
+        const int ACCENT_DISABLED = 0;
+        const int ACCENT_ENABLE_BLURBEHIND = 3;
+        const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+        const int WCA_ACCENT_POLICY = 19;
+
+        public static bool Supported
+        {
+            get
+            {
+                try { return Environment.OSVersion.Version.Major >= 10 && TransparencyOn; }
+                catch { return false; }
+            }
+        }
+
+        // 系统里把"透明效果"关掉时 acrylic 不生效 —— 那种情况下再画半透明底会变成
+        // "玻璃没了、却透着一层桌面"，字看不清，所以直接退回不透明底
+        public static bool TransparencyOn
+        {
+            get
+            {
+                try
+                {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(
+                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    {
+                        if (k == null) return true;
+                        object v = k.GetValue("EnableTransparency");
+                        if (v == null) return true;
+                        return Convert.ToInt32(v) != 0;
+                    }
+                }
+                catch { return true; }
+            }
+        }
+
+        // tint = ABGR 颜色（GradientColor 是 0xAABBGGRR）
+        public static bool Apply(IntPtr hwnd, int a, int r, int g, int b, bool acrylic)
+        {
+            try
+            {
+                ACCENTPOLICY ap = new ACCENTPOLICY();
+                ap.AccentState = acrylic ? ACCENT_ENABLE_ACRYLICBLURBEHIND : ACCENT_ENABLE_BLURBEHIND;
+                ap.AccentFlags = 2;                     // 四边都画
+                ap.GradientColor = (a << 24) | (b << 16) | (g << 8) | r;
+                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
+                d.Attribute = WCA_ACCENT_POLICY;
+                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
+                Marshal.StructureToPtr(ap, d.Data, false);
+                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
+                int hr = SetWindowCompositionAttribute(hwnd, ref d);
+                Marshal.FreeHGlobal(d.Data);
+                return hr != 0;
+            }
+            catch { return false; }
+        }
+
+        public static void Clear(IntPtr hwnd)
+        {
+            try
+            {
+                ACCENTPOLICY ap = new ACCENTPOLICY();
+                ap.AccentState = ACCENT_DISABLED;
+                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
+                d.Attribute = WCA_ACCENT_POLICY;
+                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
+                Marshal.StructureToPtr(ap, d.Data, false);
+                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
+                SetWindowCompositionAttribute(hwnd, ref d);
+                Marshal.FreeHGlobal(d.Data);
+            }
+            catch { }
+        }
+    }
+
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.9";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.10";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.3.9";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+        public const string Version = "0.4.0";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -185,12 +272,87 @@ namespace SnapWheel
             float d = rad * 2f;
             if (d > r.Width) d = r.Width;
             if (d > r.Height) d = r.Height;
+            if (d < 0.5f) { p.AddRectangle(r); return p; }        // 圆角为 0 时别画成椭圆
             p.AddArc(r.X, r.Y, d, d, 180, 90);
             p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
             p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
             p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             p.CloseFigure();
             return p;
+        }
+
+        // ---- 新拟态 / 毛玻璃 基元 ----
+
+        // 玻璃面板：竖向微渐变底 + 顶部内侧高光 + 底部内侧暗边（新拟态的关键就是这一上一下）
+        public static void GlassPanel(Graphics g, GraphicsPath path, RectangleF r, Color fill,
+                                      int topHi, int bottomShade, bool verticalGradient)
+        {
+            if (verticalGradient && r.Height > 2f)
+            {
+                using (LinearGradientBrush lg = new LinearGradientBrush(
+                    new RectangleF(r.X, r.Y - 1f, r.Width, r.Height + 2f),
+                    Shade(fill, 0.10f), Shade(fill, -0.10f), LinearGradientMode.Vertical))
+                    g.FillPath(lg, path);
+            }
+            else using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, path);
+
+            if (topHi > 0)
+            {
+                // 上半圈高光（浅色描边，像光从左上打过来）
+                using (Pen hi = new Pen(Color.FromArgb(topHi, 255, 255, 255), 1.2f))
+                {
+                    hi.StartCap = LineCap.Round; hi.EndCap = LineCap.Round;
+                    g.DrawPath(hi, path);
+                }
+            }
+            if (bottomShade > 0)
+            {
+                using (Pen sh = new Pen(Color.FromArgb(bottomShade, 0, 0, 0), 1.4f))
+                {
+                    sh.StartCap = LineCap.Round; sh.EndCap = LineCap.Round;
+                    g.DrawPath(sh, path);
+                }
+            }
+        }
+
+        // 新拟态圆钮：外凸（亮边在左上，暗边在右下）或内凹（反过来的 hover / 按下态）
+        public static void NeuCircle(Graphics g, RectangleF r, Color surface, Color accent,
+                                     bool primary, bool pressed, int hiA, int shA)
+        {
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                p.AddEllipse(r);
+                Color baseC = primary ? accent : surface;
+                using (LinearGradientBrush lg = new LinearGradientBrush(
+                    new RectangleF(r.X, r.Y - 1f, r.Width, r.Height + 2f),
+                    primary ? Shade(baseC, 0.22f) : Shade(baseC, 0.14f),
+                    primary ? Shade(baseC, -0.20f) : Shade(baseC, -0.16f),
+                    LinearGradientMode.Vertical))
+                    g.FillPath(lg, p);
+
+                if (!pressed)
+                {
+                    // 左上高光
+                    using (Pen hi = new Pen(Color.FromArgb(hiA, 255, 255, 255), 1.4f))
+                        g.DrawArc(hi, r.X + 0.5f, r.Y + 0.5f, r.Width - 1f, r.Height - 1f, 175f, 130f);
+                }
+                // 右下暗边（内凹感）
+                using (Pen sh = new Pen(Color.FromArgb(shA, 0, 0, 0), 1.6f))
+                    g.DrawArc(sh, r.X + 0.6f, r.Y + 0.6f, r.Width - 1.2f, r.Height - 1.2f, -5f, 130f);
+            }
+        }
+
+        // 柔和外阴影（新拟态的"浮起来"感）：画几层递减的圆角轮廓
+        public static void SoftShadow(Graphics g, GraphicsPath path, int strength, float spread)
+        {
+            if (strength <= 2) return;
+            for (int i = 3; i >= 1; i--)
+            {
+                int a = (int)(strength * (0.10f + 0.06f * (3 - i)) / 3f);
+                if (a <= 0) continue;
+                using (Pen p = new Pen(Color.FromArgb(a, 0, 0, 0), i * spread))
+                { p.LineJoin = LineJoin.Round; g.DrawPath(p, path); }
+            }
         }
 
         // fit the whole image inside dest, preserving aspect (letterbox)
@@ -790,6 +952,15 @@ namespace SnapWheel
         public int PeekPercent = 240;         // 长按放大：百分比（100 = 原大小）
         public bool IntroSeen = false;        // 是否看过新手引导
         public bool IntroAnim = true;         // 启动时播开启动画
+        // ---- 外观风格（新拟态 + 扁平化 + 毛玻璃）----
+        public string UiStyle = "neu";        // neu=新拟态+毛玻璃(默认) / flat=纯扁平 / solid=高对比不透明
+        public int GlassPercent = 80;         // 玻璃面板不透明度 40..100
+        public int CardRadius = 14;           // 卡片圆角（占最小边的百分比）0..30
+        public int ShadowPercent = 55;        // 阴影强度 0..100
+        public int AnimSpeed = 100;           // 动画速度 %（70 慢 / 100 标准 / 140 快）
+        public int AccentIndex = -1;          // -1=跟随每个 Wheel 自己的颜色；0..7=全局统一主题色
+        public bool ShowNameLabel = true;     // 显示 Wheel 名称药丸
+        public bool ShowCountLabel = true;    // 显示图片计数药丸
 
         static string FilePath()
         {
@@ -831,6 +1002,14 @@ namespace SnapWheel
                         else if (k == "PeekPercent") { int n; if (int.TryParse(v, out n) && n >= 120 && n <= 500) s.PeekPercent = n; }
                         else if (k == "IntroSeen") s.IntroSeen = (v == "1");
                         else if (k == "IntroAnim") s.IntroAnim = (v == "1");
+                        else if (k == "UiStyle" && (v == "neu" || v == "flat" || v == "solid")) s.UiStyle = v;
+                        else if (k == "GlassPercent") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 100) s.GlassPercent = n; }
+                        else if (k == "CardRadius") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 30) s.CardRadius = n; }
+                        else if (k == "ShadowPercent") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 100) s.ShadowPercent = n; }
+                        else if (k == "AnimSpeed") { int n; if (int.TryParse(v, out n) && n >= 50 && n <= 200) s.AnimSpeed = n; }
+                        else if (k == "AccentIndex") { int n; if (int.TryParse(v, out n) && n >= -1 && n <= 7) s.AccentIndex = n; }
+                        else if (k == "ShowNameLabel") s.ShowNameLabel = (v == "1");
+                        else if (k == "ShowCountLabel") s.ShowCountLabel = (v == "1");
                     }
                 }
             }
@@ -862,18 +1041,28 @@ namespace SnapWheel
                 lines.Add("PeekPercent=" + PeekPercent);
                 lines.Add("IntroSeen=" + (IntroSeen ? "1" : "0"));
                 lines.Add("IntroAnim=" + (IntroAnim ? "1" : "0"));
+                lines.Add("UiStyle=" + UiStyle);
+                lines.Add("GlassPercent=" + GlassPercent);
+                lines.Add("CardRadius=" + CardRadius);
+                lines.Add("ShadowPercent=" + ShadowPercent);
+                lines.Add("AnimSpeed=" + AnimSpeed);
+                lines.Add("AccentIndex=" + AccentIndex);
+                lines.Add("ShowNameLabel=" + (ShowNameLabel ? "1" : "0"));
+                lines.Add("ShowCountLabel=" + (ShowCountLabel ? "1" : "0"));
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
             catch { }
         }
     }
 
-    // flat rounded button with hover state (for a cleaner, more designed look)
+    // 扁平/新拟态风格的按钮：浅底 + 上亮下暗的柔和立体，主按钮用主题色填充
     class RoundButton : Button
     {
         public Color Fill = Color.FromArgb(0, 122, 204);
         public Color FillHover = Color.FromArgb(0, 138, 228);
         public Color TextColor = Color.White;
+        public bool Primary = false;
+        public bool Ghost = false;
 
         public RoundButton()
         {
@@ -887,17 +1076,37 @@ namespace SnapWheel
         {
             Graphics g = pevent.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
-            // 先用父容器的底色铺满，再画圆角块 —— 否则 BackColor=Transparent 时四角会留下没画过的脏底
+            RectangleF r = new RectangleF(0, 0, Width - 1, Height - 1);
             Color bg = (Parent != null && Parent.BackColor.A == 255) ? Parent.BackColor : Color.White;
             using (SolidBrush bb = new SolidBrush(bg))
                 g.FillRectangle(bb, ClientRectangle);
+
             bool hot = ClientRectangle.Contains(PointToClient(Cursor.Position));
+            bool down = MouseButtons == MouseButtons.Left && hot;
             Color c = hot ? FillHover : Fill;
-            using (GraphicsPath p = Gfx.Round(r, 9f))
-            using (SolidBrush b = new SolidBrush(c))
-                g.FillPath(b, p);
-            TextRenderer.DrawText(g, Text, Font, r, TextColor,
+            if (Ghost) c = Color.FromArgb(hot ? 240 : 200, c.R, c.G, c.B);
+
+            using (GraphicsPath p = Gfx.Round(r, 10f))
+            {
+                if (down)
+                {
+                    // 按下：内凹（暗边在上，亮边在下）
+                    using (SolidBrush b = new SolidBrush(Gfx.Shade(c, -0.10f))) g.FillPath(b, p);
+                    using (Pen sh = new Pen(Color.FromArgb(70, 0, 0, 0), 1.6f)) g.DrawPath(sh, p);
+                }
+                else
+                {
+                    using (LinearGradientBrush lg = new LinearGradientBrush(
+                        new RectangleF(r.X, r.Y - 1f, r.Width, r.Height + 2f),
+                        Primary ? Gfx.Shade(c, 0.16f) : Gfx.Shade(c, 0.55f),
+                        Primary ? Gfx.Shade(c, -0.12f) : Gfx.Shade(c, -0.04f),
+                        LinearGradientMode.Vertical))
+                        g.FillPath(lg, p);
+                    using (Pen hi = new Pen(Color.FromArgb(Primary ? 60 : 200, 255, 255, 255), 1.1f)) g.DrawPath(hi, p);
+                    using (Pen sh = new Pen(Color.FromArgb(28, 0, 0, 0), 1f)) g.DrawPath(sh, p);
+                }
+            }
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height - 1), TextColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
@@ -1724,6 +1933,45 @@ namespace SnapWheel
         int _lastRightIndex = -1;
         const float HoverScale = 1.36f;
         float PeekScale { get { return Math.Max(1.2f, Math.Min(5f, _settings.PeekPercent / 100f)); } }
+
+        // ---------- 风格参数（新拟态 / 扁平 / 毛玻璃）----------
+        bool StyleNeu() { return _settings.UiStyle != "flat" && _settings.UiStyle != "solid"; }
+        bool StyleSolid() { return _settings.UiStyle == "solid"; }
+        bool StyleFlatOnly() { return _settings.UiStyle == "flat"; }
+
+        // 动画速度：>1 = 更快。所有时长都乘这个系数，保证各段动画不会各走各的
+        float AnimK() { return 100f / Math.Max(50f, Math.Min(200f, (float)_settings.AnimSpeed)); }
+
+        // 面板底色（毛玻璃的"玻璃"部分；solid 风格强制不透明，方便在花哨壁纸上也能看清）
+        Color GlassBase()
+        {
+            if (StyleSolid()) return Color.FromArgb(30, 32, 38);
+            if (StyleFlatOnly()) return Color.FromArgb(26, 28, 34);
+            return Color.FromArgb(20, 23, 30);
+        }
+
+        int GlassA(int baseA)
+        {
+            float g = StyleSolid() ? 1f : (_settings.GlassPercent / 100f);
+            int a = (int)(baseA * g);
+            return a < 0 ? 0 : (a > 255 ? 255 : a);
+        }
+
+        int ShadowA(int baseA) { return (int)(baseA * _settings.ShadowPercent / 100f); }
+
+        float CardRadOf(RectangleF r)
+        {
+            float rad = Math.Min(r.Width, r.Height) * (_settings.CardRadius / 100f);
+            return rad < 3f ? 3f : rad;
+        }
+
+        Color AccentColor()
+        {
+            int i = _settings.AccentIndex;
+            if (i >= 0 && i < Palette.Colors.Length) return Palette.Get(i);
+            return _mgr.Accent;
+        }
+
         float _keyT = 0f;              // 万能键按下进度 0..1
         bool _intro = false;           // 正在播开启动画
         float _introT = 0f;            // 0..1
@@ -1865,7 +2113,7 @@ namespace SnapWheel
             bool hide = _targetShow < _show;
             if (_showAnimating)
             {
-                float dur = hide ? 0.50f : 0.30f;      // fixed, predictable duration
+                float dur = (hide ? 0.50f : 0.30f) * AnimK();      // 速度设置会一起缩放
                 float t = (float)((DateTime.Now - _showT0).TotalSeconds / dur);
                 if (t >= 1f) { t = 1f; _showAnimating = false; }
                 float ease = t * t * (3f - 2f * t);       // smoothstep
@@ -1909,6 +2157,7 @@ namespace SnapWheel
                 float cur;
                 if (!_scales.TryGetValue(i, out cur)) cur = 1f;
                 float rate = (tgt > 1.5f || cur > 1.5f) ? 0.16f : 0.19f;   // peek moves a little slower
+                rate = Math.Max(0.05f, Math.Min(0.5f, rate / AnimK()));
                 if (Math.Abs(cur - tgt) > 0.003f) { _scales[i] = cur + (tgt - cur) * rate; need = true; }
                 else if (cur != tgt) { _scales[i] = tgt; need = true; }
             }
@@ -1954,7 +2203,7 @@ namespace SnapWheel
             // 开启动画进度
             if (_intro)
             {
-                float t = (float)(DateTime.Now - _introAt).TotalSeconds / Math.Max(0.5f, _introDur);
+                float t = (float)(DateTime.Now - _introAt).TotalSeconds / Math.Max(0.5f, _introDur * AnimK());
                 if (t >= 1f) { t = 1f; _intro = false; }
                 _introT = t;
                 need = true;
@@ -1986,7 +2235,7 @@ namespace SnapWheel
             }
 
             // 主题色过渡 + 切换闪光
-            Color want = _mgr.Accent;
+            Color want = AccentColor();
             if (_accentCur.ToArgb() != want.ToArgb())
             {
                 _accentCur = Color.FromArgb(
@@ -2070,7 +2319,7 @@ namespace SnapWheel
             if (!_enterT0.TryGetValue(_store.Items[i], out t0)) return 1f;
             float d = (float)(DateTime.Now - t0).TotalSeconds;
             if (d <= 0f) return 0f;
-            float t = d / 0.42f;
+            float t = d / (0.42f * AnimK());
             if (t >= 1f) return 1f;
             return t * t * (3f - 2f * t);      // smoothstep -> eased, silky
         }
@@ -2460,57 +2709,60 @@ namespace SnapWheel
                 g.FillEllipse(kb, kr);
         }
 
-        // 万能键的“材质”：外发光 + 球面渐变 + 顶弧高光 + 玻璃内圈 + 摇杆点，按下时轻微放大并加亮
+        // 万能键：新拟态玻璃圆盘 —— 玻璃底 + 上亮下暗 + 主题色核心，按下时核心点亮并轻微放大
         void DrawKeyDisc(Graphics g, int a, Color acc, Rectangle kr, float kcx, float kcy, float krr)
         {
             float kt = Gfx.Clamp01(_keyT);
             float rr = krr * (1f + 0.05f * kt);
             RectangleF disc = new RectangleF(kcx - rr, kcy - rr, rr * 2f, rr * 2f);
+            bool neu = StyleNeu();
 
-            // 1) 外发光（径向渐变到透明）
-            using (GraphicsPath gp = new GraphicsPath())
+            // 1) 外发光：新拟态用很淡的一圈主题色晕，扁平风格完全不画
+            if (neu && _settings.ShadowPercent > 8)
             {
-                float ho = rr + 16f + 10f * kt;
-                gp.AddEllipse(kcx - ho, kcy - ho, ho * 2f, ho * 2f);
-                using (PathGradientBrush halo = new PathGradientBrush(gp))
+                using (GraphicsPath gp = new GraphicsPath())
                 {
-                    halo.CenterPoint = new PointF(kcx, kcy);
-                    halo.CenterColor = Gfx.A(acc, (int)((70 + 70 * kt) * a / 255f));
-                    halo.SurroundColors = new Color[] { Gfx.A(acc, 0) };
-                    g.FillPath(halo, gp);
+                    float ho = rr + 12f + 10f * kt;
+                    gp.AddEllipse(kcx - ho, kcy - ho, ho * 2f, ho * 2f);
+                    using (PathGradientBrush halo = new PathGradientBrush(gp))
+                    {
+                        halo.CenterPoint = new PointF(kcx, kcy);
+                        halo.CenterColor = Gfx.A(acc, (int)((48 + 90 * kt) * a / 255f));
+                        halo.SurroundColors = new Color[] { Gfx.A(acc, 0) };
+                        g.FillPath(halo, gp);
+                    }
                 }
             }
 
-            // 2) 球面本体
+            // 2) 玻璃盘身
             using (GraphicsPath body = new GraphicsPath())
             {
                 body.AddEllipse(disc);
-                using (PathGradientBrush pgb = new PathGradientBrush(body))
+                Gfx.GlassPanel(g, body, disc,
+                    Gfx.A(GlassBase(), GlassA((int)((226 + 24 * kt) * a / 255f))),
+                    (int)((neu ? 46 : 22) * a / 255f),
+                    (int)((neu ? 52 : 0) * a / 255f),
+                    !StyleFlatOnly());
+                // 3) 主题色内芯（按下的进度决定点亮的程度）
+                float cr = rr * (0.52f + 0.06f * kt);
+                using (GraphicsPath core = new GraphicsPath())
                 {
-                    pgb.CenterPoint = new PointF(kcx - rr * 0.34f, kcy - rr * 0.38f);
-                    pgb.CenterColor = Gfx.A(Gfx.Shade(acc, 0.42f + 0.18f * kt), (int)((235 + 20 * kt) * a / 255f));
-                    pgb.SurroundColors = new Color[] { Gfx.A(Gfx.Shade(acc, -0.42f), (int)(210 * a / 255f)) };
-                    g.FillPath(pgb, body);
+                    core.AddEllipse(kcx - cr, kcy - cr, cr * 2f, cr * 2f);
+                    using (LinearGradientBrush lg = new LinearGradientBrush(
+                        new RectangleF(kcx - cr, kcy - cr - 1f, cr * 2f, cr * 2f + 2f),
+                        Gfx.A(Gfx.Shade(acc, 0.22f), (int)(((StyleFlatOnly() ? 200 : 118) + 60 * kt) * a / 255f)),
+                        Gfx.A(Gfx.Shade(acc, -0.28f), (int)(((StyleFlatOnly() ? 170 : 88) + 62 * kt) * a / 255f)),
+                        LinearGradientMode.Vertical))
+                        g.FillPath(lg, core);
+                    using (Pen cp = new Pen(Gfx.A(Gfx.Shade(acc, 0.35f), (int)((110 + 90 * kt) * a / 255f)), 1.2f))
+                        g.DrawPath(cp, core);
                 }
-                // 边缘细线
-                using (Pen rim = new Pen(Color.FromArgb((int)(120 * a / 255f), 255, 255, 255), 1.5f))
-                    g.DrawPath(rim, body);
             }
 
-            // 3) 顶部弧线高光（玻璃感）
-            using (Pen hl = new Pen(Color.FromArgb((int)(120 * a / 255f), 255, 255, 255), 2.4f))
-            {
-                hl.StartCap = LineCap.Round; hl.EndCap = LineCap.Round;
-                g.DrawArc(hl, disc.X + rr * 0.20f, disc.Y + rr * 0.14f, rr * 1.60f, rr * 1.60f, 200f, 140f);
-            }
-
-            // 4) 玻璃内圈 + 摇杆点
-            using (Pen kin = new Pen(Color.FromArgb((int)(80 * a / 255f), 255, 255, 255), 1.1f))
-                g.DrawEllipse(kin, kcx - rr * 0.64f, kcy - rr * 0.64f, rr * 1.28f, rr * 1.28f);
-
-            float dsz = 6.8f + 1.6f * kt;
+            // 4) 摇杆点：扁平的小白点，按下时稍微散开
+            float dsz = 6.2f + 1.4f * kt;
             float spread = 15f + 2f * kt;
-            using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 255, 255, 255)))
+            using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(238 * a / 255f), 255, 255, 255)))
             {
                 for (int q = 0; q < 4; q++)
                 {
@@ -2518,7 +2770,7 @@ namespace SnapWheel
                     float px = (float)(kcx + Math.Cos(th) * spread), py = (float)(kcy + Math.Sin(th) * spread);
                     g.FillEllipse(db, px - dsz / 2f, py - dsz / 2f, dsz, dsz);
                 }
-                float cs = 8f + 2.4f * kt;
+                float cs = 7.4f + 2.2f * kt;
                 g.FillEllipse(db, kcx - cs / 2f, kcy - cs / 2f, cs, cs);
             }
         }
@@ -2551,11 +2803,13 @@ namespace SnapWheel
                     using (Pen dm = new Pen(Color.FromArgb((int)(235 * ringA / 255f), dch.R, dch.G, dch.B), 6f))
                     { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
                 }
-                using (Pen glow = new Pen(Color.FromArgb((int)(55 * ringA / 255f), 255, 255, 255), 30f))
-                { glow.StartCap = LineCap.Round; glow.EndCap = LineCap.Round; g.DrawPath(glow, gp); }
-                using (Pen mid = new Pen(Color.FromArgb((int)(110 * ringA / 255f), 255, 255, 255), 3f))
+                // 环：扁平化处理 —— 一条细亮线为主，新拟态风格再垫一层柔和的光晕
+                if (StyleNeu() && _settings.ShadowPercent > 8)
+                    using (Pen glow = new Pen(Gfx.A(_accentCur, (int)(34 * ringA / 255f)), 22f))
+                    { glow.StartCap = LineCap.Round; glow.EndCap = LineCap.Round; g.DrawPath(glow, gp); }
+                using (Pen mid = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 78 : 92) * ringA / 255f), 255, 255, 255), 2.2f))
                 { mid.StartCap = LineCap.Round; mid.EndCap = LineCap.Round; g.DrawPath(mid, gp); }
-                using (Pen hair = new Pen(Color.FromArgb((int)(200 * ringA / 255f), 255, 255, 255), 1.3f))
+                using (Pen hair = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 210 : 235) * ringA / 255f), 255, 255, 255), 1.3f))
                 { g.DrawPath(hair, gp); }
                 if (_switchFlash > 0.01f)     // 切换 Wheel 时的一圈扩散闪光
                 {
@@ -2612,17 +2866,35 @@ namespace SnapWheel
                     if (iw < 4 || ih < 4) continue;
                     RectangleF ir = new RectangleF((float)Math.Round(pc.X - iw / 2f), (float)Math.Round(pc.Y - ih / 2f), iw, ih);
                     RectangleF rr2 = new RectangleF(ir.X - CardPad, ir.Y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
-                    float rad = (float)Math.Round(Math.Max(5f, Math.Min(rr2.Width, rr2.Height) * 0.14f));
+                    float rad = CardRadOf(rr2);
                     float shOff = (float)Math.Round(Math.Max(2f, rr2.Height * 0.04f));
 
-                    using (GraphicsPath sh = Gfx.Round(new RectangleF(rr2.X, rr2.Y + shOff, rr2.Width, rr2.Height), rad))
-                    using (SolidBrush sb = new SolidBrush(Color.FromArgb((int)(95 * ia / 255f), 0, 0, 0)))
-                        g.FillPath(sb, sh);
+                    // 阴影：新拟态用柔和的漫射阴影，纯扁平就一层淡淡的投影
+                    int shA = ShadowA(95);
+                    if (shA > 2)
+                    {
+                        if (StyleFlatOnly())
+                        {
+                            using (GraphicsPath sh = Gfx.Round(new RectangleF(rr2.X, rr2.Y + shOff, rr2.Width, rr2.Height), rad))
+                            using (SolidBrush sb = new SolidBrush(Color.FromArgb((int)(shA * ia / 255f / 2.2f), 0, 0, 0)))
+                                g.FillPath(sb, sh);
+                        }
+                        else
+                        {
+                            using (GraphicsPath sh = Gfx.Round(new RectangleF(rr2.X + 1f, rr2.Y + shOff * 1.4f, rr2.Width, rr2.Height), rad))
+                                Gfx.SoftShadow(g, sh, (int)(shA * ia / 255f / 2.4f), 2.6f);
+                        }
+                    }
 
                     using (GraphicsPath card = Gfx.Round(rr2, rad))
                     {
-                        using (SolidBrush cb = new SolidBrush(Color.FromArgb((int)(238 * ia / 255f), 24, 26, 30)))
-                            g.FillPath(cb, card);
+                        // 毛玻璃底 + 新拟态的上下明暗边
+                        int baseA = GlassA(238);
+                        Color fill = Gfx.A(GlassBase(), (int)(baseA * ia / 255f));
+                        Gfx.GlassPanel(g, card, rr2, fill,
+                            (int)((StyleNeu() ? 34 : 16) * ia / 255f),
+                            (int)((StyleNeu() ? 40 : 0) * ia / 255f),
+                            !StyleFlatOnly());
                         if (_store.Items[i].Image != null)
                         {
                             g.SetClip(card);
@@ -2662,6 +2934,7 @@ namespace SnapWheel
             // (the big preview is now just a larger card scale - no separate overlay, so no desync)
 
             Rectangle cbr = CloseButtonRect();
+            Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
             PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
             int ab0 = (int)(a * pb0), ab1 = (int)(a * pb1), ab2 = (int)(a * pb2);
@@ -2671,9 +2944,10 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m0 = g.Transform;
                 g.TranslateTransform(sh0.X, sh0.Y);
                 Rectangle cbr0 = cbr;
-                using (SolidBrush cbb = new SolidBrush(Color.FromArgb((int)((_closeHover ? 215 : 130) * ab0 / 255f), 20, 22, 28)))
-                    g.FillEllipse(cbb, cbr0);
-                using (Pen cbp = new Pen(Color.FromArgb((int)(235 * ab0 / 255f), 255, 255, 255), 1.8f))
+                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 226 : 170) * ab0 / 255f))),
+                    Gfx.A(acc, (int)(200 * ab0 / 255f)), false, false,
+                    (int)((StyleNeu() ? 60 : 24) * ab0 / 255f), (int)((StyleNeu() ? 60 : 0) * ab0 / 255f));
+                using (Pen cbp = new Pen(Color.FromArgb((int)(238 * ab0 / 255f), 255, 255, 255), 1.8f))
                 {
                     g.DrawLine(cbp, cbr0.Left + 10, cbr0.Top + 10, cbr0.Right - 10, cbr0.Bottom - 10);
                     g.DrawLine(cbp, cbr0.Right - 10, cbr0.Top + 10, cbr0.Left + 10, cbr0.Bottom - 10);
@@ -2687,11 +2961,12 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = GearButtonRect();
-                using (SolidBrush gbb = new SolidBrush(Color.FromArgb((int)((_gearHover ? 215 : 130) * ab1 / 255f), 20, 22, 28)))
-                    g.FillEllipse(gbb, gbr);
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 226 : 170) * ab1 / 255f))),
+                    Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
+                    (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
                 float gro = gbr.Width * 0.28f;
-                using (Pen gp2 = new Pen(Color.FromArgb((int)(235 * ab1 / 255f), 255, 255, 255), 1.8f))
+                using (Pen gp2 = new Pen(Color.FromArgb((int)(238 * ab1 / 255f), 255, 255, 255), 1.8f))
                 {
                     g.DrawEllipse(gp2, gcx - gro * 0.62f, gcy - gro * 0.62f, gro * 1.24f, gro * 1.24f);
                     for (int k = 0; k < 8; k++)
@@ -2706,15 +2981,16 @@ namespace SnapWheel
             }
 
             // 万能键（弧线内侧中点的摇杆式大圆盘）
+            // NO_KEY 变体里 KeyRect() 是空的，这里必须直接跳过，否则会拿 0 尺寸去建画刷
             Rectangle kr = KeyRect();
-            Color acc = _accentCur;
             float kcx = kr.X + kr.Width / 2f, kcy = kr.Y + kr.Height / 2f;
             float krr = kr.Width / 2f;
             float pk = IntroP(0.16f);
             PointF sk = IntroShift(pk);
-            if (pk > 0.01f) { g.TranslateTransform(sk.X, sk.Y); }
+            bool hasKey = kr.Width > 8 && kr.Height > 8;
+            if (hasKey && pk > 0.01f) { g.TranslateTransform(sk.X, sk.Y); }
 
-            if (_delConfirm)
+            if (_delConfirm && hasKey)
             {
                 // 左半 = 取消（灰绿），右半 = 确认删除（红），鼠标所在半更亮
                 using (GraphicsPath lp = new GraphicsPath())
@@ -2755,16 +3031,16 @@ namespace SnapWheel
                     g.DrawString(t3, f3, b3, kcx - s3.Width / 2f, kr.Y - s3.Height - 4);
                 }
             }
-            else
+            else if (hasKey)
             {
-            // 万能键：拟物一点 —— 外发光 + 球面渐变 + 顶部高光 + 细边
+            // 万能键：玻璃盘 + 主题色内芯（新拟态 + 扁平 + 毛玻璃）
             DrawKeyDisc(g, (int)(a * pk), acc, kr, kcx, kcy, krr);
             }
-            if (pk > 0.01f) g.TranslateTransform(-sk.X, -sk.Y);       // 恢复，别影响后面的元素
+            if (hasKey && pk > 0.01f) g.TranslateTransform(-sk.X, -sk.Y);   // 恢复，别影响后面的元素
 
-            // 当前 wheel 名：药丸底 + 主题色圆点（原来是硬邦邦一块黑底，很难看）
+            // 当前 wheel 名：药丸底 + 主题色圆点（可在设置里关掉）
             float pn = IntroP(0.62f);
-            if (a > 60 && pn > 0.01f)
+            if (hasKey && a > 60 && pn > 0.01f && _settings.ShowNameLabel)
             {
                 PointF sn = IntroShift(pn);
                 int an = (int)(a * pn);
@@ -2780,9 +3056,9 @@ namespace SnapWheel
                     RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
                     using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
                     {
-                        using (SolidBrush bgw = new SolidBrush(Color.FromArgb((int)(175 * an / 255f), 14, 16, 20)))
-                            g.FillPath(bgw, pg2);
-                        using (Pen bp2 = new Pen(Color.FromArgb((int)(150 * an / 255f), acc.R, acc.G, acc.B), 1.3f))
+                        Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)(196 * an / 255f))),
+                            (int)((StyleNeu() ? 40 : 18) * an / 255f), (int)((StyleNeu() ? 34 : 0) * an / 255f), !StyleFlatOnly());
+                        using (Pen bp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)(120 * an / 255f)), 1.1f))
                             g.DrawPath(bp2, pg2);
                     }
                     float dy2 = pill2.Y + ph2 / 2f;
@@ -2812,9 +3088,13 @@ namespace SnapWheel
                         gp2.AddArc(kc.X - R, kc.Y - R, R * 2, R * 2, s2 * 90 - 135, 88);
                         gp2.AddLine(kc.X, kc.Y, kc.X, kc.Y);
                         gp2.CloseFigure();
-                        using (SolidBrush sb2 = new SolidBrush(Color.FromArgb(alpha, sc.R, sc.G, sc.B)))
+                        // 玻璃扇区 + 选中时主题色点亮（新拟态：外圈加一道高光）
+                        Color scFill = sel ? Gfx.A(Gfx.Shade(acc, 0.05f), (int)(alpha * 0.92f))
+                                           : (s2 == 2 ? Color.FromArgb((int)(alpha * 0.72f), 150, 46, 58)
+                                                      : Gfx.A(GlassBase(), (int)(alpha * 0.86f)));
+                        using (SolidBrush sb2 = new SolidBrush(scFill))
                             g.FillPath(sb2, gp2);
-                        using (Pen sp2 = new Pen(Color.FromArgb((int)(alpha * 0.5f), 255, 255, 255), 1.2f))
+                        using (Pen sp2 = new Pen(Color.FromArgb((int)(alpha * (sel ? 0.75f : 0.42f)), 255, 255, 255), 1.2f))
                             g.DrawPath(sp2, gp2);
                     }
                     double mid = (-90 + s2 * 90) * Math.PI / 180.0;
@@ -2845,7 +3125,7 @@ namespace SnapWheel
                 g.TranslateTransform(-sh2.X, -sh2.Y);
             }
 
-            if (_store.Items.Count > 0)
+            if (_store.Items.Count > 0 && _settings.ShowCountLabel)
             {
                 int cur = (int)Math.Round(_offset) + 1;
                 if (cur < 1) cur = 1;
@@ -2866,9 +3146,9 @@ namespace SnapWheel
                     RectangleF pill = new RectangleF(tp.X - 9f, tp.Y - 3f, sz.Width + ip + 26f, sz.Height + 6f);
                     using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
                     {
-                        using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(150 * ac2 / 255f), 10, 12, 16)))
-                            g.FillPath(pb, pg);
-                        using (Pen pp2 = new Pen(Color.FromArgb((int)(110 * ac2 / 255f), acc.R, acc.G, acc.B), 1.2f))
+                        Gfx.GlassPanel(g, pg, pill, Gfx.A(GlassBase(), GlassA((int)(190 * ac2 / 255f))),
+                            (int)((StyleNeu() ? 38 : 16) * ac2 / 255f), (int)((StyleNeu() ? 32 : 0) * ac2 / 255f), !StyleFlatOnly());
+                        using (Pen pp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)(110 * ac2 / 255f)), 1.1f))
                             g.DrawPath(pp2, pg);
                     }
                     float dotY = pill.Y + pill.Height / 2f;
@@ -3100,9 +3380,9 @@ namespace SnapWheel
                 float x = 26f + (1f - t) * 14f, y = ClientSize.Height - h - 26f;
                 using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
                 {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(ta * 0.86f), 22, 24, 29)))
-                        g.FillPath(b, pp);
-                    using (Pen p = new Pen(Color.FromArgb((int)(ta * 0.55f), _accentCur.R, _accentCur.G, _accentCur.B), 1.4f))
+                    Gfx.GlassPanel(g, pp, new RectangleF(x, y, w, h), Gfx.A(GlassBase(), GlassA((int)(ta * 0.90f))),
+                        (int)(ta * 0.16f), (int)(ta * 0.14f), !StyleFlatOnly());
+                    using (Pen p = new Pen(Gfx.A(Gfx.Shade(_accentCur, 0.15f), (int)(ta * 0.42f)), 1.2f))
                         g.DrawPath(p, pp);
                 }
                 using (SolidBrush tb = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
@@ -3343,6 +3623,26 @@ namespace SnapWheel
         ComboBox _color;
         bool _loading = false;
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (Blur.Supported)
+            {
+                BackColor = Color.FromArgb(228, 246, 248, 252);
+                try { Blur.Apply(Handle, 190, 246, 248, 252, true); } catch { }
+            }
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (Blur.Supported)
+            {
+                using (SolidBrush b = new SolidBrush(BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
+                return;
+            }
+            base.OnPaintBackground(e);
+        }
+
         public WheelsForm(WheelManager mgr)
         {
             _mgr = mgr;
@@ -3483,6 +3783,35 @@ namespace SnapWheel
 
     class SettingsForm : Form
     {
+        TableLayoutPanel _root;
+        // 应用真·毛玻璃：窗口背景半透明 + 系统 acrylic 模糊；系统不支持就退回不透明浅底
+        void ApplyGlass()
+        {
+            if (!Blur.Supported) { BackColor = Color.FromArgb(248, 249, 252); return; }
+            BackColor = Color.FromArgb(228, 246, 248, 252);
+            bool ok = false;
+            try { ok = Blur.Apply(Handle, 190, 246, 248, 252, true); } catch { }
+            if (!ok) BackColor = Color.FromArgb(246, 247, 250);
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyGlass();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // 半透明底：让 acrylic 透出来
+            if (Blur.Supported)
+            {
+                using (SolidBrush b = new SolidBrush(BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
+                return;
+            }
+            base.OnPaintBackground(e);
+        }
+
+
         public SettingsForm(Settings s)
         {
             Text = AppInfo.Name + " 设置";
@@ -3499,12 +3828,25 @@ namespace SnapWheel
             Padding = new Padding(20, 14, 20, 12);
 
             TableLayoutPanel root = new TableLayoutPanel();
-            root.ColumnCount = 1;
+            root.ColumnCount = 2;
             root.AutoSize = true;
             root.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
+            _root = root;
             Controls.Add(root);
+
+            // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
+            TableLayoutPanel colL = new TableLayoutPanel();
+            colL.ColumnCount = 1;
+            colL.AutoSize = true;
+            colL.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            colL.Margin = new Padding(0, 0, 34, 0);
+            TableLayoutPanel colR = new TableLayoutPanel();
+            colR.ColumnCount = 1;
+            colR.AutoSize = true;
+            colR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            colR.Margin = new Padding(0);
 
             Label head = new Label();
             head.AutoSize = true;
@@ -3513,21 +3855,24 @@ namespace SnapWheel
             head.ForeColor = Color.FromArgb(32, 34, 38);
             head.Margin = new Padding(0, 0, 0, 10);
             root.Controls.Add(head);
+            root.SetColumnSpan(head, 2);
+            root.Controls.Add(colL, 0, 1);
+            root.Controls.Add(colR, 1, 1);
 
             CheckBox chkDisk = new CheckBox();
             chkDisk.AutoSize = true;
             chkDisk.Text = "保存到硬盘（否则只存内存，退出即清）";
             chkDisk.Checked = s.SaveToDisk;
             chkDisk.Margin = new Padding(0, 4, 0, 4);
-            root.Controls.Add(Section("行为"));
-            root.Controls.Add(chkDisk);
+            colL.Controls.Add(Section("行为"));
+            colL.Controls.Add(chkDisk);
 
             CheckBox chkAutoStart = new CheckBox();
             chkAutoStart.AutoSize = true;
             chkAutoStart.Text = "开机自动启动（登录后自动在后台运行）";
             chkAutoStart.Checked = AutoRun.IsEnabled();
             chkAutoStart.Margin = new Padding(0, 4, 0, 4);
-            root.Controls.Add(chkAutoStart);
+            colL.Controls.Add(chkAutoStart);
 
             TextBox txtDir = new TextBox();
             txtDir.Text = s.Dir;
@@ -3542,17 +3887,17 @@ namespace SnapWheel
                 FolderBrowserDialog d = new FolderBrowserDialog();
                 if (d.ShowDialog() == DialogResult.OK) txtDir.Text = d.SelectedPath;
             });
-            root.Controls.Add(Row(MkLabel("保存目录"), txtDir, browse));
+            colL.Controls.Add(Row(MkLabel("保存目录"), txtDir, browse));
 
-            root.Controls.Add(Section("外观"));
+            colL.Controls.Add(Section("外观"));
             NumericUpDown numMax = Num(1, 999, s.MaxCount);
             NumericUpDown numThumb = Num(40, 260, s.ThumbSize);
-            root.Controls.Add(Row(MkLabel("最多保留张数"), numMax, Gap(24), MkLabel("缩略图大小"), numThumb));
+            colL.Controls.Add(Row(MkLabel("最多保留张数"), numMax, Gap(24), MkLabel("缩略图大小"), numThumb));
 
             NumericUpDown numRad = Num(120, 700, s.Radius);
             NumericUpDown numSlots = Num(2, 12, s.Slots);
             NumericUpDown numLabel = Num(9, 40, s.LabelSize);
-            root.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel));
+            colL.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel));
 
             NumericUpDown numPeek = Num(120, 500, s.PeekPercent);
             CheckBox chkIntroAnim = new CheckBox();
@@ -3560,7 +3905,54 @@ namespace SnapWheel
             chkIntroAnim.Text = "启动时播放开启动画";
             chkIntroAnim.Checked = s.IntroAnim;
             chkIntroAnim.Margin = new Padding(0, 10, 0, 0);
-            root.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim));
+            colL.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim));
+
+            // ---------------- 风格（新拟态 + 扁平化 + 毛玻璃）----------------
+            colR.Controls.Add(Section("风格"));
+
+            ComboBox cmbStyle = new ComboBox();
+            cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbStyle.FlatStyle = FlatStyle.Flat;
+            cmbStyle.Width = 170;
+            cmbStyle.Margin = new Padding(0, 6, 0, 0);
+            cmbStyle.Items.AddRange(new object[] { "新拟态 + 毛玻璃", "纯扁平", "高对比（不透明）" });
+            cmbStyle.SelectedIndex = (s.UiStyle == "flat") ? 1 : (s.UiStyle == "solid" ? 2 : 0);
+
+            ComboBox cmbAccent = new ComboBox();
+            cmbAccent.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbAccent.FlatStyle = FlatStyle.Flat;
+            cmbAccent.Width = 170;
+            cmbAccent.Margin = new Padding(0, 6, 0, 0);
+            cmbAccent.Items.Add("跟随 Wheel 颜色");
+            for (int i = 0; i < Palette.Names.Length; i++) cmbAccent.Items.Add("统一：" + Palette.Names[i]);
+            cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
+            colR.Controls.Add(Row(MkLabel("界面风格"), cmbStyle, Gap(24), MkLabel("主题色"), cmbAccent));
+
+            NumericUpDown numGlass = Num(40, 100, s.GlassPercent);
+            NumericUpDown numRadius = Num(0, 30, s.CardRadius);
+            NumericUpDown numShadow = Num(0, 100, s.ShadowPercent);
+            colR.Controls.Add(Row(MkLabel("玻璃不透明度"), numGlass, Gap(16), MkLabel("圆角(%)"), numRadius,
+                                  Gap(16), MkLabel("阴影强度"), numShadow));
+
+            ComboBox cmbAnim = new ComboBox();
+            cmbAnim.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbAnim.FlatStyle = FlatStyle.Flat;
+            cmbAnim.Width = 170;
+            cmbAnim.Margin = new Padding(0, 6, 0, 0);
+            cmbAnim.Items.AddRange(new object[] { "慢", "标准", "快" });
+            cmbAnim.SelectedIndex = (s.AnimSpeed <= 85) ? 0 : (s.AnimSpeed >= 120 ? 2 : 1);
+
+            CheckBox chkName = new CheckBox();
+            chkName.AutoSize = true;
+            chkName.Text = "显示名称标签";
+            chkName.Checked = s.ShowNameLabel;
+            chkName.Margin = new Padding(0, 10, 0, 0);
+            CheckBox chkCount = new CheckBox();
+            chkCount.AutoSize = true;
+            chkCount.Text = "显示计数标签";
+            chkCount.Checked = s.ShowCountLabel;
+            chkCount.Margin = new Padding(20, 10, 0, 0);
+            colR.Controls.Add(Row(MkLabel("动画速度"), cmbAnim, Gap(24), chkName, chkCount));
 
             CheckBox chkAuto = new CheckBox();
             chkAuto.AutoSize = true;
@@ -3568,14 +3960,14 @@ namespace SnapWheel
             chkAuto.Checked = s.AutoHide;
             chkAuto.Margin = new Padding(0, 4, 0, 4);
             NumericUpDown numSec = Num(2, 600, s.AutoHideSeconds);
-            root.Controls.Add(Row(chkAuto, Gap(16), MkLabel("空闲秒数"), numSec));
+            colL.Controls.Add(Row(chkAuto, Gap(16), MkLabel("空闲秒数"), numSec));
 
             CheckBox chkTop = new CheckBox();
             chkTop.AutoSize = true;
             chkTop.Text = "总在最前（始终置顶显示）";
             chkTop.Checked = s.AlwaysOnTop;
             chkTop.Margin = new Padding(0, 4, 0, 4);
-            root.Controls.Add(chkTop);
+            colL.Controls.Add(chkTop);
 
             ComboBox cmb = new ComboBox();
             cmb.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -3584,7 +3976,7 @@ namespace SnapWheel
             cmb.Items.AddRange(HotkeyUtil.Names);
             cmb.SelectedItem = s.Hotkey;
             if (cmb.SelectedIndex < 0) cmb.SelectedIndex = 0;
-            root.Controls.Add(Row(MkLabel("截图热键"), cmb));
+            colR.Controls.Add(Row(MkLabel("截图热键"), cmb));
 
             ComboBox cmbCorner = new ComboBox();
             cmbCorner.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -3592,7 +3984,7 @@ namespace SnapWheel
             cmbCorner.Margin = new Padding(0, 6, 0, 0);
             cmbCorner.Items.AddRange(new object[] { "左下角", "右下角", "左上角", "右上角" });
             cmbCorner.SelectedIndex = CornerIndex(s.Corner);
-            root.Controls.Add(Row(MkLabel("圆环位置"), cmbCorner));
+            colR.Controls.Add(Row(MkLabel("圆环位置"), cmbCorner));
 
             ComboBox cmbDel = new ComboBox();
             cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -3600,7 +3992,7 @@ namespace SnapWheel
             cmbDel.Margin = new Padding(0, 6, 0, 0);
             cmbDel.Items.AddRange(new object[] { "双击右键删除", "单击右键删除" });
             cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
-            root.Controls.Add(Row(MkLabel("删除方式"), cmbDel));
+            colR.Controls.Add(Row(MkLabel("删除方式"), cmbDel));
 
             ComboBox cmbSwitch = new ComboBox();
             cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -3608,7 +4000,7 @@ namespace SnapWheel
             cmbSwitch.Margin = new Padding(0, 6, 0, 0);
             cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
             cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
-            root.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch));
+            colR.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch));
 
             RoundButton ok = new RoundButton();
             ok.Text = "确定";
@@ -3635,6 +4027,14 @@ namespace SnapWheel
                 s.SwitchMode = (cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
                 s.PeekPercent = (int)numPeek.Value;
                 s.IntroAnim = chkIntroAnim.Checked;
+                s.UiStyle = (cmbStyle.SelectedIndex == 1) ? "flat" : (cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
+                s.AccentIndex = cmbAccent.SelectedIndex - 1;
+                s.GlassPercent = (int)numGlass.Value;
+                s.CardRadius = (int)numRadius.Value;
+                s.ShadowPercent = (int)numShadow.Value;
+                s.AnimSpeed = (cmbAnim.SelectedIndex == 0) ? 70 : (cmbAnim.SelectedIndex == 2 ? 140 : 100);
+                s.ShowNameLabel = chkName.Checked;
+                s.ShowCountLabel = chkCount.Checked;
                 if (cmb.SelectedItem != null) s.Hotkey = cmb.SelectedItem.ToString();
                 AutoRun.Apply(s.AutoStart);
                 s.Save();
@@ -3679,7 +4079,11 @@ namespace SnapWheel
             btnRow.Controls.Add(new Panel(), 1, 0);
             btnRow.Controls.Add(ok, 2, 0);
             btnRow.Controls.Add(cancel, 3, 0);
+            btnRow.AutoSize = false;
+            btnRow.Height = 42;
+            btnRow.Dock = DockStyle.Fill;
             root.Controls.Add(btnRow);
+            root.SetColumnSpan(btnRow, 2);
 
             Label about = new Label();
             about.AutoSize = true;
@@ -3687,6 +4091,14 @@ namespace SnapWheel
             about.ForeColor = Color.FromArgb(150, 150, 160);
             about.Margin = new Padding(0, 16, 0, 0);
             root.Controls.Add(about);
+
+            // 屏幕矮的时候别把窗口顶出屏幕（两栏布局后一般用不到，保险起见留个上限）
+            try
+            {
+                Rectangle wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+                MaximumSize = new Size((int)(wa.Width * 0.95), (int)(wa.Height * 0.94));
+            }
+            catch { }
         }
 
         static int CornerIndex(string c)
@@ -3759,6 +4171,26 @@ namespace SnapWheel
     // 新手引导：第一次打开时自动出现一次，之后可以从托盘/设置里再叫出来
     class GuideForm : Form
     {
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (Blur.Supported)
+            {
+                BackColor = Color.FromArgb(228, 246, 248, 252);
+                try { Blur.Apply(Handle, 190, 246, 248, 252, true); } catch { }
+            }
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (Blur.Supported)
+            {
+                using (SolidBrush b = new SolidBrush(BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
+                return;
+            }
+            base.OnPaintBackground(e);
+        }
+
         public GuideForm()
         {
             Text = AppInfo.Name + " 新手上路";
