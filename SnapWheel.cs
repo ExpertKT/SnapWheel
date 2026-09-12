@@ -3744,25 +3744,7 @@ namespace SnapWheel
                         g.DrawArc(pr, cbr0.X - 3f, cbr0.Y - 3f, cbr0.Width + 6f, cbr0.Height + 6f, -90f, 360f * hp);
                     }
                 }
-                // 长按提示：让"松手会退出 / 移开就取消"变得明确
-                if (hp > 0.12f)
-                {
-                    int ta = (int)(Math.Min(1f, (hp - 0.12f) / 0.25f) * 235 * ab0 / 255f);
-                    string tip2 = _closeLong ? "松手就退出 · 移开则取消" : "按住…移开可取消";
-                    using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
-                    using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
-                    {
-                        SizeF ts2 = g.MeasureString(tip2, ft2);
-                        float px2 = cbr0.Right + 12f, py2 = cbr0.Y + cbr0.Height / 2f - ts2.Height / 2f;
-                        RectangleF pr2 = new RectangleF(px2 - 8f, py2 - 4f, ts2.Width + 16f, ts2.Height + 8f);
-                        using (GraphicsPath clPath = Gfx.Round(pr2, pr2.Height / 2f))
-                        {
-                            BackdropClip(g, clPath, ta);
-                            using (SolidBrush clBg = new SolidBrush(Color.FromArgb((int)(ta * 0.55f), 24, 26, 32))) g.FillPath(clBg, clPath);
-                        }
-                        g.DrawString(tip2, ft2, tb2, px2, py2);
-                    }
-                }
+                // （长按提示条挪到最后统一画：这里画会被后面的万能键盖住）
                 using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown + 0.8f * (_closeLong ? 1f : 0f)))
                 {
                     float pad = 10 + 2f * _closeDown;
@@ -4010,6 +3992,34 @@ namespace SnapWheel
                     }
                     using (SolidBrush tb = new SolidBrush(Color.FromArgb((int)(250 * a / 255f), 255, 255, 255)))
                         g.DrawString(tip, f, tb, pill.X + 14, pill.Y + 6);
+                }
+            }
+
+            // 长按关闭键的提示条：位置放在关闭键正上方（避开万能键），并且最后画，不会被盖住
+            if (_closeHoldP > 0.10f)
+            {
+                Rectangle cbr8 = Shrink(CloseButtonRect(), _closeDown);
+                int ab8 = (int)(a * IntroP(0.30f));
+                if (ab8 < 8) ab8 = 8;
+                int ta = (int)(Math.Min(1f, (_closeHoldP - 0.10f) / 0.25f) * 240 * ab8 / 255f);
+                string tip2 = _closeLong ? "松手退出 · 移开取消" : "按住不放 · 移开可取消";
+                using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
+                using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
+                {
+                    SizeF ts2 = g.MeasureString(tip2, ft2);
+                    // 放在轮盘左下角那条提示带（和 toast 同一位置）：
+                    // 按钮上方被万能键占着、旁边被缩略图占着，只有这里是干净的
+                    SizeF ls3 = LogicalSize();
+                    float px2 = 26f;
+                    float py2 = ls3.Height - ts2.Height - 26f;   // 再往下让开计数胶囊
+                    RectangleF pr2 = new RectangleF(px2 - 8f, py2 - 4f, ts2.Width + 16f, ts2.Height + 8f);
+                    using (GraphicsPath clPath = Gfx.Round(pr2, pr2.Height / 2f))
+                    {
+                        BackdropClip(g, clPath, ta);
+                        using (SolidBrush clBg = new SolidBrush(Color.FromArgb((int)(ta * 0.62f), 22, 24, 30))) g.FillPath(clBg, clPath);
+                        using (Pen clPen = new Pen(Color.FromArgb((int)(ta * 0.55f), 236, 74, 62), 1.4f)) g.DrawPath(clPen, clPath);
+                    }
+                    g.DrawString(tip2, ft2, tb2, px2, py2);
                 }
             }
 

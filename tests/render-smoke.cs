@@ -582,6 +582,36 @@ namespace SnapWheel
                     if (noExit && f.Visible) pass++; else fail++;
                     fIgnore.SetValue(f, false);
                 }
+                // ---- 长按提示条：要看得见、且不被万能键/缩略图压住 ----
+                {
+                    MethodInfo dwH = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo krH = wt.GetMethod("KeyRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    float uikH = (float)wt.GetField("UiK", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f);
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                    F(f, "_testIgnoreLeave", true);
+                    F(f, "_closeHold", true); F(f, "_closeDownAt", DateTime.Now.AddMilliseconds(-700));
+                    for (int k = 0; k < 8; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    Rectangle kr3 = (Rectangle)krH.Invoke(f, null);
+                    SizeF lsH = (SizeF)wt.GetMethod("LogicalSize", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(f, null);
+                    int n = 0;
+                    using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                    {
+                        using (Graphics g = Graphics.FromImage(b)) dwH.Invoke(f, new object[] { g, f.Width, f.Height });
+                        int y0 = (int)((lsH.Height - 74f) * uikH), y1 = (int)((lsH.Height - 12f) * uikH);
+                        int x0 = (int)(14f * uikH), x1 = (int)(340f * uikH);
+                        for (int y = Math.Max(0, y0); y < Math.Min(y1, b.Height); y++)
+                            for (int x = Math.Max(0, x0); x < Math.Min(x1, b.Width); x++)
+                                if (b.GetPixel(x, y).A > 60) n++;
+                    }
+                    bool noClip = (lsH.Height - 74f) > (kr3.Y + kr3.Height);   // 提示带在万能键下面，不重叠
+                    bool ok2 = n > 500 && noClip;
+                    Console.WriteLine("  {0} 长按提示条可见且不被压住（像素 {1}，与万能键不重叠={2}）",
+                        ok2 ? "OK  " : "FAIL", n, noClip);
+                    if (ok2) pass++; else fail++;
+                    F(f, "_closeHold", false); F(f, "_testIgnoreLeave", false);
+                    for (int k = 0; k < 20; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                }
+
                 // ---- 启动时把手要有出现动画（不能突然冒出来）----
                 {
                     MethodInfo nOut3 = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
