@@ -50,19 +50,50 @@
 
 ## 快速开始
 
-**下载即用**：到 [Releases](https://github.com/ExpertKT/SnapWheel/releases) 下载 `SnapWheel.exe`（或含说明的 zip），双击运行，不用装任何东西。
+### 该下哪个？两条产品线
 
-**从源码编译**（无需 Visual Studio，用系统自带的 .NET Framework 编译器即可）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.6 ↔ v0.2.16）：
+
+| 你想要的 | 下这个 | 区别 |
+|---|---|---|
+| 长按**万能键**切 Wheel / 新建 / 删除 | **v0.4.x 完整版** ⭐ 推荐 | 多一个摇杆圆盘交互 |
+| 不想有那个圆盘，只要多 Wheel + 缩放/锁定 | **v0.2.x 无万能键版** | 其余功能完全一样 |
+
+到 [Releases](https://github.com/ExpertKT/SnapWheel/releases) 选版本下载（完整版是 Latest）；
+也可以直接下 [`build.ps1 -Package`](#从源码构建) 打出来的两个 zip。
+
+### 从源码构建
 
 ```powershell
-# 完整版（含万能键）
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /target:winexe `
-  /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
-
-# 无万能键变体（多 Wheel + 缩放/锁定）
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /define:NO_KEY `
-  /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
+.\build.ps1                # 一键编译两条线到 build\
+.\build.ps1 -Test          # 顺便跑全部测试
+.\build.ps1 -Package       # 再打包成分发 zip（含使用说明）
+.\build.ps1 -Clean         # 先清空 build\ 再编
 ```
+
+输出：
+
+```
+build\SnapWheel.exe                 完整版（含万能键）
+build\SnapWheel-nokey.exe           无万能键版
+build\SnapWheel-v0.4.6-full.zip     完整版分发包
+build\SnapWheel-v0.2.16-nokey.zip   无万能键版分发包
+```
+
+<details>
+<summary>不想用脚本？手动编译（两条线就一行参数的区别）</summary>
+
+```powershell
+$csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+
+# 完整版（含万能键）
+& $csc /nologo /optimize+ /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
+
+# 无万能键版（就是多一个 /define:NO_KEY）
+& $csc /nologo /optimize+ /define:NO_KEY /target:winexe /win32icon:snapwheel.ico `
+  /out:SnapWheel-nokey.exe SnapWheel.cs
+```
+</details>
 
 ## 怎么用
 
@@ -129,6 +160,7 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /defi
 ```
 SnapWheel.cs            单文件源码（约 5100 行，全部逻辑都在这）
 snapwheel.ico           图标
+build.ps1               一键编译两条产品线（-Test 跑测试 / -Package 打包）
 record-version.ps1      版本归档工具（编译两条线 + 快照 + 写说明）
 tests/                  7 套可复跑的测试与工具
   resize-geometry-test.cs   缩放几何仿真（角度 × 比例 × 四角 × 摆位）
@@ -145,6 +177,8 @@ CHANGELOG.md           完整更新日志（含两条产品线说明）
 ```
 
 ## 开发
+
+' 平时用 build.ps1 -Test 就够了；下面是单独跑某一套：
 
 ```powershell
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"

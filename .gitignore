@@ -13,6 +13,9 @@ Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
 
+# 本地构建产物（build.ps1 的输出）
+build/
+
 # 临时与调试产物
 *.tmp
 *_dbg.exe
