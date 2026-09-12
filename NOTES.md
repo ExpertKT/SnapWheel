@@ -1,16 +1,31 @@
-# SnapWheel v0.1.1
+# SnapWheel v0.2.0
 
-**日期**：2026-09-11
+**构建方式**：`csc /define:NO_KEY`（**不含万能键**）
 
-## 本次更新
-首个正式版本：截图轮盘完整功能（热键框选、比例锁定、圆环库、拖出/放回、动画、四角位置、开机自启）
+## 本版定义（按你的划分）
+> **没有万能键，但有框选缩放 + 比例锁定** → v0.2.0
+
+## 本版内容
+- **多 Wheel（多项目）**：每个 Wheel 一套独立截图集合，可新建/切换，各有主题色（8 色预设，切换时颜色平滑过渡）。
+- **切换方式**：设置里可选「长按后左右滑动」切换 Wheel（本变体不含万能键圆盘）。
+- **Wheel 管理界面**：托盘右键 →「管理 Wheel…」→ 新建 / 重命名 / 换色 / 删除。
+- **框选界面**：
+  - **四角拖拽缩放**：对角绝对不动；只在屏内限制尺寸；锁定比例时按比例缩放。
+  - **比例锁定**：选标准比例（自由/1:1/16:9/9:16/4:3/3:4/21:9）后缩放按比例；**旋转键下方的连体锁定键**可随时锁定/解锁（自由模式尤其有用），锁定变蓝。
+  - **旋转键**：拖动旋转选区，确认时输出旋转后的图。
+  - 提示：`双击保存 · 拖角缩放 · 拖圆点旋转 · Esc 取消`
+- **持久化**：`%APPDATA%\SnapWheel\wheels.ini`；开「保存到硬盘」后每个 Wheel 存各自子目录。
+- 截图、圆环库、拖出/放回、悬停放大、长按预览、双击复制、双击右键删除等基础功能齐全。
+
+## 与 v0.3.0 的差别
+**只有一点：本版没有万能键（摇杆圆盘）**；缩放、锁定、旋转、多 Wheel 均与 v0.3.0 相同。
 
 ## 文件
-- SnapWheel.exe —— 可执行文件（绿色免安装）
-- SnapWheel.cs —— 完整源码
-- snapwheel.ico —— 图标
+- `SnapWheel.exe` —— 本版可执行文件（无万能键）
+- `SnapWheel.cs` —— 完整源码（同一源码用 `NO_KEY` 开关可分别构建 0.2.0 / 0.3.0）
+- `snapwheel.ico` —— 图标
 
-## 编译
+## 编译（本版）
 ```
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /define:NO_KEY /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
 ```

@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -12,7 +13,11 @@ namespace SnapWheel
 {
     static class AppInfo
     {
-        public const string Version = "0.1.1";
+#if NO_KEY
+        public const string Version = "0.2.0";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+#else
+        public const string Version = "0.3.0";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+#endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
     }
@@ -184,6 +189,178 @@ namespace SnapWheel
         }
     }
 
+    static class Palette
+    {
+        public static readonly string[] Names = { "蓝", "红", "琥珀", "绿", "紫", "青", "橙", "灰" };
+        public static readonly Color[] Colors = {
+            Color.FromArgb(0, 122, 204),
+            Color.FromArgb(232, 86, 110),
+            Color.FromArgb(247, 166, 35),
+            Color.FromArgb(46, 184, 114),
+            Color.FromArgb(139, 108, 240),
+            Color.FromArgb(0, 176, 185),
+            Color.FromArgb(236, 120, 60),
+            Color.FromArgb(120, 132, 150)
+        };
+        public static Color Get(int i)
+        {
+            int n = Colors.Length;
+            int k = i % n; if (k < 0) k += n;
+            return Colors[k];
+        }
+    }
+
+    class Wheel
+    {
+        public string Id;
+        public string Name;
+        public int ColorIndex;
+        public Store Store = new Store();
+        public Wheel() { Id = Guid.NewGuid().ToString("N").Substring(0, 8); Name = "项目"; ColorIndex = 0; }
+        public Color Accent { get { return Palette.Get(ColorIndex); } }
+    }
+
+    // holds all wheels + which one is active; persists names/colours/active index
+    class WheelManager
+    {
+        public readonly List<Wheel> Wheels = new List<Wheel>();
+        public int Active = 0;
+        Settings _s;
+
+        public WheelManager(Settings s)
+        {
+            _s = s;
+            Load();
+            if (Wheels.Count == 0) { New(); }
+            if (Active < 0 || Active >= Wheels.Count) Active = 0;
+            ApplySettings();
+            Save();          // ensure wheels.ini exists (also on first run)
+        }
+
+        public Wheel ActiveWheel { get { return Wheels[Active]; } }
+        public Store ActiveStore { get { return Wheels[Active].Store; } }
+        public Color Accent { get { return Wheels[Active].Accent; } }
+
+        static string MetaPath()
+        {
+            string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapWheel");
+            try { Directory.CreateDirectory(d); } catch { }
+            return Path.Combine(d, "wheels.ini");
+        }
+
+        public static string SafeName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) name = "项目";
+            char[] bad = Path.GetInvalidFileNameChars();
+            for (int i = 0; i < bad.Length; i++) name = name.Replace(bad[i], '_');
+            return name.Trim();
+        }
+
+        public void ApplySettings()
+        {
+            for (int i = 0; i < Wheels.Count; i++)
+            {
+                Store st = Wheels[i].Store;
+                st.SaveToDisk = _s.SaveToDisk;
+                st.MaxCount = _s.MaxCount;
+                st.Dir = _s.SaveToDisk && !string.IsNullOrEmpty(_s.Dir)
+                    ? Path.Combine(_s.Dir, SafeName(Wheels[i].Name))
+                    : "";
+            }
+        }
+
+        public Wheel New()
+        {
+            Wheel w = new Wheel();
+            w.Name = "项目" + (Wheels.Count + 1);
+            w.ColorIndex = Wheels.Count % Palette.Colors.Length;
+            Wheels.Add(w);
+            ApplySettings();
+            return w;
+        }
+
+        public void Remove(int i)
+        {
+            if (Wheels.Count <= 1) { Wheels.Clear(); New(); Active = 0; return; }   // never run out of wheels
+            Wheel w = Wheels[i];
+            try
+            {
+                if (w.Store.SaveToDisk && !string.IsNullOrEmpty(w.Store.Dir) && Directory.Exists(w.Store.Dir))
+                    Directory.Delete(w.Store.Dir, true);
+            }
+            catch { }
+            Wheels.RemoveAt(i);
+            if (Active >= Wheels.Count) Active = Wheels.Count - 1;
+            if (Active < 0) Active = 0;
+        }
+
+        public void Next() { if (Wheels.Count > 0) Active = (Active + 1) % Wheels.Count; }
+        public void Prev() { if (Wheels.Count > 0) Active = (Active - 1 + Wheels.Count) % Wheels.Count; }
+
+        public void Save()
+        {
+            try
+            {
+                List<string> lines = new List<string>();
+                lines.Add("active=" + Active);
+                for (int i = 0; i < Wheels.Count; i++)
+                    lines.Add("wheel=" + Wheels[i].Id + "|" + Wheels[i].Name + "|" + Wheels[i].ColorIndex);
+                File.WriteAllLines(MetaPath(), lines.ToArray(), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        void Load()
+        {
+            try
+            {
+                string f = MetaPath();
+                if (!File.Exists(f)) return;
+                foreach (string line in File.ReadAllLines(f, Encoding.UTF8))
+                {
+                    if (line.StartsWith("active=")) { int a; if (int.TryParse(line.Substring(7), out a)) Active = a; }
+                    else if (line.StartsWith("wheel="))
+                    {
+                        string[] p = line.Substring(6).Split('|');
+                        if (p.Length < 3) continue;
+                        Wheel w = new Wheel();
+                        w.Id = p[0];
+                        w.Name = p[1];
+                        int ci; if (int.TryParse(p[2], out ci)) w.ColorIndex = ci;
+                        Wheels.Add(w);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // load saved shots for every wheel when running in disk mode
+        public void LoadImagesFromDisk()
+        {
+            if (!_s.SaveToDisk || string.IsNullOrEmpty(_s.Dir)) return;
+            for (int i = 0; i < Wheels.Count; i++)
+            {
+                Store st = Wheels[i].Store;
+                if (string.IsNullOrEmpty(st.Dir) || !Directory.Exists(st.Dir)) continue;
+                string[] files = Directory.GetFiles(st.Dir, "snap_*.png");
+                Array.Sort(files);
+                for (int k = 0; k < files.Length; k++)
+                {
+                    try
+                    {
+                        Bitmap b = new Bitmap(files[k]);
+                        StoreItem it = new StoreItem();
+                        it.Image = b;
+                        it.FilePath = files[k];
+                        st.Items.Add(it);
+                    }
+                    catch { }
+                }
+                while (st.Items.Count > st.MaxCount) st.Items.RemoveAt(0);
+            }
+        }
+    }
+
     static class HotkeyUtil
     {
         public static readonly string[] Names = { "Ctrl+Shift+S", "Ctrl+Shift+A", "Ctrl+Alt+A", "Alt+Shift+A", "Ctrl+Shift+X" };
@@ -226,6 +403,7 @@ namespace SnapWheel
         public string Corner = "BL";    // BL / BR / TL / TR - which screen corner the ring docks to
         public bool AutoStart = false;  // launch at logon (HKCU Run)
         public string DeleteMode = "double";  // "double" right-click to delete, or "single"
+        public string SwitchMode = "radial";  // "radial" (万能键圆盘) or "swipe" (长按滑动切换)
 
         static string FilePath()
         {
@@ -263,6 +441,7 @@ namespace SnapWheel
                         else if (k == "Corner" && (v == "BL" || v == "BR" || v == "TL" || v == "TR")) s.Corner = v;
                         else if (k == "AutoStart") s.AutoStart = (v == "1");
                         else if (k == "DeleteMode" && (v == "single" || v == "double")) s.DeleteMode = v;
+                        else if (k == "SwitchMode" && (v == "radial" || v == "swipe")) s.SwitchMode = v;
                     }
                 }
             }
@@ -290,6 +469,7 @@ namespace SnapWheel
                 lines.Add("Corner=" + Corner);
                 lines.Add("AutoStart=" + (AutoStart ? "1" : "0"));
                 lines.Add("DeleteMode=" + DeleteMode);
+                lines.Add("SwitchMode=" + SwitchMode);
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
             catch { }
@@ -363,25 +543,39 @@ namespace SnapWheel
     class OverlayForm : Form
     {
         Bitmap _shot;
-        Bitmap _dimmed;          // pre-dimmed base -> cheap per-frame paint
+        Bitmap _dimmed;
         Rectangle _vs;
-        bool _dragging;
-        Point _start;
-        Rectangle _sel = Rectangle.Empty;
+
+        // 选区模型：中心 + 尺寸 + 旋转角（弧度），支持旋转
+        PointF _c;
+        SizeF _sz;
+        float _ang = 0f;
         bool _hasSel;
 
-        // quick standard aspect-ratio presets, collapsed behind a toggle
+        bool _dragging;      // 新建选区
+        Point _start;
+        bool _moving;
+        PointF _moveStartC;
+        int _resizeCorner = -1;    // 0..3 左上/右上/右下/左下
+        bool _rotating;
+        float _rotGrab = 0f;
+
+        // 比例
+        float _ratio = 0f;          // 来自比例胶囊；0 = 自由
+        bool _locked = false;       // 锁定键状态
+        float _lockedRatio = 0f;
+
+        // 比例胶囊
         struct Chip { public string Label; public float Ratio; public Rectangle Rect; }
         Chip[] _chips;
-        float _ratio = 0f;          // 0 = free
         Rectangle _toggleRect;
         bool _chipsOpen = false;
-        float _chipsT = 0f;         // 0 collapsed .. 1 expanded
+        float _chipsT = 0f;
         Timer _anim;
-        // moving an existing selection
-        bool _moving;
-        Point _moveStart;
-        Rectangle _moveOrig;
+        int[] _chipW;
+        int _toggleW = 92;
+        Rectangle _panelBounds;
+
         public Bitmap Result;
 
         public OverlayForm(Rectangle virtualScreen, Bitmap shot)
@@ -398,7 +592,6 @@ namespace SnapWheel
             KeyPreview = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
 
-            // bake the dimmed base once -> painting a frame becomes two blits (fast, high frame rate)
             _dimmed = new Bitmap(shot.Width, shot.Height, PixelFormat.Format32bppPArgb);
             using (Graphics g = Graphics.FromImage(_dimmed))
             {
@@ -417,14 +610,78 @@ namespace SnapWheel
         {
             float tgt = _chipsOpen ? 1f : 0f;
             if (Math.Abs(_chipsT - tgt) < 0.002f) { _chipsT = tgt; _anim.Stop(); Invalidate(); return; }
-            _chipsT += (tgt - _chipsT) * 0.26f;      // silky ease
+            _chipsT += (tgt - _chipsT) * 0.26f;
             Invalidate();
         }
 
-        int[] _chipW;
-        int _toggleW = 92;
-        Rectangle _panelBounds;
+        // ---------- 选区几何 ----------
+        PointF AxisU() { return new PointF((float)Math.Cos(_ang), (float)Math.Sin(_ang)); }
+        PointF AxisV() { return new PointF((float)-Math.Sin(_ang), (float)Math.Cos(_ang)); }
 
+        PointF[] Corners()
+        {
+            PointF u = AxisU(), v = AxisV();
+            float hw = _sz.Width / 2f, hh = _sz.Height / 2f;
+            return new PointF[] {
+                new PointF(_c.X - u.X*hw - v.X*hh, _c.Y - u.Y*hw - v.Y*hh),   // 左上
+                new PointF(_c.X + u.X*hw - v.X*hh, _c.Y + u.Y*hw - v.Y*hh),   // 右上
+                new PointF(_c.X + u.X*hw + v.X*hh, _c.Y + u.Y*hw + v.Y*hh),   // 右下
+                new PointF(_c.X - u.X*hw + v.X*hh, _c.Y - u.Y*hw + v.Y*hh)    // 左下
+            };
+        }
+
+        bool InsideSel(PointF p)
+        {
+            if (!_hasSel) return false;
+            PointF u = AxisU(), v = AxisV();
+            float dx = p.X - _c.X, dy = p.Y - _c.Y;
+            float du = dx * u.X + dy * u.Y, dv = dx * v.X + dy * v.Y;
+            return Math.Abs(du) <= _sz.Width / 2f + 2 && Math.Abs(dv) <= _sz.Height / 2f + 2;
+        }
+
+        RectangleF SelBounds()
+        {
+            PointF[] cs = Corners();
+            float minx = cs[0].X, maxx = cs[0].X, miny = cs[0].Y, maxy = cs[0].Y;
+            for (int i = 1; i < 4; i++)
+            {
+                if (cs[i].X < minx) minx = cs[i].X;
+                if (cs[i].X > maxx) maxx = cs[i].X;
+                if (cs[i].Y < miny) miny = cs[i].Y;
+                if (cs[i].Y > maxy) maxy = cs[i].Y;
+            }
+            return new RectangleF(minx, miny, maxx - minx, maxy - miny);
+        }
+
+        // 旋转键：在“上边中点”外侧；锁定键：连在旋转键外侧
+        PointF RotateHandlePos()
+        {
+            PointF v = AxisV();
+            return new PointF(_c.X - v.X * (_sz.Height / 2f + 30f), _c.Y - v.Y * (_sz.Height / 2f + 30f));
+        }
+        PointF LockHandlePos()
+        {
+            PointF v = AxisV();
+            return new PointF(_c.X - v.X * (_sz.Height / 2f + 62f), _c.Y - v.Y * (_sz.Height / 2f + 62f));
+        }
+
+        float EffRatio()
+        {
+            if (_locked && _lockedRatio > 0.01f) return _lockedRatio;
+            return _ratio;
+        }
+
+        void ClampCenter()
+        {
+            float hw = _sz.Width / 2f, hh = _sz.Height / 2f;
+            float rad = (float)Math.Sqrt(hw * hw + hh * hh);
+            if (_c.X < rad) _c.X = rad;
+            if (_c.Y < rad) _c.Y = rad;
+            if (_c.X > _vs.Width - rad) _c.X = _vs.Width - rad;
+            if (_c.Y > _vs.Height - rad) _c.Y = _vs.Height - rad;
+        }
+
+        // ---------- 比例胶囊 ----------
         void MeasureChips()
         {
             string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
@@ -435,7 +692,6 @@ namespace SnapWheel
                     _chipW[i] = (int)g.MeasureString(labels[i], f).Width + 22;
         }
 
-        // panel position follows the selection and is always kept fully on screen
         void PlaceChips()
         {
             string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
@@ -448,11 +704,12 @@ namespace SnapWheel
             int totalW = _toggleW + gap + chipsW;
 
             int rowX, rowY;
-            if (_hasSel && _sel.Width > 4)
+            if (_hasSel)
             {
-                rowX = _sel.Left;
-                rowY = _sel.Bottom + 12;
-                if (rowY + h > _vs.Height - 10) rowY = _sel.Top - h - 12;   // flip above if no room below
+                RectangleF bb = SelBounds();
+                rowX = (int)bb.Left;
+                rowY = (int)bb.Bottom + 14;
+                if (rowY + h > _vs.Height - 10) rowY = (int)bb.Top - h - 40;
             }
             else
             {
@@ -479,18 +736,17 @@ namespace SnapWheel
 
         void DrawChips(Graphics g)
         {
-            PlaceChips();                     // recompute so the panel always follows the selection
+            PlaceChips();
             if (_chips == null) return;
             using (Font f = new Font("Microsoft YaHei UI", 10f))
             {
-                // expanding chips (slide right + fade with _chipsT)
                 int shift = (int)((1f - _chipsT) * 26f);
                 int al = (int)(255 * _chipsT);
                 if (_chipsT > 0.01f)
                 {
                     foreach (Chip c in _chips)
                     {
-                        bool act = Math.Abs(c.Ratio - _ratio) < 0.001f;
+                        bool act = (_ratio > 0f && Math.Abs(c.Ratio - _ratio) < 0.001f) || (c.Ratio == 0f && _ratio == 0f && !_locked);
                         Rectangle r = new Rectangle(c.Rect.X - shift, c.Rect.Y, c.Rect.Width, c.Rect.Height);
                         using (GraphicsPath p = Gfx.Round(r, 8f))
                         using (SolidBrush b = new SolidBrush(act
@@ -504,7 +760,6 @@ namespace SnapWheel
                             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                     }
                 }
-                // toggle pill
                 Rectangle tr = _toggleRect;
                 using (GraphicsPath p = Gfx.Round(tr, 9f))
                 using (SolidBrush b = new SolidBrush(_chipsOpen ? Color.FromArgb(225, 0, 122, 204) : Color.FromArgb(185, 22, 24, 28)))
@@ -512,44 +767,96 @@ namespace SnapWheel
                 using (GraphicsPath p2 = Gfx.Round(tr, 9f))
                 using (Pen pen = new Pen(Color.FromArgb(130, 255, 255, 255), 1.2f))
                     g.DrawPath(pen, p2);
-                string tl = _chipsOpen ? "比例 ▼" : "比例 ▶";
-                TextRenderer.DrawText(g, tl, f, tr, Color.White,
+                TextRenderer.DrawText(g, _chipsOpen ? "比例 ▼" : "比例 ▶", f, tr, Color.White,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
 
+        // ---------- 绘制 ----------
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
             g.CompositingMode = CompositingMode.SourceCopy;
             if (_dimmed != null) g.DrawImageUnscaled(_dimmed, 0, 0);
             g.CompositingMode = CompositingMode.SourceOver;
-            if (_hasSel && _sel.Width > 0 && _sel.Height > 0)
+
+            if (_hasSel && _sz.Width > 1 && _sz.Height > 1)
             {
-                Rectangle r = _sel;
-                if (_shot != null) g.DrawImage(_shot, r, r, GraphicsUnit.Pixel);
-                using (Pen p = new Pen(Color.FromArgb(0, 174, 255), 2)) g.DrawRectangle(p, r);
-                string txt = r.Width + " x " + r.Height;
-                using (Font f = new Font("Segoe UI", 9f))
-                using (SolidBrush bg = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                PointF[] cs = Corners();
+                using (GraphicsPath path = new GraphicsPath())
+                {
+                    path.AddPolygon(cs);
+                    // 选区内显示原图（未变暗）
+                    if (_shot != null)
+                    {
+                        g.SetClip(path);
+                        g.DrawImageUnscaled(_shot, 0, 0);
+                        g.ResetClip();
+                    }
+                    using (Pen p = new Pen(Color.FromArgb(0, 174, 255), 2f)) g.DrawPath(p, path);
+                }
+
+                // 四角缩放手柄
+                foreach (PointF p in cs)
+                {
+                    using (SolidBrush b = new SolidBrush(Color.White))
+                        g.FillRectangle(b, p.X - 4.5f, p.Y - 4.5f, 9, 9);
+                    using (Pen bp = new Pen(Color.FromArgb(0, 174, 255), 1.6f))
+                        g.DrawRectangle(bp, p.X - 4.5f, p.Y - 4.5f, 9, 9);
+                }
+
+                // 旋转键 + 连体锁定键
+                PointF rh = RotateHandlePos(), lh = LockHandlePos();
+                using (Pen line = new Pen(Color.FromArgb(160, 255, 255, 255), 1.2f))
+                {
+                    PointF topMid = new PointF((cs[0].X + cs[1].X) / 2f, (cs[0].Y + cs[1].Y) / 2f);
+                    g.DrawLine(line, topMid, rh);
+                    g.DrawLine(line, rh, lh);
+                }
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(235, 22, 24, 28)))
+                    g.FillEllipse(b, rh.X - 13, rh.Y - 13, 26, 26);
+                using (Pen p = new Pen(Color.White, 1.6f))
+                {
+                    // 旋转图标：圆弧 + 箭头
+                    g.DrawArc(p, rh.X - 6.5f, rh.Y - 6.5f, 13, 13, 40, 250);
+                    g.DrawLine(p, rh.X + 3.4f, rh.Y - 7.6f, rh.X + 7.2f, rh.Y - 4.4f);
+                    g.DrawLine(p, rh.X + 7.2f, rh.Y - 4.4f, rh.X + 2.6f, rh.Y - 3.4f);
+                }
+                using (SolidBrush b = new SolidBrush(_locked ? Color.FromArgb(240, 0, 122, 204) : Color.FromArgb(225, 22, 24, 28)))
+                    g.FillEllipse(b, lh.X - 13, lh.Y - 13, 26, 26);
+                using (Pen p = new Pen(Color.White, 1.6f))
+                {
+                    // 锁图标
+                    g.DrawRectangle(p, lh.X - 5f, lh.Y - 1f, 10f, 9f);
+                    g.DrawArc(p, lh.X - 3.5f, lh.Y - 7f, 7f, 8f, 180, 180);
+                }
+
+                // 尺寸/角度标签
+                RectangleF bb2 = SelBounds();
+                string txt = ((int)Math.Round(_sz.Width)) + " x " + ((int)Math.Round(_sz.Height));
+                if (Math.Abs(_ang) > 0.001f) txt += "   " + ((int)Math.Round(_ang * 180f / Math.PI)) + "°";
+                if (_locked) txt += "   🔒";
+                using (Font f = new Font("Segoe UI", 9.5f))
+                using (SolidBrush bg = new SolidBrush(Color.FromArgb(205, 0, 0, 0)))
                 using (SolidBrush fg = new SolidBrush(Color.White))
                 {
-                    SizeF sz = g.MeasureString(txt, f);
-                    float tx = r.Left, ty = r.Top - sz.Height - 4;
-                    if (ty < 0) ty = r.Bottom + 4;
-                    g.FillRectangle(bg, tx, ty, sz.Width + 8, sz.Height + 2);
-                    g.DrawString(txt, f, fg, tx + 4, ty + 1);
+                    SizeF szl = g.MeasureString(txt, f);
+                    float tx = bb2.Left, ty = bb2.Top - szl.Height - 6;
+                    if (ty < 4) ty = bb2.Bottom + 6;
+                    g.FillRectangle(bg, tx, ty, szl.Width + 10, szl.Height + 3);
+                    g.DrawString(txt, f, fg, tx + 5, ty + 1);
                 }
-                string hint = "双击选区保存　·　Esc 取消";
+
+                string hint = "双击保存　·　拖角缩放　·　拖圆点旋转　·　Esc 取消";
                 using (Font f2 = new Font("Microsoft YaHei UI", 10f))
                 using (SolidBrush fg2 = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
                 using (SolidBrush bg2 = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
                 {
                     SizeF sz2 = g.MeasureString(hint, f2);
-                    // keep the hint ABOVE the selection so it never collides with the ratio panel below
-                    float hx = r.Left;
-                    float hy = r.Top - sz2.Height - 30;
-                    if (hy < 4) hy = r.Bottom + 8;
+                    float hx = bb2.Left;
+                    float hy = bb2.Top - sz2.Height - 36;
+                    if (hy < 4) hy = bb2.Bottom + 30;
                     g.FillRectangle(bg2, hx, hy, sz2.Width + 8, sz2.Height + 4);
                     g.DrawString(hint, f2, fg2, hx + 4, hy + 2);
                 }
@@ -557,114 +864,181 @@ namespace SnapWheel
             DrawChips(g);
         }
 
+        // ---------- 交互 ----------
         protected override void OnMouseDown(MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (e.Button == MouseButtons.Right) { Cancel(); return; }
+            if (e.Button != MouseButtons.Left) return;
+
+            if (_toggleRect.Contains(e.Location)) { _chipsOpen = !_chipsOpen; _anim.Start(); Invalidate(); return; }
+            if (_chipsOpen && _chipsT > 0.5f && _chips != null)
             {
-                // ratio toggle / chips
-                if (_toggleRect.Contains(e.Location))
+                int shift = (int)((1f - _chipsT) * 26f);
+                for (int i = 0; i < _chips.Length; i++)
                 {
-                    _chipsOpen = !_chipsOpen;
-                    _anim.Start();
+                    Rectangle r = new Rectangle(_chips[i].Rect.X - shift, _chips[i].Rect.Y, _chips[i].Rect.Width, _chips[i].Rect.Height);
+                    if (!r.Contains(e.Location)) continue;
+                    _ratio = _chips[i].Ratio;
+                    _locked = (_ratio > 0f);
+                    _lockedRatio = _ratio;
+                    ApplyRatioToSel();
                     Invalidate();
                     return;
                 }
-                if (_chipsOpen && _chipsT > 0.5f && _chips != null)
+            }
+
+            if (_hasSel)
+            {
+                // 锁定键
+                PointF lh = LockHandlePos();
+                if (Dist(e.Location, lh) < 15f)
                 {
-                    int shift = (int)((1f - _chipsT) * 26f);
-                    for (int i = 0; i < _chips.Length; i++)
-                    {
-                        Rectangle r = new Rectangle(_chips[i].Rect.X - shift, _chips[i].Rect.Y, _chips[i].Rect.Width, _chips[i].Rect.Height);
-                        if (!r.Contains(e.Location)) continue;
-                        _ratio = _chips[i].Ratio;
-                        ApplyRatioToSel();
-                        Invalidate();
-                        return;
-                    }
-                }
-                // drag an existing selection around
-                if (_hasSel && _sel.Contains(e.Location))
-                {
-                    _moving = true; _moveStart = e.Location; _moveOrig = _sel;
+                    _locked = !_locked;
+                    if (_locked) { _lockedRatio = _sz.Height > 1 ? _sz.Width / _sz.Height : 1f; _ratio = 0f; }
+                    else { _lockedRatio = 0f; _ratio = 0f; }
+                    Invalidate();
                     return;
                 }
-                _dragging = true; _start = e.Location; _hasSel = false; _sel = Rectangle.Empty; Invalidate();
+                // 旋转键
+                PointF rh = RotateHandlePos();
+                if (Dist(e.Location, rh) < 15f)
+                {
+                    _rotating = true;
+                    _rotGrab = (float)Math.Atan2(e.Y - _c.Y, e.X - _c.X) - _ang;
+                    return;
+                }
+                // 四角
+                PointF[] cs = Corners();
+                for (int i = 0; i < 4; i++)
+                    if (Dist(e.Location, cs[i]) < 11f) { _resizeCorner = i; return; }
+                // 内部拖动
+                if (InsideSel(e.Location)) { _moving = true; _moveStartC = _c; _start = e.Location; return; }
             }
-            else if (e.Button == MouseButtons.Right) Cancel();
+
+            // 新建选区
+            _dragging = true;
+            _start = e.Location;
+            _hasSel = false;
+            Invalidate();
         }
 
-        // resize the current selection to the locked ratio (keeps top-left + width)
+        static float Dist(PointF a, PointF b)
+        {
+            float dx = a.X - b.X, dy = a.Y - b.Y;
+            return (float)Math.Sqrt(dx * dx + dy * dy);
+        }
+
         void ApplyRatioToSel()
         {
-            if (_ratio <= 0f || !_hasSel || _sel.Width < 4) return;
-            int w = _sel.Width;
-            int h = (int)Math.Round(w / _ratio);
-            if (h > _vs.Height) { h = _vs.Height; w = (int)Math.Round(h * _ratio); }
-            if (_sel.Left + w > _vs.Width) w = _vs.Width - _sel.Left;
-            if (_sel.Top + h > _vs.Height) h = _vs.Height - _sel.Top;
-            _sel = new Rectangle(_sel.Left, _sel.Top, Math.Max(4, w), Math.Max(4, h));
+            float r = EffRatio();
+            if (r <= 0f || !_hasSel || _sz.Width < 4) return;
+            float w = _sz.Width;
+            _sz = new SizeF(w, w / r);
+            ClampCenter();
         }
 
-        // invalidate the changed selection AND both old/new panel positions (otherwise the panel ghosts)
-        void InvalidateForSelection(Rectangle oldSel, Rectangle newSel)
+        void InvalidateForSelection(Rectangle a, Rectangle b)
         {
             Rectangle oldPanel = _panelBounds;
-            Rectangle dirty = Rectangle.Union(oldSel, newSel);
+            Rectangle dirty = Rectangle.Union(a, b);
             PlaceChips();
             dirty = Rectangle.Union(dirty, Rectangle.Union(oldPanel, _panelBounds));
-            dirty.Inflate(60, 60);
+            dirty.Inflate(90, 90);
             Invalidate(dirty);
+        }
+
+        Rectangle DirtyRect()
+        {
+            RectangleF bb = _hasSel ? SelBounds() : RectangleF.Empty;
+            Rectangle r = new Rectangle((int)bb.Left - 80, (int)bb.Top - 100, (int)bb.Width + 160, (int)bb.Height + 200);
+            if (r.Width < 1) r = new Rectangle(0, 0, _vs.Width, _vs.Height);
+            return r;
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (_rotating)
+            {
+                Rectangle old = DirtyRect();
+                float want = (float)Math.Atan2(e.Y - _c.Y, e.X - _c.X) - _rotGrab;
+                if (Math.Abs(want - _ang) > 0.0005f) { _ang = want; }
+                InvalidateForSelection(old, DirtyRect());
+                return;
+            }
+            if (_resizeCorner >= 0)
+            {
+                Rectangle old = DirtyRect();
+                ResizeTo(e.Location);
+                InvalidateForSelection(old, DirtyRect());
+                return;
+            }
             if (_moving)
             {
-                int dx = e.X - _moveStart.X, dy = e.Y - _moveStart.Y;
-                int nx = _moveOrig.X + dx, ny = _moveOrig.Y + dy;
-                if (nx < 0) nx = 0;
-                if (ny < 0) ny = 0;
-                if (nx + _moveOrig.Width > _vs.Width) nx = _vs.Width - _moveOrig.Width;
-                if (ny + _moveOrig.Height > _vs.Height) ny = _vs.Height - _moveOrig.Height;
-                Rectangle old = _sel;
-                _sel = new Rectangle(nx, ny, _moveOrig.Width, _moveOrig.Height);
-                _hasSel = true;
-                InvalidateForSelection(old, _sel);
+                Rectangle old = DirtyRect();
+                _c = new PointF(_moveStartC.X + (e.X - _start.X), _moveStartC.Y + (e.Y - _start.Y));
+                ClampCenter();
+                InvalidateForSelection(old, DirtyRect());
                 return;
             }
             if (_dragging)
             {
-                Rectangle oldR = _sel;
-                int x1 = Math.Min(_start.X, e.X), y1 = Math.Min(_start.Y, e.Y);
-                int x2 = Math.Max(_start.X, e.X), y2 = Math.Max(_start.Y, e.Y);
-                int w = x2 - x1, h = y2 - y1;
-                if (_ratio > 0f && w > 2 && h > 2)
-                {
-                    if (w / (float)h > _ratio) h = (int)Math.Round(w / _ratio);
-                    else w = (int)Math.Round(h * _ratio);
-                    x2 = Math.Min(_vs.Width, x1 + w);
-                    y2 = Math.Min(_vs.Height, y1 + h);
-                }
-                _sel = new Rectangle(x1, y1, Math.Max(0, x2 - x1), Math.Max(0, y2 - y1));
+                Rectangle old = DirtyRect();
+                float x1 = Math.Min(_start.X, e.X), y1 = Math.Min(_start.Y, e.Y);
+                float x2 = Math.Max(_start.X, e.X), y2 = Math.Max(_start.Y, e.Y);
+                float w = Math.Max(2f, x2 - x1), h = Math.Max(2f, y2 - y1);
+                float r = EffRatio();
+                if (r > 0f) { if (w / h > r) h = w / r; else w = h * r; }
+                _c = new PointF(x1 + w / 2f, y1 + h / 2f);
+                _sz = new SizeF(w, h);
+                _ang = 0f;
                 _hasSel = true;
-                // repaint only the changed area (+ panel) -> smooth, high frame rate while dragging
-                InvalidateForSelection(oldR, _sel);
+                InvalidateForSelection(old, DirtyRect());
             }
+        }
+
+        // 按住某个角缩放：对角绝对不动；比例锁定按比例；只在屏内限制尺寸（绝不移动固定角）
+        void ResizeTo(PointF mouse)
+        {
+            if (!_hasSel) return;
+            PointF u = AxisU(), v = AxisV();
+            PointF[] cs = Corners();
+            PointF fx = cs[(_resizeCorner + 2) % 4];        // 对角固定
+            float dx = mouse.X - fx.X, dy = mouse.Y - fx.Y;
+            float du = dx * u.X + dy * u.Y;
+            float dv = dx * v.X + dy * v.Y;
+            if (du < 6f) du = 6f;
+            if (dv < 6f) dv = 6f;
+            float r = EffRatio();
+            if (r > 0f) { if (du / dv > r) dv = du / r; else du = dv * r; }
+
+            // 只按比例缩小尺寸，保证“拖动的那个角”不出屏；固定角始终原位
+            for (int k = 0; k < 60; k++)
+            {
+                float fxp = fx.X + u.X * du + v.X * dv;
+                float fyp = fx.Y + u.Y * du + v.Y * dv;
+                if (fxp >= 0f && fyp >= 0f && fxp <= _vs.Width && fyp <= _vs.Height) break;
+                du *= 0.97f; dv *= 0.97f;
+                if (du < 6f || dv < 6f) { du = 6f; dv = 6f; break; }
+            }
+
+            _sz = new SizeF(du, dv);
+            _c = new PointF(fx.X + u.X * du / 2f + v.X * dv / 2f,
+                            fx.Y + u.Y * du / 2f + v.Y * dv / 2f);
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            _moving = false;
+            _moving = false; _resizeCorner = -1; _rotating = false;
             if (e.Button == MouseButtons.Left && _dragging)
             {
                 _dragging = false;
-                if (_sel.Width < 3 || _sel.Height < 3) { _hasSel = false; _sel = Rectangle.Empty; Invalidate(); }
+                if (!_hasSel || _sz.Width < 3 || _sz.Height < 3) { _hasSel = false; Invalidate(); }
             }
         }
 
         protected override void OnMouseDoubleClick(MouseEventArgs e)
         {
-            if (_hasSel && _sel.Contains(e.Location)) Confirm();
+            if (_hasSel && InsideSel(e.Location)) Confirm();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -675,12 +1049,19 @@ namespace SnapWheel
 
         void Confirm()
         {
-            if (_shot == null) { Close(); return; }
-            Rectangle r = _sel;
-            r.Intersect(new Rectangle(0, 0, _shot.Width, _shot.Height));
-            if (r.Width <= 0 || r.Height <= 0) { Close(); return; }
-            Bitmap crop = new Bitmap(r.Width, r.Height);
-            using (Graphics g = Graphics.FromImage(crop)) g.DrawImage(_shot, new Rectangle(0, 0, r.Width, r.Height), r, GraphicsUnit.Pixel);
+            if (_shot == null || !_hasSel) { Close(); return; }
+            int w = Math.Max(1, (int)Math.Round(_sz.Width));
+            int h = Math.Max(1, (int)Math.Round(_sz.Height));
+            Bitmap crop = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
+            using (Graphics g = Graphics.FromImage(crop))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.TranslateTransform(w / 2f, h / 2f);
+                g.RotateTransform(-_ang * 180f / (float)Math.PI);
+                g.TranslateTransform(-_c.X, -_c.Y);
+                g.DrawImageUnscaled(_shot, 0, 0);
+            }
             Result = crop;
             DialogResult = DialogResult.OK;
             Close();
@@ -767,7 +1148,8 @@ namespace SnapWheel
     // ---- minimal corner dock: a quarter arc hugging the bottom-left corner ----
     class WheelForm : Form
     {
-        Store _store;
+        Store _store { get { return _mgr.ActiveStore; } }     // always the ACTIVE wheel's store
+        WheelManager _mgr;
         Settings _settings;
         Timer _anim;
         float _R = 300f;          // ring radius, measured from the screen corner
@@ -809,9 +1191,9 @@ namespace SnapWheel
         const int WS_EX_TOOLWINDOW = 0x80;
         const int WS_EX_NOACTIVATE = 0x08000000;
 
-        public WheelForm(Store store, Settings settings)
+        public WheelForm(WheelManager mgr, Settings settings)
         {
-            _store = store;
+            _mgr = mgr;
             _settings = settings;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
@@ -837,7 +1219,8 @@ namespace SnapWheel
             _slots = Math.Max(2, Math.Min(12, _settings.Slots));
             _phiMin = (float)Math.Asin(Math.Min(0.92, (_thumb * 0.80f) / _R));
             _phiMax = (float)(Math.PI / 2) - _phiMin;
-            int size = (int)(_R + _thumb * 1.75f + 40f);
+            // 留出摇杆键的空间：半径 + 键(92) + 名字标签
+            int size = (int)(_R + _thumb * 1.75f + 190f);
             if (Size.Width != size) Size = new Size(size, size);
             PlaceBottomLeft();
             _rendered = false;
@@ -974,6 +1357,35 @@ namespace SnapWheel
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
             if (_deletingItem != null) need = true;
+
+            // 万能键：长按展开圆盘 / 滑动切换
+            if (_keyDown)
+            {
+                bool radial = (_settings.SwitchMode != "swipe");
+                if (radial && !_menuOpen && (DateTime.Now - _keyDownAt).TotalMilliseconds > 260)
+                {
+                    _menuOpen = true; _sector = -1; _confirmDelete = false; need = true;
+                }
+                if (_menuOpen && _menuT < 1f) { _menuT += (1f - _menuT) * 0.28f; need = true; }
+            }
+            else if (_menuT > 0.001f)
+            {
+                _menuT += (0f - _menuT) * 0.30f;
+                if (_menuT < 0.01f) { _menuT = 0f; _menuOpen = false; _sector = -1; _confirmDelete = false; }
+                need = true;
+            }
+
+            // 主题色过渡 + 切换闪光
+            Color want = _mgr.Accent;
+            if (_accentCur.ToArgb() != want.ToArgb())
+            {
+                _accentCur = Color.FromArgb(
+                    (int)Math.Round(_accentCur.R + (want.R - _accentCur.R) * 0.22f),
+                    (int)Math.Round(_accentCur.G + (want.G - _accentCur.G) * 0.22f),
+                    (int)Math.Round(_accentCur.B + (want.B - _accentCur.B) * 0.22f));
+                need = true;
+            }
+            if (_switchFlash > 0f) { _switchFlash += (0f - _switchFlash) * 0.16f; if (_switchFlash < 0.01f) _switchFlash = 0f; need = true; }
 
             if (_settings.AutoHide && _targetShow > 0.5f && _show > 0.99f)
                 if ((DateTime.Now - _lastActive).TotalSeconds > _settings.AutoHideSeconds) HideWheel();
@@ -1135,6 +1547,21 @@ namespace SnapWheel
             return b;
         }
 
+        // exactly what DrawWheel draws for item i (so grabbing matches what you see)
+        RectangleF DrawnRect(int i)
+        {
+            if (i < 0 || i >= _store.Items.Count) return RectangleF.Empty;
+            float sc; if (!_scales.TryGetValue(i, out sc)) sc = 1f;
+            if (_store.Items[i] == _dragOutItem) sc *= Math.Max(0f, 1f - _dragOutProg);
+            if (_store.Items[i] == _deletingItem) sc *= Math.Max(0f, 1f - _deleteProg);
+            SizeF b = CardSize(_store.Items[i]);
+            int iw = Math.Max(4, (int)Math.Round(b.Width * sc));
+            int ih = Math.Max(4, (int)Math.Round(b.Height * sc));
+            PointF pc = ItemCenter(i);
+            float x = (float)Math.Round(pc.X - iw / 2f), y = (float)Math.Round(pc.Y - ih / 2f);
+            return new RectangleF(x - CardPad, y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
+        }
+
         int HitTest(Point p)
         {
             int best = -1; float bestD = float.MaxValue;
@@ -1144,9 +1571,8 @@ namespace SnapWheel
                 if (phi < _phiMin - 0.45f || phi > _phiMax + 0.45f) continue;
                 if (EnterProgress(i) < 0.5f) continue;
                 if (_store.Items[i] == _dragOutItem) continue;
-                float sc0; if (!_scales.TryGetValue(i, out sc0)) sc0 = 1f;
-                RectangleF rr = CardRect(i, Math.Max(0f, (sc0 - 1f) * Math.Min(CardSize(_store.Items[i]).Width, CardSize(_store.Items[i]).Height) / 2f));
-                RectangleF hit = new RectangleF(rr.X - 3, rr.Y - 3, rr.Width + 6, rr.Height + 6);
+                RectangleF rr = DrawnRect(i);
+                RectangleF hit = new RectangleF(rr.X - 2, rr.Y - 2, rr.Width + 4, rr.Height + 4);
                 if (hit.Contains(p))
                 {
                     PointF c = ItemCenter(i);
@@ -1160,6 +1586,98 @@ namespace SnapWheel
         Rectangle CloseButtonRect() { return BtnRect(0); }
         Rectangle GearButtonRect() { return BtnRect(1); }
         Rectangle ShootButtonRect() { return BtnRect(2); }
+
+        // ---- 万能键（在弧线中点）：长按弹出四扇区圆盘，拖到扇区松手执行 ----
+        Rectangle KeyRect()
+        {
+#if NO_KEY
+            return Rectangle.Empty;           // v0.2.0 变体：不含万能键
+#else
+            float mid = (_phiMin + _phiMax) / 2f;
+            // 弧的“内侧”中点：避开缩略图，也不压住角上的按钮
+            float kr2 = EffR() - _thumb * 1.25f;
+            if (kr2 < 60f) kr2 = 60f;
+            PointF p = ItemCenterAtPhiRadius(mid, kr2);
+            int s = 92;                       // 摇杆式大圆盘
+            return new Rectangle((int)Math.Round(p.X - s / 2f), (int)Math.Round(p.Y - s / 2f), s, s);
+#endif
+        }
+
+        PointF ItemCenterAtPhiRadius(float phi, float radius)
+        {
+            PointF c = Center();
+            return new PointF((float)(c.X + radius * Math.Cos(phi) * Sx()), (float)(c.Y + radius * Math.Sin(phi) * Sy()));
+        }
+
+        bool _keyDown = false;
+        DateTime _keyDownAt = DateTime.MinValue;
+        float _menuT = 0f;             // 0..1 radial menu expansion
+        bool _menuOpen = false;
+        int _sector = -1;              // 0=上新建 1=右下一个 2=下删除 3=左上一个
+        bool _confirmDelete = false;   // two-step delete
+        Point _swipeStart;
+        Color _accentCur = Color.FromArgb(0, 122, 204);
+        float _switchFlash = 0f;
+
+        PointF KeyCenter()
+        {
+            Rectangle r = KeyRect();
+            return new PointF(r.X + r.Width / 2f, r.Y + r.Height / 2f);
+        }
+
+        // 上=新建 右=下一个 左=上一个 下=删除
+        int SectorAt(PointF p)
+        {
+            PointF c = KeyCenter();
+            float dx = p.X - c.X, dy = p.Y - c.Y;
+            float d = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (d < 18f) return -1;
+            if (Math.Abs(dy) > Math.Abs(dx)) return dy < 0 ? 0 : 2;
+            return dx > 0 ? 1 : 3;
+        }
+
+        void SwitchWheel(int dir)
+        {
+            if (dir > 0) _mgr.Next(); else _mgr.Prev();
+            _mgr.Save();
+            AfterWheelSwitch();
+        }
+
+        public void RefreshWheel()
+        {
+            _offset = 0f; _targetOffset = 0f;
+            _hover = -1; _enlarged = -1; _peekIndex = -1;
+            _scales.Clear(); _enterT0.Clear();
+            _switchFlash = 1f;
+            Render();
+        }
+
+        void AfterWheelSwitch()
+        {
+            _offset = 0f; _targetOffset = 0f;
+            _hover = -1; _enlarged = -1; _peekIndex = -1;
+            _scales.Clear(); _enterT0.Clear();
+            // 新 wheel 的图依次滑入，形成切换过渡
+            for (int i = 0; i < _store.Items.Count; i++)
+                _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(i * 0.045);
+            _switchFlash = 1f;
+            Render();
+        }
+
+        void CreateWheel()
+        {
+            _mgr.New();
+            _mgr.Active = _mgr.Wheels.Count - 1;
+            _mgr.Save();
+            AfterWheelSwitch();
+        }
+
+        void DeleteWheel()
+        {
+            _mgr.Remove(_mgr.Active);
+            _mgr.Save();
+            AfterWheelSwitch();
+        }
         public event EventHandler CaptureRequested;
 
         // buttons stack up from the corner (kept well above an auto-hiding taskbar)
@@ -1189,6 +1707,8 @@ namespace SnapWheel
             if (CloseButtonRect().Contains(p)) return true;
             if (GearButtonRect().Contains(p)) return true;
             if (ShootButtonRect().Contains(p)) return true;
+            if (KeyRect().Contains(p)) return true;
+            if (_menuOpen) return true;
             PointF c = Center();
             float d = (float)Math.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
             return Math.Abs(d - _R) < _thumb * 0.75f;
@@ -1303,6 +1823,11 @@ namespace SnapWheel
                 { mid.StartCap = LineCap.Round; mid.EndCap = LineCap.Round; g.DrawPath(mid, gp); }
                 using (Pen hair = new Pen(Color.FromArgb((int)(200 * a / 255f), 255, 255, 255), 1.3f))
                 { g.DrawPath(hair, gp); }
+                if (_switchFlash > 0.01f)     // 切换 Wheel 时的一圈扩散闪光
+                {
+                    using (Pen fp = new Pen(Color.FromArgb((int)(_switchFlash * 130f), _accentCur.R, _accentCur.G, _accentCur.B), 12f * _switchFlash + 2f))
+                    { fp.StartCap = LineCap.Round; fp.EndCap = LineCap.Round; g.DrawPath(fp, gp); }
+                }
             }
             // end dots on the two visible ends of the quarter
             for (int e2 = 0; e2 < 2; e2++)
@@ -1427,7 +1952,93 @@ namespace SnapWheel
                 }
             }
 
-            // camera (capture) button - for people who'd rather click than use a hotkey
+            // 万能键（弧线中点的摇杆式大圆盘，半透明）
+            Rectangle kr = KeyRect();
+            Color acc = _accentCur;
+            float kcx = kr.X + kr.Width / 2f, kcy = kr.Y + kr.Height / 2f;
+            float krr = kr.Width / 2f;
+            using (GraphicsPath kg = new GraphicsPath())
+            {
+                kg.AddEllipse(kr);
+                using (SolidBrush kb = new SolidBrush(Color.FromArgb((int)((_keyDown ? 165 : 120) * a / 255f), acc.R, acc.G, acc.B)))
+                    g.FillPath(kb, kg);
+                using (Pen kgp = new Pen(Color.FromArgb((int)(150 * a / 255f), 255, 255, 255), 1.4f))
+                    g.DrawPath(kgp, kg);
+                using (Pen kin = new Pen(Color.FromArgb((int)(70 * a / 255f), 255, 255, 255), 1f))
+                    g.DrawEllipse(kin, kcx - krr * 0.62f, kcy - krr * 0.62f, krr * 1.24f, krr * 1.24f);
+            }
+            using (Pen kp = new Pen(Color.FromArgb((int)(215 * a / 255f), 255, 255, 255), 2f))
+            {
+                for (int q = 0; q < 4; q++)
+                {
+                    double th = -Math.PI / 2 + q * Math.PI / 2;
+                    float px = (float)(kcx + Math.Cos(th) * 15f), py = (float)(kcy + Math.Sin(th) * 15f);
+                    g.DrawEllipse(kp, px - 3.4f, py - 3.4f, 6.8f, 6.8f);
+                }
+                g.DrawEllipse(kp, kcx - 4f, kcy - 4f, 8f, 8f);
+            }
+            // 当前 wheel 名
+            if (a > 60)
+            {
+                using (Font fw = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
+                using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(240 * a / 255f), 255, 255, 255)))
+                {
+                    string wn = _mgr.ActiveWheel.Name;
+                    SizeF ws = g.MeasureString(wn, fw);
+                    float wx = kcx - ws.Width / 2f;
+                    float wy = kr.Y + kr.Height + 4f;
+                    using (SolidBrush bgw = new SolidBrush(Color.FromArgb((int)(165 * a / 255f), 0, 0, 0)))
+                        g.FillRectangle(bgw, wx - 6, wy, ws.Width + 12, ws.Height + 2);
+                    g.DrawString(wn, fw, bw, wx, wy + 1);
+                }
+            }
+
+            // 圆盘菜单
+            if (_menuT > 0.01f)
+            {
+                PointF kc = KeyCenter();
+                float R = 78f * (0.55f + 0.45f * _menuT);
+                int alpha = (int)(_menuT * 235);
+                string[] labels = { "新建", "下一个", "删除", "上一个" };
+                for (int s2 = 0; s2 < 4; s2++)
+                {
+                    bool sel = (_sector == s2);
+                    Color sc;
+                    if (_confirmDelete && s2 == 0) sc = Color.FromArgb(200, 60, 160, 90);      // 确认删除=绿
+                    else if (s2 == 2) sc = Color.FromArgb(sel ? 230 : 170, 214, 70, 84);        // 删除=红
+                    else sc = sel ? Color.FromArgb(235, acc.R, acc.G, acc.B) : Color.FromArgb(170, 26, 28, 33);
+                    using (GraphicsPath gp2 = new GraphicsPath())
+                    {
+                        gp2.AddArc(kc.X - R, kc.Y - R, R * 2, R * 2, s2 * 90 - 135, 88);
+                        gp2.AddLine(kc.X, kc.Y, kc.X, kc.Y);
+                        gp2.CloseFigure();
+                        using (SolidBrush sb2 = new SolidBrush(Color.FromArgb(alpha, sc.R, sc.G, sc.B)))
+                            g.FillPath(sb2, gp2);
+                        using (Pen sp2 = new Pen(Color.FromArgb((int)(alpha * 0.5f), 255, 255, 255), 1.2f))
+                            g.DrawPath(sp2, gp2);
+                    }
+                    double mid = (-90 + s2 * 90) * Math.PI / 180.0;
+                    float tx = (float)(kc.X + Math.Cos(mid) * R * 0.62f);
+                    float ty = (float)(kc.Y + Math.Sin(mid) * R * 0.62f);
+                    string lab = (s2 == 0 && _confirmDelete) ? "确认" : labels[s2];
+                    using (Font f2b = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold))
+                    using (SolidBrush sb3 = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255)))
+                    {
+                        SizeF ls = g.MeasureString(lab, f2b);
+                        g.DrawString(lab, f2b, sb3, tx - ls.Width / 2f, ty - ls.Height / 2f);
+                    }
+                }
+                if (_confirmDelete)
+                {
+                    using (Font f3 = new Font("Microsoft YaHei UI", 9f))
+                    using (SolidBrush b3 = new SolidBrush(Color.FromArgb(alpha, 255, 190, 190)))
+                    {
+                        string t2 = "松手取消 · 拖到“确认”执行删除";
+                        SizeF ls2 = g.MeasureString(t2, f3);
+                        g.DrawString(t2, f3, b3, kc.X - ls2.Width / 2f, kc.Y + R + 6);
+                    }
+                }
+            }
             Rectangle sbr = ShootButtonRect();
             using (SolidBrush sbb = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * a / 255f), 0, 122, 204)))
                 g.FillEllipse(sbb, sbr);
@@ -1506,6 +2117,38 @@ namespace SnapWheel
         protected override void OnMouseMove(MouseEventArgs e)
         {
             _lastActive = DateTime.Now;
+
+            if (_keyDown)
+            {
+                if (_settings.SwitchMode == "swipe")
+                {
+                    // 长按后左右滑动切换 wheel
+                    if ((DateTime.Now - _keyDownAt).TotalMilliseconds > 240)
+                    {
+                        int dx = e.X - _swipeStart.X;
+                        if (Math.Abs(dx) > 70)
+                        {
+                            SwitchWheel(dx > 0 ? 1 : -1);
+                            _swipeStart = e.Location;      // 允许连续滑动
+                        }
+                    }
+                }
+                else if (_menuOpen)
+                {
+                    int s2 = SectorAt(e.Location);
+                    if (s2 != _sector)
+                    {
+                        _sector = s2;
+                        // 拖到“删除”先进入确认态；确认态里拖到“新建”(上)才真正删
+                        if (s2 == 2 && !_confirmDelete) _confirmDelete = true;
+                        else if (_confirmDelete && s2 == 0) { /* 待松手执行 */ }
+                        else if (_confirmDelete && s2 != 0) { _confirmDelete = false; }
+                        Render();
+                    }
+                }
+                return;
+            }
+
             bool ch = CloseButtonRect().Contains(e.Location);
             bool gh = GearButtonRect().Contains(e.Location);
             bool sh2 = ShootButtonRect().Contains(e.Location);
@@ -1518,7 +2161,8 @@ namespace SnapWheel
             if (need) Render();
             if (_maybeDrag && _dragIndex >= 0)
             {
-                if (Math.Abs(e.X - _mouseDownPt.X) > 6 || Math.Abs(e.Y - _mouseDownPt.Y) > 6)
+                // 更明确的手感：按下后移动超过 10px 才算拖动（避免误触发/判定飘忽）
+                if (Math.Abs(e.X - _mouseDownPt.X) > 10 || Math.Abs(e.Y - _mouseDownPt.Y) > 10)
                 {
                     _maybeDrag = false; _enlarged = -1; _holdIndex = -1; Render();
                     StartDragOut(_dragIndex);
@@ -1529,6 +2173,13 @@ namespace SnapWheel
         protected override void OnMouseDown(MouseEventArgs e)
         {
             _lastActive = DateTime.Now;
+            if (e.Button == MouseButtons.Left && KeyRect().Contains(e.Location))
+            {
+                _keyDown = true; _keyDownAt = DateTime.Now;
+                _menuOpen = false; _menuT = 0f; _sector = -1; _confirmDelete = false;
+                _swipeStart = e.Location;
+                return;
+            }
             if (e.Button == MouseButtons.Left && ShootButtonRect().Contains(e.Location))
             {
                 if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty);
@@ -1567,6 +2218,21 @@ namespace SnapWheel
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (_keyDown)
+            {
+                _keyDown = false;
+                if (_menuOpen)
+                {
+                    int s2 = SectorAt(e.Location);
+                    if (_confirmDelete) { if (s2 == 0) DeleteWheel(); }      // 拖到“确认”才删
+                    else if (s2 == 0) CreateWheel();
+                    else if (s2 == 1) SwitchWheel(1);
+                    else if (s2 == 3) SwitchWheel(-1);
+                    _menuOpen = false; _menuT = 0f; _sector = -1; _confirmDelete = false;
+                }
+                Render();
+                return;
+            }
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             if (_enlarged >= 0) { _enlarged = -1; Render(); }
         }
@@ -1657,6 +2323,153 @@ namespace SnapWheel
         }
 
         public static readonly uint ShowMsg = Native.RegisterWindowMessage("SnapWheel_SHOW");
+    }
+
+    // 管理 Wheels：重命名 / 换色 / 新建 / 删除
+    class WheelsForm : Form
+    {
+        WheelManager _mgr;
+        ListBox _list;
+        TextBox _name;
+        ComboBox _color;
+        bool _loading = false;
+
+        public WheelsForm(WheelManager mgr)
+        {
+            _mgr = mgr;
+            Text = "管理 Wheel";
+            Icon = Brand.Get();
+            Font = new Font("Microsoft YaHei UI", 9.5f);
+            AutoScaleMode = AutoScaleMode.None;
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false; MinimizeBox = false;
+            ClientSize = new Size(430, 330);
+
+            _list = new ListBox();
+            _list.Bounds = new Rectangle(16, 16, 240, 250);
+            _list.IntegralHeight = false;
+            _list.DrawMode = DrawMode.OwnerDrawFixed;
+            _list.ItemHeight = 26;
+            _list.DrawItem += new DrawItemEventHandler(OnDrawItem);
+            _list.SelectedIndexChanged += new EventHandler(OnSelect);
+            Controls.Add(_list);
+
+            Label l1 = new Label(); l1.Text = "名称"; l1.Bounds = new Rectangle(272, 18, 60, 22);
+            Controls.Add(l1);
+            _name = new TextBox(); _name.Bounds = new Rectangle(272, 40, 140, 24);
+            _name.TextChanged += new EventHandler(OnNameChanged);
+            Controls.Add(_name);
+
+            Label l2 = new Label(); l2.Text = "颜色"; l2.Bounds = new Rectangle(272, 74, 60, 22);
+            Controls.Add(l2);
+            _color = new ComboBox();
+            _color.DropDownStyle = ComboBoxStyle.DropDownList;
+            _color.Bounds = new Rectangle(272, 96, 140, 24);
+            for (int i = 0; i < Palette.Names.Length; i++) _color.Items.Add(Palette.Names[i]);
+            _color.SelectedIndexChanged += new EventHandler(OnColorChanged);
+            Controls.Add(_color);
+
+            RoundButton add = new RoundButton();
+            add.Text = "新建"; add.Size = new Size(66, 30);
+            add.Fill = Color.FromArgb(0, 122, 204); add.FillHover = Color.FromArgb(0, 140, 232);
+            add.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+            add.Location = new Point(272, 136);
+            add.Click += new EventHandler(delegate(object o, EventArgs e2) { _mgr.New(); _mgr.Save(); Reload(_mgr.Wheels.Count - 1); });
+            Controls.Add(add);
+
+            RoundButton del = new RoundButton();
+            del.Text = "删除"; del.Size = new Size(66, 30);
+            del.Fill = Color.FromArgb(214, 70, 84); del.FillHover = Color.FromArgb(230, 90, 104);
+            del.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+            del.Location = new Point(346, 136);
+            del.Click += new EventHandler(delegate(object o, EventArgs e2) {
+                if (_list.SelectedIndex < 0) return;
+                if (MessageBox.Show("确定删除 Wheel「" + _mgr.Wheels[_list.SelectedIndex].Name + "」及其截图？",
+                        "删除 Wheel", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+                _mgr.Remove(_list.SelectedIndex); _mgr.Save(); Reload(Math.Min(_list.SelectedIndex, _mgr.Wheels.Count - 1));
+            });
+            Controls.Add(del);
+
+            RoundButton close = new RoundButton();
+            close.Text = "完成"; close.Size = new Size(140, 34);
+            close.Fill = Color.FromArgb(233, 234, 238); close.FillHover = Color.FromArgb(222, 224, 230);
+            close.TextColor = Color.FromArgb(58, 60, 66);
+            close.Location = new Point(272, 178);
+            close.Click += new EventHandler(delegate(object o, EventArgs e2) { _mgr.Save(); DialogResult = DialogResult.OK; Close(); });
+            Controls.Add(close);
+
+            Label tip = new Label();
+            tip.Text = "点一下左侧即可切换为当前 Wheel";
+            tip.ForeColor = Color.FromArgb(150, 150, 158);
+            tip.Bounds = new Rectangle(16, 276, 260, 22);
+            Controls.Add(tip);
+
+            Reload(_mgr.Active);
+        }
+
+        void Reload(int sel)
+        {
+            _loading = true;
+            _list.Items.Clear();
+            for (int i = 0; i < _mgr.Wheels.Count; i++)
+                _list.Items.Add((i == _mgr.Active ? "● " : "   ") + _mgr.Wheels[i].Name);
+            if (sel >= 0 && sel < _list.Items.Count) _list.SelectedIndex = sel;
+            _loading = false;
+            SyncFields();
+        }
+
+        void SyncFields()
+        {
+            int i = _list.SelectedIndex;
+            if (i < 0 || i >= _mgr.Wheels.Count) return;
+            _loading = true;
+            _name.Text = _mgr.Wheels[i].Name;
+            _color.SelectedIndex = Math.Abs(_mgr.Wheels[i].ColorIndex) % Palette.Names.Length;
+            _loading = false;
+        }
+
+        void OnSelect(object sender, EventArgs e)
+        {
+            if (_loading) return;
+            int i = _list.SelectedIndex;
+            if (i < 0) return;
+            _mgr.Active = i;
+            _mgr.Save();
+            Reload(i);
+        }
+
+        void OnNameChanged(object sender, EventArgs e)
+        {
+            if (_loading) return;
+            int i = _list.SelectedIndex;
+            if (i < 0 || i >= _mgr.Wheels.Count) return;
+            _mgr.Wheels[i].Name = _name.Text;
+            _list.Items[i] = (i == _mgr.Active ? "● " : "   ") + _name.Text;
+            _mgr.ApplySettings();
+            _mgr.Save();
+        }
+
+        void OnColorChanged(object sender, EventArgs e)
+        {
+            if (_loading) return;
+            int i = _list.SelectedIndex;
+            if (i < 0 || i >= _mgr.Wheels.Count) return;
+            _mgr.Wheels[i].ColorIndex = _color.SelectedIndex;
+            _mgr.Save();
+            _list.Invalidate();
+        }
+
+        void OnDrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+            e.DrawBackground();
+            Wheel w = _mgr.Wheels[e.Index];
+            using (SolidBrush b = new SolidBrush(w.Accent))
+                e.Graphics.FillEllipse(b, e.Bounds.Left + 6, e.Bounds.Top + 7, 12, 12);
+            using (SolidBrush t = new SolidBrush(e.ForeColor))
+                e.Graphics.DrawString(_list.Items[e.Index].ToString(), e.Font, t, e.Bounds.Left + 26, e.Bounds.Top + 5);
+        }
     }
 
     class SettingsForm : Form
@@ -1772,6 +2585,14 @@ namespace SnapWheel
             cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
             root.Controls.Add(Row(MkLabel("删除方式"), cmbDel));
 
+            ComboBox cmbSwitch = new ComboBox();
+            cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbSwitch.Width = 170;
+            cmbSwitch.Margin = new Padding(0, 6, 0, 0);
+            cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
+            cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
+            root.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch));
+
             RoundButton ok = new RoundButton();
             ok.Text = "确定";
             ok.Size = new Size(104, 36);
@@ -1794,6 +2615,7 @@ namespace SnapWheel
                 s.Corner = IndexCorner(cmbCorner.SelectedIndex);
                 s.AutoStart = chkAutoStart.Checked;
                 s.DeleteMode = (cmbDel.SelectedIndex == 1) ? "single" : "double";
+                s.SwitchMode = (cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
                 if (cmb.SelectedItem != null) s.Hotkey = cmb.SelectedItem.ToString();
                 AutoRun.Apply(s.AutoStart);
                 s.Save();
@@ -1923,6 +2745,7 @@ namespace SnapWheel
     {
         Settings _settings;
         Store _store;
+        WheelManager _wheels;
         NotifyIcon _tray;
         HotkeyForm _hotkey;
         WheelForm _wheel;
@@ -1930,15 +2753,14 @@ namespace SnapWheel
         public AppCtx()
         {
             _settings = Settings.Load();
-            _store = new Store();
-            _store.SaveToDisk = _settings.SaveToDisk;
-            _store.Dir = _settings.Dir;
-            _store.MaxCount = _settings.MaxCount;
+            _wheels = new WheelManager(_settings);
+            _wheels.LoadImagesFromDisk();
+            _store = _wheels.ActiveStore;
 
             _hotkey = new HotkeyForm();
             _hotkey.Hotkey += new EventHandler(OnHotkey);
 
-            _wheel = new WheelForm(_store, _settings);
+            _wheel = new WheelForm(_wheels, _settings);
             _wheel.SettingsRequested += new EventHandler(OnSettings);
             _wheel.CaptureRequested += new EventHandler(OnHotkey);
 
@@ -1949,6 +2771,7 @@ namespace SnapWheel
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
+            menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出", null, new EventHandler(delegate(object o, EventArgs e) { Quit(); }));
@@ -1983,6 +2806,16 @@ namespace SnapWheel
             catch { }
         }
 
+        void OnWheels(object sender, EventArgs e)
+        {
+            _wheel.TopMost = false;
+            WheelsForm f = new WheelsForm(_wheels);
+            f.ShowDialog();
+            _wheels.ApplySettings();
+            _wheel.TopMost = _settings.AlwaysOnTop;
+            _wheel.RefreshWheel();
+        }
+
         void OnSettings(object sender, EventArgs e)
         {
             bool wasTop = _wheel.TopMost;
@@ -1991,9 +2824,7 @@ namespace SnapWheel
             DialogResult r = f.ShowDialog();
             if (r == DialogResult.OK)
             {
-                _store.SaveToDisk = _settings.SaveToDisk;
-                _store.Dir = _settings.Dir;
-                _store.MaxCount = _settings.MaxCount;
+                _wheels.ApplySettings();
                 _wheel.ApplyTopMost();
                 _wheel.ApplyLayout();
                 RegisterHotkeyAndNotify();
@@ -2024,7 +2855,8 @@ namespace SnapWheel
             ov.ShowDialog();
             if (ov.Result != null)
             {
-                StoreItem ni = _store.Add(ov.Result);
+                Store st = _wheels.ActiveStore;
+                StoreItem ni = st.Add(ov.Result);
                 _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
                 _wheel.ShowWheel();
             }
