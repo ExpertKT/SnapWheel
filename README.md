@@ -5,7 +5,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.4.6-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.4.7-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-114%20KB-lightgrey?style=flat-square)
 
@@ -61,7 +61,7 @@
 
 ### 该下哪个？两条产品线
 
-同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.6 ↔ v0.2.16）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.7 ↔ v0.2.17）：
 
 | 你想要的 | 下这个 | 区别 |
 |---|---|---|

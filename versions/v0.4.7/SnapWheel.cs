@@ -880,6 +880,16 @@ namespace SnapWheel
         public void Next() { if (Wheels.Count > 0) Active = (Active + 1) % Wheels.Count; }
         public void Prev() { if (Wheels.Count > 0) Active = (Active - 1 + Wheels.Count) % Wheels.Count; }
 
+        // 把 src 的每个设置字段拷到 dst（用于"还原默认设置"）
+        public static void CopyInto(Settings src, Settings dst)
+        {
+            FieldInfo[] fs = typeof(Settings).GetFields(BindingFlags.Public | BindingFlags.Instance);
+            for (int i = 0; i < fs.Length; i++)
+            {
+                try { fs[i].SetValue(dst, fs[i].GetValue(src)); } catch { }
+            }
+        }
+
         public void Save()
         {
             try
@@ -1068,6 +1078,16 @@ namespace SnapWheel
             }
             catch { }
             return s;
+        }
+
+        // 把 src 的每个设置字段拷到 dst（用于"还原默认设置"）
+        public static void CopyInto(Settings src, Settings dst)
+        {
+            FieldInfo[] fs = typeof(Settings).GetFields(BindingFlags.Public | BindingFlags.Instance);
+            for (int i = 0; i < fs.Length; i++)
+            {
+                try { fs[i].SetValue(dst, fs[i].GetValue(src)); } catch { }
+            }
         }
 
         public void Save()
@@ -2047,8 +2067,10 @@ namespace SnapWheel
         bool _nameHover = false;       // 指针停在 Wheel 名药丸上（提示"点一下改名"）
         bool _intro = false;           // 正在播环的动画（拉出 / 收起都算）
         float _introT = 0f;            // 0..1：环"露出来"的程度
-        float _introDur = 1.8f;        // 秒
+        float _introDur = 1.8f;        // 秒（完成一整趟 0->1 的时间基准）
         DateTime _introAt = DateTime.MinValue;
+        float _ringFrom = 1f;          // 本次动画的起点值
+        float _ringTo = 1f;            // 本次动画的目标值（可反向，随时改目标）
 
         // ---------- 收起态（像贴边小球那样，只在屏幕边上留一个可点的小把手）----------
         bool _collapsed = false;       // 已完全收起：只画把手，不画环
@@ -2066,9 +2088,10 @@ namespace SnapWheel
         const float NubLong = 78f;     // 把手长边
         const float NubThick = 13f;    // 把手厚度（贴着屏幕边）
 
-        // 把手的中心离角落多远（沿屏幕边方向）
-        float NubDistOut() { return _R * 0.60f; }
-        float NubDistIn() { return _R + _thumb + 46f; }
+        // 把手的中心离角落多远（沿屏幕边方向）；<0 表示用默认值，调参时可以覆盖
+        float _nubOutDist = -1f, _nubInDist = -1f;
+        float NubDistOut() { return _nubOutDist >= 0f ? _nubOutDist : (_R * 0.60f); }
+        float NubDistIn() { return _nubInDist >= 0f ? _nubInDist : (_R + _thumb + 46f); }
 
         RectangleF NubOutRect()
         {
@@ -2084,6 +2107,16 @@ namespace SnapWheel
             float cx = (Sx() > 0) ? NubDistIn() : ls.Width - NubDistIn();
             float y = (Sy() > 0) ? 0f : ls.Height - NubThick;
             return new RectangleF(cx - NubLong / 2f, y, NubLong, NubThick);
+        }
+
+        // 一整趟 0 -> 1 的时间基准：展开 / 收起共用，保证两个方向手感一致。
+        // 原来两边各一套公式（展开 1.5+0.13n、收起 1.15+0.07n），所以速度不一样。
+        float RingUnitDur()
+        {
+            float d = 0.92f + 0.055f * _store.Items.Count;     // 5 张图约 1.2s
+            if (d < 0.75f) d = 0.75f;
+            if (d > 1.65f) d = 1.65f;
+            return d * AnimK();
         }
 
         // 展开（彩虹拉出）
@@ -2118,9 +2151,10 @@ namespace SnapWheel
             if (!Visible) { _collapsed = true; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; CaptureBackdrop(); Show(); Render(); return; }
             _collapsing = true;
             _intro = true;
-            _introT = 1f;
+            _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
+            _ringTo = 0f;
             _introAt = DateTime.Now;
-            _introDur = Math.Min(1.9f, 1.15f + 0.07f * _store.Items.Count) * AnimK();
+            _introDur = RingUnitDur();
             _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
             _lastActive = DateTime.Now;
         }
@@ -2282,8 +2316,11 @@ namespace SnapWheel
             if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
             _show = 1f; _targetShow = 1f; _showAnimating = false;
             _collapsed = false; _collapsing = false;
-            _intro = true; _introT = 0f; _introAt = DateTime.Now;
-            _introDur = Math.Min(3.4f, 1.5f + 0.13f * _store.Items.Count);
+            _intro = true;
+            _ringFrom = _introT;
+            _ringTo = 1f;
+            _introAt = DateTime.Now;
+            _introDur = RingUnitDur();
             _scales.Clear(); _enterT0.Clear();
             for (int i = 0; i < _store.Items.Count; i++)
                 _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(0.45 + i * 0.13);
@@ -2444,14 +2481,18 @@ namespace SnapWheel
             // 开启动画进度（收起时 _introT 往回走，同一个公式就是倒放）
             if (_intro)
             {
-                float t = (float)(DateTime.Now - _introAt).TotalSeconds / Math.Max(0.5f, _introDur * AnimK());
+                // 时间按"这次要走多远"算：走得近就快，走完就停 —— 展开/收起共用，随时可反向
+                float span = Math.Abs(_ringTo - _ringFrom);
+                float dur = Math.Max(0.10f, _introDur * span);
+                float t = (float)((DateTime.Now - _introAt).TotalSeconds / dur);
                 if (t >= 1f) { t = 1f; _intro = false; }
-                if (_collapsing)
+                float e = t * t * (3f - 2f * t);                   // smoothstep
+                _introT = _ringFrom + (_ringTo - _ringFrom) * e;
+                if (!_intro)
                 {
-                    _introT = 1f - t;
-                    if (!_intro) { _collapsed = true; _introT = 0f; }   // 收完了：进入收起态
+                    _introT = _ringTo;
+                    if (_collapsing) { _collapsed = true; _collapsing = false; }   // 收完了：进入收起态
                 }
-                else _introT = t;
                 need = true;
             }
 
@@ -3084,7 +3125,7 @@ namespace SnapWheel
             // 贴边把手：收起态只有它可点；展开态它也算内容（不然点它会穿透到桌面）
             if (_collapsed)
                 return NubOutRect().Contains(p);
-            if (!_intro && NubInRect().Contains(p)) return true;
+            if (NubInRect().Contains(p)) return true;
             if (HitTest(p) >= 0) return true;
             if (CloseButtonRect().Contains(p)) return true;
             if (GearButtonRect().Contains(p)) return true;
@@ -4154,8 +4195,9 @@ namespace SnapWheel
                 return;
             }
             // 贴边把手：拉出 / 收起
+            // 把手在动画中也能点：随时可以掉头（手感不拖沓）
             if (e.Button == MouseButtons.Left && _collapsed && NubOutRect().Contains(e.Location)) { ExpandWheel(); return; }
-            if (e.Button == MouseButtons.Left && !_collapsed && !_intro && NubInRect().Contains(e.Location)) { CollapseWheel(); return; }
+            if (e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location)) { CollapseWheel(); return; }
 
             if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location)) { DismissWheel(); return; }
             int hh = HitTest(e.Location);
@@ -4799,23 +4841,48 @@ namespace SnapWheel
             guide.Click += new EventHandler(delegate(object o, EventArgs e2)
             { GuideForm gf = new GuideForm(); gf.ShowDialog(this); });
 
+            // 还原默认设置：只重置设置项，不动你的图片和 Wheel 内容
+            RoundButton reset = new RoundButton();
+            reset.Text = "还原默认";
+            reset.Size = new Size(104, 36);
+            reset.Fill = Color.FromArgb(252, 238, 236);
+            reset.FillHover = Color.FromArgb(248, 224, 220);
+            reset.TextColor = Color.FromArgb(178, 66, 52);
+            reset.Font = new Font("Microsoft YaHei UI", 10f);
+            reset.Margin = new Padding(10, 0, 0, 0);
+            reset.Click += new EventHandler(delegate(object o, EventArgs e2)
+            {
+                DialogResult r2 = MessageBox.Show(this,
+                    "把所有设置恢复成默认值？\r\n\r\n（不会动你的图片和 Wheel 内容，只重置外观/行为等设置项）",
+                    "还原默认设置", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+                if (r2 != DialogResult.OK) return;
+                Settings def = new Settings();
+                Settings.CopyInto(def, s);
+                AutoRun.Apply(s.AutoStart);
+                s.Save();
+                DialogResult = DialogResult.OK;
+                Close();
+            });
+
             // 按钮行：用四列表格把确定/取消靠右对齐。
             // 原来是一个 250px 的假占位控件硬顶 + FlowLayoutPanel，窗口 AutoSize 一算就错位/被裁
             TableLayoutPanel btnRow = new TableLayoutPanel();
-            btnRow.ColumnCount = 4;
+            btnRow.ColumnCount = 5;
             btnRow.RowCount = 1;
             btnRow.AutoSize = true;
             btnRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             btnRow.Dock = DockStyle.Fill;
             btnRow.Margin = new Padding(0, 14, 0, 0);
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.Controls.Add(guide, 0, 0);
-            btnRow.Controls.Add(new Panel(), 1, 0);
-            btnRow.Controls.Add(ok, 2, 0);
-            btnRow.Controls.Add(cancel, 3, 0);
+            btnRow.Controls.Add(reset, 1, 0);
+            btnRow.Controls.Add(new Panel(), 2, 0);
+            btnRow.Controls.Add(ok, 3, 0);
+            btnRow.Controls.Add(cancel, 4, 0);
             btnRow.AutoSize = false;
             btnRow.Height = 42;
             btnRow.Dock = DockStyle.Fill;

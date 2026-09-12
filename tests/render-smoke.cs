@@ -466,6 +466,63 @@ namespace SnapWheel
             }
 
             Console.WriteLine();
+            Console.WriteLine("--- 收起 / 展开：速度一致 + 可中途掉头 ---");
+            {
+                // 注意：IsCollapsed 在动画一开始就翻转了，等待要用 IsExpanded（= 不在收起态且动画结束）
+                Action waitCollapsed = delegate
+                {
+                    for (int i = 0; i < 300; i++) { if (f.IsCollapsed) return; Application.DoEvents(); Thread.Sleep(15); }
+                };
+                Action waitExpanded = delegate
+                {
+                    for (int i = 0; i < 300; i++) { if (f.IsExpanded) return; Application.DoEvents(); Thread.Sleep(15); }
+                };
+
+                // 展开耗时
+                f.CollapseWheel(); waitCollapsed();
+                Application.DoEvents(); Thread.Sleep(80);
+                DateTime t0 = DateTime.Now;
+                f.ExpandWheel();
+                waitExpanded();
+                Application.DoEvents(); Thread.Sleep(80);
+                double expandMs = (DateTime.Now - t0).TotalMilliseconds;
+
+                // 收起耗时
+                DateTime t1 = DateTime.Now;
+                f.CollapseWheel();
+                waitCollapsed();
+                Application.DoEvents(); Thread.Sleep(80);
+                double collapseMs = (DateTime.Now - t1).TotalMilliseconds;
+
+                double ratio = expandMs > collapseMs ? expandMs / Math.Max(1.0, collapseMs) : collapseMs / Math.Max(1.0, expandMs);
+                bool sameSpeed = ratio < 1.35;
+                Console.WriteLine("  {0} 展开 {1:F0}ms / 收起 {2:F0}ms（比值 {3:F2}，要求 < 1.35）",
+                    sameSpeed ? "OK  " : "FAIL", expandMs, collapseMs, ratio);
+                if (sameSpeed) pass++; else fail++;
+
+                // 中途掉头：展开到一半点收回，应该很快收完（而不是重头再来）
+                f.CollapseWheel(); waitCollapsed();
+                Application.DoEvents(); Thread.Sleep(80);
+                f.ExpandWheel();
+                Application.DoEvents(); Thread.Sleep((int)(expandMs * 0.45));   // 走到大约一半
+                DateTime t2 = DateTime.Now;
+                f.CollapseWheel();
+                waitCollapsed();
+                Application.DoEvents(); Thread.Sleep(60);
+                double reverseMs = (DateTime.Now - t2).TotalMilliseconds;
+                bool snappy = f.IsCollapsed && reverseMs < collapseMs * 0.8;
+                Console.WriteLine("  {0} 半路掉头：立刻反向并收完，用时 {1:F0}ms（全程 {2:F0}ms，要求 < {3:F0}ms）",
+                    snappy ? "OK  " : "FAIL", reverseMs, collapseMs, collapseMs * 0.8);
+                if (snappy) pass++; else fail++;
+
+                // 再展开回来，确认状态干净
+                f.ExpandWheel(); waitExpanded();
+                bool back = f.IsExpanded;
+                Console.WriteLine("  {0} 掉头之后还能正常展开（IsExpanded={1}）", back ? "OK  " : "FAIL", back);
+                if (back) pass++; else fail++;
+            }
+
+            Console.WriteLine();
             Console.WriteLine("--- 剪贴板自动收纳 ---");
             {
                 string oldText = null; Bitmap oldImg = null;
