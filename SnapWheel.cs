@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
@@ -11,12 +13,59 @@ using Microsoft.Win32;
 
 namespace SnapWheel
 {
+    // 出错就记到 %APPDATA%\SnapWheel\error.log，不弹框、不退出。
+    // 绘制里任何一处算错（比如颜色分量越界）最多让那一帧不好看，不该让整个程序挂掉。
+    static class Err
+    {
+        static readonly object _lock = new object();
+        static DateTime _last = DateTime.MinValue;
+
+        public static string LogPath()
+        {
+            string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapWheel");
+            try { Directory.CreateDirectory(d); } catch { }
+            return Path.Combine(d, "error.log");
+        }
+
+        public static void Log(string where, Exception ex)
+        {
+            try
+            {
+                lock (_lock)
+                {
+                    string s = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  [" + where + "]  " +
+                               (ex == null ? "(null)" : ex.GetType().Name + ": " + ex.Message) + "\r\n" +
+                               (ex == null ? "" : ex.StackTrace) + "\r\n\r\n";
+                    File.AppendAllText(LogPath(), s, Encoding.UTF8);
+                }
+            }
+            catch { }
+            try
+            {
+                if (Notify != null && ShouldNotify())
+                    Notify(where + "：" + (ex == null ? "未知错误" : ex.Message));
+            }
+            catch { }
+        }
+
+        public static Action<string> Notify;      // 由 AppCtx 挂上气泡提示
+
+        // 同一个地方短期内只提示一次，避免刷屏
+        public static bool ShouldNotify()
+        {
+            DateTime now = DateTime.Now;
+            if ((now - _last).TotalSeconds < 30) return false;
+            _last = now;
+            return true;
+        }
+    }
+
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.3";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.5";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.3.3";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+        public const string Version = "0.3.5";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -141,6 +190,276 @@ namespace SnapWheel
         }
     }
 
+    // 读图“尽量全能”：
+    //   1) .ico / .cur  -> Icon 类（连 256 的 PNG 压缩图标都认，保留透明）
+    //   2) 其余先交给 GDI+（png/jpg/bmp/gif/tif/exif/wmf/emf…）
+    //   3) 还不行就交给系统 WIC（WPF 的 BitmapDecoder）—— WebP / HEIC / AVIF / JXR / 相机 RAW
+    //      只要机器上装了对应解码器（Win10/11 多数自带的 WebP/HEIC 扩展）就能读
+    // 任何一步失败都安静返回 null，绝不抛异常
+    static class ImageIO
+    {
+        public const int MaxDim = 4096;      // 存进轮盘的图最大边；再大的等比缩下来，防止内存/磁盘爆
+
+        public static readonly string[] Exts = {
+            ".png", ".apng", ".jpg", ".jpeg", ".jpe", ".jfif", ".jiff",
+            ".bmp", ".dib", ".rle", ".gif", ".tif", ".tiff",
+            ".ico", ".cur", ".exif", ".emf", ".wmf",
+            ".webp", ".heic", ".heif", ".avif", ".jxl", ".jxr", ".wdp", ".hdp", ".dds",
+            ".dng", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".raf", ".pef", ".srw", ".raw"
+        };
+
+        // 打开文件对话框用的过滤器（"图片文件|*.png;*.jpg;…|所有文件|*.*"）
+        public static string DialogFilter()
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < Exts.Length; i++)
+            {
+                if (i > 0) sb.Append(';');
+                sb.Append('*').Append(Exts[i]);
+            }
+            return "图片文件|" + sb.ToString() + "|所有文件|*.*";
+        }
+
+        public static bool IsImageExt(string path)        {
+            string e = "";
+            try { e = Path.GetExtension(path); } catch { }
+            if (string.IsNullOrEmpty(e)) return false;
+            e = e.ToLowerInvariant();
+            for (int i = 0; i < Exts.Length; i++) if (Exts[i] == e) return true;
+            return false;
+        }
+
+        // 展开文件夹（只取一层）并过滤出图片；cap 限制总数，避免一次拖进来一大堆把内存吃满
+        public static List<string> Collect(string[] paths, int cap)
+        {
+            List<string> ok = new List<string>();
+            if (paths == null) return ok;
+            for (int i = 0; i < paths.Length && ok.Count < cap; i++)
+            {
+                string p = paths[i];
+                try
+                {
+                    if (Directory.Exists(p))
+                    {
+                        string[] fs = Directory.GetFiles(p);
+                        Array.Sort(fs);
+                        for (int k = 0; k < fs.Length && ok.Count < cap; k++)
+                            if (IsImageExt(fs[k])) ok.Add(fs[k]);
+                    }
+                    else if (File.Exists(p) && IsImageExt(p)) ok.Add(p);
+                }
+                catch { }
+            }
+            return ok;
+        }
+
+        public static Bitmap Load(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            string ext = "";
+            try { ext = Path.GetExtension(path).ToLowerInvariant(); } catch { }
+            Bitmap b = null;
+            if (ext == ".ico" || ext == ".cur") b = LoadIcon(path);
+            if (b == null) b = LoadGdi(path);
+            if (b == null) b = LoadWic(path);
+            if (b == null) return null;
+            return Fit(b, MaxDim);
+        }
+
+        // GDI+：先整份读进内存再解，避免 Image.FromFile 一直占着原文件
+        static Bitmap LoadGdi(string path)
+        {
+            try
+            {
+                byte[] raw = File.ReadAllBytes(path);
+                using (MemoryStream ms = new MemoryStream(raw))
+                using (Image img = Image.FromStream(ms))
+                    return Clone(img);
+            }
+            catch { return null; }
+        }
+
+        static Bitmap LoadIcon(string path)
+        {
+            int[] want = { 256, 128, 64, 48, 32, 16 };
+            for (int i = 0; i < want.Length; i++)
+            {
+                try
+                {
+                    using (Icon ic = new Icon(path, want[i], want[i]))
+                    {
+                        Bitmap b = ic.ToBitmap();
+                        if (b.Width > 1 && b.Height > 1) return b;
+                        b.Dispose();
+                    }
+                }
+                catch { }
+            }
+            try { using (Icon ic = new Icon(path)) return ic.ToBitmap(); } catch { }
+            return null;
+        }
+
+        // PresentationCore 不一定在 GAC 里（本机就只在框架目录的 WPF 子目录下），
+        // 所以先 Assembly.Load，失败再 LoadFrom 那个固定位置。只试一次，结果缓存。
+        static Assembly _wicAsm;
+        static bool _wicTried;
+
+        static Assembly WicAsm()
+        {
+            if (_wicTried) return _wicAsm;
+            _wicTried = true;
+            try { _wicAsm = Assembly.Load("PresentationCore"); }
+            catch { _wicAsm = null; }
+            if (_wicAsm == null)
+            {
+                try
+                {
+                    string d = RuntimeEnvironment.GetRuntimeDirectory();
+                    string p = Path.Combine(Path.Combine(d, "WPF"), "PresentationCore.dll");
+                    if (File.Exists(p)) _wicAsm = Assembly.LoadFrom(p);
+                }
+                catch { _wicAsm = null; }
+            }
+            return _wicAsm;
+        }
+
+        // 系统 WIC（反射拿 PresentationCore，编不进来也不影响本体）
+        static Bitmap LoadWic(string path)
+        {
+            try
+            {
+                Assembly pc = WicAsm();
+                if (pc == null) return null;
+                Type tDec = pc.GetType("System.Windows.Media.Imaging.BitmapDecoder", false);
+                Type tOpt = pc.GetType("System.Windows.Media.Imaging.BitmapCreateOptions", false);
+                Type tCch = pc.GetType("System.Windows.Media.Imaging.BitmapCacheOption", false);
+                Type tEnc = pc.GetType("System.Windows.Media.Imaging.PngBitmapEncoder", false);
+                if (tDec == null || tOpt == null || tCch == null || tEnc == null) return null;
+
+                MethodInfo create = tDec.GetMethod("Create", new Type[] { typeof(Uri), tOpt, tCch });
+                if (create == null) return null;
+                object dec = create.Invoke(null, new object[] {
+                    new Uri(path), Enum.ToObject(tOpt, 0), Enum.ToObject(tCch, 1) });
+                if (dec == null) return null;
+
+                object frames = tDec.GetProperty("Frames").GetValue(dec, null);
+                IList fl = frames as IList;
+                if (fl == null || fl.Count == 0) return null;
+                object frame = fl[0];
+
+                object enc = Activator.CreateInstance(tEnc);
+                object encFrames = tEnc.GetProperty("Frames").GetValue(enc, null);
+                IList ef = encFrames as IList;
+                if (ef == null) return null;
+                ef.Add(frame);
+
+                MethodInfo save = tEnc.GetMethod("Save", new Type[] { typeof(Stream) });
+                if (save == null) return null;
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    save.Invoke(enc, new object[] { ms });
+                    ms.Position = 0;
+                    using (Image img = Image.FromStream(ms))
+                        return Clone(img);
+                }
+            }
+            catch { return null; }
+        }
+
+        // 复制成不依赖流/文件的独立位图（保留 alpha）
+        static Bitmap Clone(Image img)
+        {
+            Bitmap c = new Bitmap(img.Width, img.Height, PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(c))
+            {
+                g.CompositingMode = CompositingMode.SourceCopy;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.DrawImage(img, new Rectangle(0, 0, c.Width, c.Height));
+            }
+            return c;
+        }
+
+        // 太大就等比缩到 MaxDim（顺手把原图释放掉）
+        public static Bitmap Fit(Bitmap b, int max)
+        {
+            if (b == null) return null;
+            if (b.Width <= max && b.Height <= max) return b;
+            float s = Math.Min((float)max / b.Width, (float)max / b.Height);
+            int w = Math.Max(1, (int)Math.Round(b.Width * s));
+            int h = Math.Max(1, (int)Math.Round(b.Height * s));
+            Bitmap c = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(c))
+            {
+                g.CompositingMode = CompositingMode.SourceCopy;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(b, new Rectangle(0, 0, w, h));
+            }
+            try { b.Dispose(); } catch { }
+            return c;
+        }
+
+        public static bool HasAlpha(Bitmap b)
+        {
+            try { return b != null && Image.IsAlphaPixelFormat(b.PixelFormat); }
+            catch { return false; }
+        }
+
+        // 真正去看像素里有没有“半透明/透明”。注意 IsAlphaPixelFormat 对任何 32bpp 图都返回 true，
+        // 光看格式会把所有照片都当带透明的，于是全存成 PNG（又大又没必要）。
+        public static bool HasRealAlpha(Bitmap b)
+        {
+            if (!HasAlpha(b)) return false;
+            try
+            {
+                BitmapData d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height),
+                                          ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    int stride = Math.Abs(d.Stride);
+                    byte[] row = new byte[stride];
+                    long baseAddr = d.Scan0.ToInt64();
+                    for (int y = 0; y < b.Height; y++)
+                    {
+                        Marshal.Copy(new IntPtr(baseAddr + (long)y * d.Stride), row, 0, stride);
+                        for (int x = 3; x < row.Length; x += 4)
+                            if (row[x] != 255) return true;
+                    }
+                }
+                finally { b.UnlockBits(d); }
+            }
+            catch { return true; }      // 读不出来就按“有透明”处理，宁可存 PNG 也别丢通道
+            return false;
+        }
+
+        // 有真透明 -> PNG（无损）；不透明 -> JPEG（省磁盘，照片也不失真）
+        public static string ExtFor(Bitmap b) { return HasRealAlpha(b) ? ".png" : ".jpg"; }
+
+        public static void SaveAs(Bitmap b, string path)
+        {
+            string low = path.ToLowerInvariant();
+            if (!low.EndsWith(".jpg") && !low.EndsWith(".jpeg"))
+            {
+                b.Save(path, ImageFormat.Png);
+                return;
+            }
+            ImageCodecInfo jpg = null;
+            try
+            {
+                ImageCodecInfo[] cs = ImageCodecInfo.GetImageEncoders();
+                for (int i = 0; i < cs.Length; i++)
+                    if (cs[i].FormatID == ImageFormat.Jpeg.Guid) { jpg = cs[i]; break; }
+            }
+            catch { }
+            if (jpg == null) { b.Save(path, ImageFormat.Png); return; }
+            using (EncoderParameters ep = new EncoderParameters(1))
+            {
+                ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 92L);
+                b.Save(path, jpg, ep);
+            }
+        }
+    }
+
     class StoreItem
     {
         public Bitmap Image;
@@ -153,8 +472,11 @@ namespace SnapWheel
         public bool SaveToDisk = false;
         public string Dir = "";
         public int MaxCount = 50;
+        int _seq = 0;
 
-        public StoreItem Add(Bitmap bmp)
+        public StoreItem Add(Bitmap bmp) { return AddCore(bmp, ".png"); }
+
+        public StoreItem AddCore(Bitmap bmp, string ext)
         {
             StoreItem it = new StoreItem();
             it.Image = bmp;
@@ -163,8 +485,8 @@ namespace SnapWheel
                 try
                 {
                     Directory.CreateDirectory(Dir);
-                    string f = Path.Combine(Dir, "snap_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".png");
-                    bmp.Save(f, ImageFormat.Png);
+                    string f = Path.Combine(Dir, "snap_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + (_seq++) + ext);
+                    ImageIO.SaveAs(bmp, f);
                     it.FilePath = f;
                 }
                 catch { }
@@ -172,6 +494,15 @@ namespace SnapWheel
             Items.Add(it);
             while (Items.Count > MaxCount && Items.Count > 0) Items.RemoveAt(0);
             return it;
+        }
+
+        // 从外部文件导入：解码 -> 落盘 -> 入列。失败返回 null（不抛）
+        public StoreItem Import(string path)
+        {
+            Bitmap b = ImageIO.Load(path);
+            if (b == null) return null;
+            try { return AddCore(b, ImageIO.ExtFor(b)); }
+            catch { try { b.Dispose(); } catch { } return null; }
         }
 
         public string EnsureFile(StoreItem it)
@@ -342,13 +673,20 @@ namespace SnapWheel
             {
                 Store st = Wheels[i].Store;
                 if (string.IsNullOrEmpty(st.Dir) || !Directory.Exists(st.Dir)) continue;
-                string[] files = Directory.GetFiles(st.Dir, "snap_*.png");
-                Array.Sort(files);
-                for (int k = 0; k < files.Length; k++)
+                List<string> files = new List<string>();
+                try
+                {
+                    files.AddRange(Directory.GetFiles(st.Dir, "snap_*.png"));
+                    files.AddRange(Directory.GetFiles(st.Dir, "snap_*.jpg"));
+                }
+                catch { }
+                files.Sort(StringComparer.OrdinalIgnoreCase);
+                for (int k = 0; k < files.Count; k++)
                 {
                     try
                     {
-                        Bitmap b = new Bitmap(files[k]);
+                        Bitmap b = ImageIO.Load(files[k]);     // 走统一加载器，ico/jpeg/…都能回读
+                        if (b == null) continue;
                         StoreItem it = new StoreItem();
                         it.Image = b;
                         it.FilePath = files[k];
@@ -857,6 +1195,12 @@ namespace SnapWheel
         // ---------- 绘制 ----------
         protected override void OnPaint(PaintEventArgs e)
         {
+            try { PaintOverlay(e); }
+            catch (Exception ex) { Err.Log("OverlayForm.OnPaint", ex); }
+        }
+
+        void PaintOverlay(PaintEventArgs e)
+        {
             Graphics g = e.Graphics;
             g.CompositingMode = CompositingMode.SourceCopy;
             if (_dimmed != null) g.DrawImageUnscaled(_dimmed, 0, 0);
@@ -1347,7 +1691,7 @@ namespace SnapWheel
             AllowDrop = true;
             DragEnter += new DragEventHandler(OnDragOverWheel);
             DragOver += new DragEventHandler(OnDragOverWheel);
-            DragLeave += new EventHandler(delegate(object o, EventArgs ev) { if (_dropActive) { _dropActive = false; Render(); } });
+            DragLeave += new EventHandler(delegate(object o, EventArgs ev) { ClearDropCache(); if (_dropActive) { _dropActive = false; _dropExternal = false; Render(); } });
             DragDrop += new DragEventHandler(OnDragDropWheel);
             _anim = new Timer();
             _anim.Interval = 15;
@@ -1500,6 +1844,13 @@ namespace SnapWheel
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
             if (_deletingItem != null) need = true;
+
+            // 提示条（"已加入 N 张图片"）淡入淡出
+            if (_toast.Length > 0)
+            {
+                if ((DateTime.Now - _toastAt).TotalSeconds > 2.6f) _toast = "";
+                else need = true;
+            }
 
             // 万能键：长按展开圆盘 / 滑动切换
             if (_keyDown)
@@ -1891,7 +2242,8 @@ namespace SnapWheel
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                DrawWheel(g, w, h);
+                try { DrawWheel(g, w, h); }
+                catch (Exception ex) { Err.Log("DrawWheel", ex); }      // 画错一帧总好过整个程序崩掉
             }
 
             IntPtr screenDc = Native.GetDC(IntPtr.Zero);
@@ -1913,7 +2265,8 @@ namespace SnapWheel
                     g2.PixelOffsetMode = PixelOffsetMode.HighQuality;
                     g2.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                     g2.Clear(Color.Transparent);
-                    DrawWheel(g2, w, h);
+                    try { DrawWheel(g2, w, h); }
+                    catch (Exception ex) { Err.Log("DrawWheel-fallback", ex); }
                 }
                 Native.PushLayered(this, bmp);
                 bmp.Dispose();
@@ -1971,10 +2324,12 @@ namespace SnapWheel
                 gp.AddArc(c.X - rr, c.Y - rr, rr * 2f, rr * 2f, st, 90f);
                 if (_dropActive)
                 {
-                    // drop-target feedback: blue glow + bright blue track
-                    using (Pen dg = new Pen(Color.FromArgb((int)(110 * a / 255f), 96, 170, 255), 40f))
+                    // drop-target feedback: blue glow + bright blue track（外部文件=偏绿，自己的图=偏蓝）
+                    Color dc = _dropExternal ? Color.FromArgb(86, 214, 138) : Color.FromArgb(96, 170, 255);
+                    Color dch = Color.FromArgb(255, Math.Min(255, dc.R + 24), Math.Min(255, dc.G + 24), Math.Min(255, dc.B + 24));
+                    using (Pen dg = new Pen(Color.FromArgb((int)(110 * a / 255f), dc.R, dc.G, dc.B), 40f))
                     { dg.StartCap = LineCap.Round; dg.EndCap = LineCap.Round; g.DrawPath(dg, gp); }
-                    using (Pen dm = new Pen(Color.FromArgb((int)(235 * a / 255f), 120, 190, 255), 6f))
+                    using (Pen dm = new Pen(Color.FromArgb((int)(235 * a / 255f), dch.R, dch.G, dch.B), 6f))
                     { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
                 }
                 using (Pen glow = new Pen(Color.FromArgb((int)(55 * a / 255f), 255, 255, 255), 30f))
@@ -2263,6 +2618,30 @@ namespace SnapWheel
                         g.DrawString(idx, f, br, pill.X + 8, pill.Y + (pill.Height - sz.Height) / 2f + 1);
                 }
             }
+
+            // 外部文件拖到轮盘上方：提示松手加入
+            if (_dropActive && _dropExternal && a > 90)
+            {
+                string tip = "松手把 " + _dropCount + " 张图片加入「" + _mgr.ActiveWheel.Name + "」";
+                using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
+                {
+                    SizeF sz = g.MeasureString(tip, f);
+                    float px = c.X + Sx() * (EffR() * 0.78f) - sz.Width / 2f;
+                    float py = c.Y + Sy() * (EffR() * 0.78f) - sz.Height / 2f;
+                    RectangleF pill = new RectangleF(px - 14, py - 7, sz.Width + 28, sz.Height + 14);
+                    using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
+                    {
+                        using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 34, 120, 86)))
+                            g.FillPath(pb, pg);
+                        using (Pen pp2 = new Pen(Color.FromArgb((int)(220 * a / 255f), 150, 245, 190), 1.6f))
+                            g.DrawPath(pp2, pg);
+                    }
+                    using (SolidBrush tb = new SolidBrush(Color.FromArgb((int)(250 * a / 255f), 255, 255, 255)))
+                        g.DrawString(tip, f, tb, pill.X + 14, pill.Y + 6);
+                }
+            }
+
+            DrawToast(g, a);
         }
 
         void OnGiveFeedback(object sender, GiveFeedbackEventArgs e)
@@ -2285,27 +2664,138 @@ namespace SnapWheel
 
         bool _dropActive = false;
         bool _returnedToWheel = false;
+        bool _dropExternal = false;      // 拖进来的是“外面的文件”（不是轮盘自己的图）
+        int _dropCount = 0;
+        object _dropCacheKey = null;
+        List<string> _dropCacheFiles = null;
+        DateTime _dropCacheAt = DateTime.MinValue;
+        const string DragFmt = "SnapWheelMove";     // 标记：这是轮盘自己在拖的图
+
+        // 一次拖拽里 DragOver 会疯狂触发，扫文件夹太浪费：同一次拖拽只算一次，
+        // 就算 DataObject 每次都换了新壳，也至少 400ms 才重算一次
+        List<string> DropCandidates(IDataObject data)
+        {
+            if (data == null) return null;
+            if (ReferenceEquals(data, _dropCacheKey)) return _dropCacheFiles;
+            if (_dropCacheFiles != null && (DateTime.Now - _dropCacheAt).TotalMilliseconds < 400) return _dropCacheFiles;
+            List<string> r = null;
+            try
+            {
+                if (!data.GetDataPresent(DragFmt) && data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    string[] paths = data.GetData(DataFormats.FileDrop) as string[];
+                    r = ImageIO.Collect(paths, 50);
+                }
+            }
+            catch { }
+            _dropCacheKey = data; _dropCacheFiles = r; _dropCacheAt = DateTime.Now;
+            return r;
+        }
+
+        void ClearDropCache() { _dropCacheKey = null; _dropCacheFiles = null; _dropCacheAt = DateTime.MinValue; }
 
         // dragging back over the ring highlights it as a drop target
         void OnDragOverWheel(object sender, DragEventArgs e)
         {
             Point cp = PointToClient(new Point(e.X, e.Y));
             bool over = OverContent(cp);
-            e.Effect = over ? DragDropEffects.Move : DragDropEffects.None;
-            if (over != _dropActive) { _dropActive = over; Render(); }
+            bool mine = false, ext = false; int n = 0;
+            try { mine = e.Data.GetDataPresent(DragFmt); } catch { }
+            if (!mine)
+            {
+                List<string> fs = DropCandidates(e.Data);
+                if (fs != null && fs.Count > 0) { ext = true; n = fs.Count; }
+            }
+            e.Effect = over ? (mine ? DragDropEffects.Move : (ext ? DragDropEffects.Copy : DragDropEffects.None))
+                            : DragDropEffects.None;
+            bool hi = over && (mine || ext);
+            if (hi != _dropActive || ext != _dropExternal || n != _dropCount)
+            {
+                _dropActive = hi; _dropExternal = ext; _dropCount = n;
+                Render();
+            }
         }
 
         void OnDragDropWheel(object sender, DragEventArgs e)
         {
             Point cp = PointToClient(new Point(e.X, e.Y));
-            if (OverContent(cp))
+            bool over = OverContent(cp);
+            _dropActive = false; _dropExternal = false;
+            if (over)
             {
-                _returnedToWheel = true;
-                e.Effect = DragDropEffects.Move;
+                bool mine = false;
+                try { mine = e.Data.GetDataPresent(DragFmt); } catch { }
+                if (mine)
+                {
+                    _returnedToWheel = true;
+                    e.Effect = DragDropEffects.Move;
+                }
+                else
+                {
+                    List<string> fs = DropCandidates(e.Data);
+                    if (fs != null && fs.Count > 0) { e.Effect = DragDropEffects.Copy; ImportFiles(fs); }
+                    else e.Effect = DragDropEffects.None;
+                }
             }
             else e.Effect = DragDropEffects.None;
-            _dropActive = false;
+            ClearDropCache();
             Render();
+        }
+
+        // 把外部图片收进当前 wheel（失败的单张跳过，不打断其它）
+        public void ImportFiles(List<string> files)
+        {
+            if (files == null || files.Count == 0) return;
+            int ok = 0, bad = 0;
+            for (int i = 0; i < files.Count; i++)
+            {
+                StoreItem it = null;
+                try { it = _store.Import(files[i]); } catch { }
+                if (it == null) { bad++; continue; }
+                _enterT0[it] = DateTime.Now.AddSeconds(ok * 0.07);    // 依次滑入
+                ok++;
+            }
+            _targetOffset = Math.Max(0, _store.Items.Count - 1);      // 视口跟到最后一张
+            _hover = -1; _enlarged = -1;
+            if (ok > 0) ShowToast("已加入 " + ok + " 张图片" + (bad > 0 ? "（" + bad + " 张读不了）" : ""));
+            else ShowToast("这些文件读不出图片");
+            Render();
+        }
+
+        // 左下角的小提示条
+        string _toast = "";
+        DateTime _toastAt = DateTime.MinValue;
+        public void ShowToast(string s)
+        {
+            _toast = s == null ? "" : s;
+            _toastAt = DateTime.Now;
+        }
+
+        void DrawToast(Graphics g, int a)
+        {
+            if (_toast.Length == 0) return;
+            float age = (float)(DateTime.Now - _toastAt).TotalSeconds;
+            if (age > 2.6f) return;
+            float t = 1f;
+            if (age < 0.18f) t = age / 0.18f;
+            else if (age > 2.1f) t = Math.Max(0f, (2.6f - age) / 0.5f);
+            int ta = (int)(235 * t * a / 255f);
+            if (ta <= 2) return;
+            using (Font f = new Font("Microsoft YaHei UI", 10f))
+            {
+                SizeF sz = g.MeasureString(_toast, f);
+                float w = sz.Width + 34f, h = sz.Height + 16f;
+                float x = 26f + (1f - t) * 14f, y = ClientSize.Height - h - 26f;
+                using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
+                {
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(ta * 0.86f), 22, 24, 29)))
+                        g.FillPath(b, pp);
+                    using (Pen p = new Pen(Color.FromArgb((int)(ta * 0.55f), _accentCur.R, _accentCur.G, _accentCur.B), 1.4f))
+                        g.DrawPath(p, pp);
+                }
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
+                    g.DrawString(_toast, f, tb, x + 17f, y + 8f);
+            }
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -2455,6 +2945,7 @@ namespace SnapWheel
             DataObject data = new DataObject();
             if (file != null) data.SetData(DataFormats.FileDrop, new string[] { file });
             try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { }
+            try { data.SetData(DragFmt, 1); } catch { }        // 标记成“轮盘自己的拖拽”，别当成外部导入
 
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             _dragOutItem = it; _dragOutProg = 0f;
@@ -2969,8 +3460,14 @@ namespace SnapWheel
             _tray.Icon = Brand.Get();
             _tray.Text = "SnapWheel 截图轮盘";
             _tray.Visible = true;
+            Err.Notify = delegate(string msg)             // 出问题时托盘冒个泡，程序继续跑
+            {
+                try { _tray.ShowBalloonTip(4000, "SnapWheel 遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
+                catch { }
+            };
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
+            menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
@@ -2982,6 +3479,22 @@ namespace SnapWheel
             RegisterHotkeyAndNotify();
 
             if (_settings.ShowWheelOnStart) _wheel.ShowWheel();
+        }
+
+        // 托盘「导入图片…」：不想拖的时候也能从任意位置选图加进当前 wheel
+        void OnImport(object sender, EventArgs e)
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = "把图片加入轮盘";
+                d.Multiselect = true;
+                d.Filter = ImageIO.DialogFilter();
+                d.RestoreDirectory = true;
+                if (d.ShowDialog() != DialogResult.OK) return;
+                List<string> files = ImageIO.Collect(d.FileNames, 50);
+                _wheel.ShowWheel();
+                _wheel.ImportFiles(files);
+            }
         }
 
         void RegisterHotkeyAndNotify()
@@ -3108,6 +3621,18 @@ namespace SnapWheel
             try { Native.SetProcessDPIAware(); } catch { }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // 全局兜底：任何没被接住的异常都只记日志（+偶尔提醒一次），绝不再让「.NET Framework 未处理异常」把程序打死
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += new System.Threading.ThreadExceptionEventHandler(delegate(object o, System.Threading.ThreadExceptionEventArgs ea)
+            {
+                Err.Log("UI线程", ea.Exception);
+            });
+            AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(delegate(object o, UnhandledExceptionEventArgs ea)
+            {
+                Err.Log("非UI线程", ea.ExceptionObject as Exception);
+            });
+
             Application.Run(new AppCtx());
             GC.KeepAlive(mtx);
         }
