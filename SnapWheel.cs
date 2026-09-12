@@ -63,9 +63,9 @@ namespace SnapWheel
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.5";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.7";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.3.5";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+        public const string Version = "0.3.7";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -2310,11 +2310,43 @@ namespace SnapWheel
             _memDc = IntPtr.Zero; _dib = IntPtr.Zero; _oldBmp = IntPtr.Zero; _bits = IntPtr.Zero;
         }
 
+        // 铺一层“看不见的接住区”：分层窗口是按 alpha 做命中测试的 —— alpha=0 的地方
+        // 系统会当作不存在，拖到那儿鼠标消息/拖放都直接穿到底下的窗口去（这就是“拖上去没反应”的根因）。
+        // alpha=1 肉眼完全看不出来，但系统会认为这里有东西，于是拖放能找上我们。
+        // 范围 = 环带（含一点余量）+ 摇杆键，也就是“看上去是轮盘”的那一片。
+        void DrawDropCatcher(Graphics g)
+        {
+            PointF c = Center();
+            float R = EffR();
+            float outer = R + _thumb * 1.15f;
+            float inner = Math.Max(0f, R - _thumb * 1.15f);
+            float st = ArcStart();
+            using (GraphicsPath gp = new GraphicsPath(FillMode.Alternate))
+            {
+                gp.AddArc(c.X - outer, c.Y - outer, outer * 2f, outer * 2f, st, 90f);
+                gp.AddLine(c.X, c.Y, c.X, c.Y);
+                gp.CloseFigure();
+                if (inner > 2f)
+                {
+                    gp.AddArc(c.X - inner, c.Y - inner, inner * 2f, inner * 2f, st, 90f);
+                    gp.AddLine(c.X, c.Y, c.X, c.Y);
+                    gp.CloseFigure();
+                }
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(1, 0, 0, 0)))
+                    g.FillPath(b, gp);
+            }
+            Rectangle kr = KeyRect();
+            using (SolidBrush kb = new SolidBrush(Color.FromArgb(1, 0, 0, 0)))
+                g.FillEllipse(kb, kr);
+        }
+
         void DrawWheel(Graphics g, int w, int h)
         {
             int a = (int)(255 * Math.Max(0f, Math.Min(1f, _show)));
             if (a <= 1) return;
             PointF c = Center();
+
+            DrawDropCatcher(g);
 
             // ring track (quarter of the ring that lies inside the screen)
             float rr = EffR();
@@ -2694,51 +2726,101 @@ namespace SnapWheel
 
         void ClearDropCache() { _dropCacheKey = null; _dropCacheFiles = null; _dropCacheAt = DateTime.MinValue; }
 
-        // dragging back over the ring highlights it as a drop target
+        // 拖进来的到底是啥：文件（含文件夹）还是直接一张位图（网页/其它程序里拖出来的图）
+        static bool HasBitmapData(IDataObject data)
+        {
+            if (data == null) return false;
+            try { return data.GetDataPresent(DataFormats.Bitmap) || data.GetDataPresent(DataFormats.Dib); }
+            catch { return false; }
+        }
+
+        // 外部图片：整个窗口范围内都接收（不再要求必须正好压在图/环上 —— 太严格会让人以为坏了）
         void OnDragOverWheel(object sender, DragEventArgs e)
         {
-            Point cp = PointToClient(new Point(e.X, e.Y));
-            bool over = OverContent(cp);
             bool mine = false, ext = false; int n = 0;
-            try { mine = e.Data.GetDataPresent(DragFmt); } catch { }
+            try { mine = e.Data != null && e.Data.GetDataPresent(DragFmt); } catch { }
             if (!mine)
             {
                 List<string> fs = DropCandidates(e.Data);
                 if (fs != null && fs.Count > 0) { ext = true; n = fs.Count; }
+                else if (HasBitmapData(e.Data)) { ext = true; n = 1; }
             }
-            e.Effect = over ? (mine ? DragDropEffects.Move : (ext ? DragDropEffects.Copy : DragDropEffects.None))
-                            : DragDropEffects.None;
-            bool hi = over && (mine || ext);
-            if (hi != _dropActive || ext != _dropExternal || n != _dropCount)
+            if (mine)
             {
-                _dropActive = hi; _dropExternal = ext; _dropCount = n;
-                Render();
+                bool over = OverContent(PointToClient(new Point(e.X, e.Y)));
+                e.Effect = over ? DragDropEffects.Move : DragDropEffects.None;
+                if (over != _dropActive || _dropExternal || _dropCount != 0)
+                { _dropActive = over; _dropExternal = false; _dropCount = 0; Render(); }
+            }
+            else
+            {
+                e.Effect = ext ? DragDropEffects.Copy : DragDropEffects.None;
+                if (!_dropActive || !_dropExternal || n != _dropCount)
+                { _dropActive = ext; _dropExternal = ext; _dropCount = n; Render(); }
             }
         }
 
         void OnDragDropWheel(object sender, DragEventArgs e)
         {
-            Point cp = PointToClient(new Point(e.X, e.Y));
-            bool over = OverContent(cp);
             _dropActive = false; _dropExternal = false;
-            if (over)
+            bool mine = false;
+            try { mine = e.Data != null && e.Data.GetDataPresent(DragFmt); } catch { }
+            if (mine)
             {
-                bool mine = false;
-                try { mine = e.Data.GetDataPresent(DragFmt); } catch { }
-                if (mine)
+                bool over = OverContent(PointToClient(new Point(e.X, e.Y)));
+                if (over) { _returnedToWheel = true; e.Effect = DragDropEffects.Move; }
+                else e.Effect = DragDropEffects.None;
+            }
+            else
+            {
+                List<string> fs = DropCandidates(e.Data);
+                if (fs != null && fs.Count > 0) { e.Effect = DragDropEffects.Copy; ImportFiles(fs); }
+                else if (HasBitmapData(e.Data))
                 {
-                    _returnedToWheel = true;
-                    e.Effect = DragDropEffects.Move;
+                    e.Effect = DragDropEffects.Copy;
+                    ImportBitmap(e.Data);
                 }
-                else
+                else e.Effect = DragDropEffects.None;
+            }
+            ClearDropCache();
+            Render();
+        }
+
+        // 直接拖过来的一张位图（不是文件）：网页、看图软件、聊天窗口里拖出来的图都走这里
+        public void ImportBitmap(IDataObject data)
+        {
+            Bitmap bmp = null;
+            try
+            {
+                object o = null;
+                try { o = data.GetData(DataFormats.Bitmap); } catch { }
+                if (o == null) { try { o = data.GetData(DataFormats.Dib); } catch { } }
+                if (o is Bitmap) bmp = new Bitmap((Bitmap)o);
+                else if (o is Image) bmp = new Bitmap((Image)o);
+                else if (o is Stream)
                 {
-                    List<string> fs = DropCandidates(e.Data);
-                    if (fs != null && fs.Count > 0) { e.Effect = DragDropEffects.Copy; ImportFiles(fs); }
-                    else e.Effect = DragDropEffects.None;
+                    using (Stream s = (Stream)o)
+                    {
+                        long pos = 0; try { pos = s.Position; } catch { }
+                        try { using (Image im = Image.FromStream(s)) bmp = new Bitmap(im); }
+                        catch { try { s.Position = pos; using (Image im2 = Image.FromStream(s)) bmp = new Bitmap(im2); } catch { } }
+                    }
+                }
+                else if (o is byte[])
+                {
+                    byte[] raw = (byte[])o;
+                    try { using (MemoryStream ms = new MemoryStream(raw)) using (Image im = Image.FromStream(ms)) bmp = new Bitmap(im); }
+                    catch { }
                 }
             }
-            else e.Effect = DragDropEffects.None;
-            ClearDropCache();
+            catch { bmp = null; }
+            if (bmp == null) { ShowToast("这张图读不出来"); Render(); return; }
+            bmp = ImageIO.Fit(bmp, ImageIO.MaxDim);
+            StoreItem it = _store.AddCore(bmp, ImageIO.ExtFor(bmp));
+            _enterT0[it] = DateTime.Now;
+            _targetOffset = Math.Max(0, _store.Items.Count - 1);
+            _hover = -1; _enlarged = -1;
+            ShowToast("已加入 1 张图片");
             Render();
         }
 
@@ -2980,9 +3062,11 @@ namespace SnapWheel
             }
             else if (returned)
             {
-                // dropped back onto the ring -> pop the card back in with an animation
-                int idx = _store.Items.IndexOf(it);
-                if (idx >= 0) _scales[idx] = 0.18f;
+                // 拖回轮盘：和刚截完图一样，重新播一次缩略图滑入动画
+                _scales.Remove(_store.Items.IndexOf(it));
+                MarkNew(it);
+                _targetOffset = Math.Max(0, _store.Items.Count - 1);
+                ShowToast("已放回「" + _mgr.ActiveWheel.Name + "」");
             }
             _hover = -1;
             Render();
@@ -3008,7 +3092,10 @@ namespace SnapWheel
             if (m.Msg == 0x0084)
             {
                 Point cp = PointToClient(Cursor.Position);
-                if (cp.X >= 0 && cp.Y >= 0 && cp.X < Width && cp.Y < Height && !OverContent(cp))
+                // 空地方点穿（不误点）；但左键按着的时候不做穿透 ——
+                // 那多半正在拖拽，穿透会让系统找不到拖放目标，图就掉不进来了
+                bool dragging = (Control.MouseButtons & MouseButtons.Left) != 0;
+                if (!dragging && cp.X >= 0 && cp.Y >= 0 && cp.X < Width && cp.Y < Height && !OverContent(cp))
                 { m.Result = (IntPtr)(-1); return; }
             }
             base.WndProc(ref m);
@@ -3468,6 +3555,8 @@ namespace SnapWheel
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
             menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
+            if (IsElevated())
+                menu.Items.Add("以普通权限重启（拖拽才有用）", null, new EventHandler(OnRelaunchNormal));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
@@ -3478,7 +3567,36 @@ namespace SnapWheel
 
             RegisterHotkeyAndNotify();
 
+            if (IsElevated())
+                try
+                {
+                    _tray.ShowBalloonTip(6000, "SnapWheel 以管理员身份运行",
+                        "Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（右键托盘图标 → 以普通权限重启）。",
+                        ToolTipIcon.Warning);
+                }
+                catch { }
+
             if (_settings.ShowWheelOnStart) _wheel.ShowWheel();
+        }
+
+        // 是不是以管理员身份在跑？管理员进程收不到（也发不出）普通权限程序的拖拽 —— Windows 的 UIPI 拦的
+        static bool IsElevated()
+        {
+            try
+            {
+                using (System.Security.Principal.WindowsIdentity id = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    return new System.Security.Principal.WindowsPrincipal(id)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
+        }
+
+        // 用 explorer 拉起自己 -> 拿到普通权限（explorer 是 Medium）
+        void OnRelaunchNormal(object sender, EventArgs e)
+        {
+            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Application.ExecutablePath + "\""); }
+            catch { }
+            Quit();
         }
 
         // 托盘「导入图片…」：不想拖的时候也能从任意位置选图加进当前 wheel
