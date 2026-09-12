@@ -1,0 +1,19 @@
+# 编译产物（源码在仓库里，可随时自己编）
+*.pdb
+*.obj
+*.ilk
+
+# 编辑器 / 系统杂项
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# 临时与调试产物
+*.tmp
+*_dbg.exe
+~$*
