@@ -63,9 +63,9 @@ namespace SnapWheel
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.7";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.9";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.3.7";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+        public const string Version = "0.3.9";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -134,6 +134,51 @@ namespace SnapWheel
 
     static class Gfx
     {
+        // f > 0 往白里混，f < 0 往黑里混（用来做拟物高光/暗部）
+        public static Color Shade(Color c, float f)
+        {
+            if (f >= 0f)
+            {
+                return Color.FromArgb(c.A,
+                    (int)Math.Round(c.R + (255 - c.R) * f),
+                    (int)Math.Round(c.G + (255 - c.G) * f),
+                    (int)Math.Round(c.B + (255 - c.B) * f));
+            }
+            float t = 1f + f;      // f=-0.4 -> 0.6
+            return Color.FromArgb(c.A, (int)Math.Round(c.R * t), (int)Math.Round(c.G * t), (int)Math.Round(c.B * t));
+        }
+
+        public static Color A(Color c, int a)
+        {
+            if (a < 0) a = 0; if (a > 255) a = 255;
+            return Color.FromArgb(a, c.R, c.G, c.B);
+        }
+
+        public static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
+
+        // 缓动：先快后慢，收尾很稳
+        public static float EaseOut(float t)
+        {
+            t = Clamp01(t);
+            return 1f - (1f - t) * (1f - t) * (1f - t);
+        }
+
+        // 缓动：两头慢中间快（滑入用这个最顺）
+        public static float EaseInOut(float t)
+        {
+            t = Clamp01(t);
+            return t * t * (3f - 2f * t);
+        }
+
+        // 回弹一点点的收尾，显得有"弹性"
+        public static float EaseBack(float t)
+        {
+            t = Clamp01(t);
+            float s = 1.70158f;
+            float u = t - 1f;
+            return u * u * ((s + 1f) * u + s) + 1f;
+        }
+
         public static GraphicsPath Round(RectangleF r, float rad)
         {
             GraphicsPath p = new GraphicsPath();
@@ -742,6 +787,9 @@ namespace SnapWheel
         public bool AutoStart = false;  // launch at logon (HKCU Run)
         public string DeleteMode = "double";  // "double" right-click to delete, or "single"
         public string SwitchMode = "radial";  // "radial" (万能键圆盘) or "swipe" (长按滑动切换)
+        public int PeekPercent = 240;         // 长按放大：百分比（100 = 原大小）
+        public bool IntroSeen = false;        // 是否看过新手引导
+        public bool IntroAnim = true;         // 启动时播开启动画
 
         static string FilePath()
         {
@@ -780,6 +828,9 @@ namespace SnapWheel
                         else if (k == "AutoStart") s.AutoStart = (v == "1");
                         else if (k == "DeleteMode" && (v == "single" || v == "double")) s.DeleteMode = v;
                         else if (k == "SwitchMode" && (v == "radial" || v == "swipe")) s.SwitchMode = v;
+                        else if (k == "PeekPercent") { int n; if (int.TryParse(v, out n) && n >= 120 && n <= 500) s.PeekPercent = n; }
+                        else if (k == "IntroSeen") s.IntroSeen = (v == "1");
+                        else if (k == "IntroAnim") s.IntroAnim = (v == "1");
                     }
                 }
             }
@@ -808,6 +859,9 @@ namespace SnapWheel
                 lines.Add("AutoStart=" + (AutoStart ? "1" : "0"));
                 lines.Add("DeleteMode=" + DeleteMode);
                 lines.Add("SwitchMode=" + SwitchMode);
+                lines.Add("PeekPercent=" + PeekPercent);
+                lines.Add("IntroSeen=" + (IntroSeen ? "1" : "0"));
+                lines.Add("IntroAnim=" + (IntroAnim ? "1" : "0"));
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
             catch { }
@@ -834,6 +888,10 @@ namespace SnapWheel
             Graphics g = pevent.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            // 先用父容器的底色铺满，再画圆角块 —— 否则 BackColor=Transparent 时四角会留下没画过的脏底
+            Color bg = (Parent != null && Parent.BackColor.A == 255) ? Parent.BackColor : Color.White;
+            using (SolidBrush bb = new SolidBrush(bg))
+                g.FillRectangle(bb, ClientRectangle);
             bool hot = ClientRectangle.Contains(PointToClient(Cursor.Position));
             Color c = hot ? FillHover : Fill;
             using (GraphicsPath p = Gfx.Round(r, 9f))
@@ -1665,7 +1723,12 @@ namespace SnapWheel
         DateTime _lastRightClick = DateTime.MinValue;
         int _lastRightIndex = -1;
         const float HoverScale = 1.36f;
-        const float PeekScale = 2.4f;
+        float PeekScale { get { return Math.Max(1.2f, Math.Min(5f, _settings.PeekPercent / 100f)); } }
+        float _keyT = 0f;              // 万能键按下进度 0..1
+        bool _intro = false;           // 正在播开启动画
+        float _introT = 0f;            // 0..1
+        float _introDur = 1.8f;        // 秒
+        DateTime _introAt = DateTime.MinValue;
         const float CardPad = 0f;       // card == image rect, so the picture fills the rounded frame
         DateTime _lastActive = DateTime.Now;
         Point _mouseDownPt;
@@ -1747,6 +1810,43 @@ namespace SnapWheel
             Render();
         }
 
+        // 软件刚启动时用它：带开启动画地显示出来
+        public void ShowWheelWithIntro()
+        {
+            if (_settings.IntroAnim) { StartIntro(); }
+            else ShowWheel();
+        }
+
+        // 开启动画：整条环像彩虹一样扫出来，图片一张张沿弧线滑落，万能键/按钮/文字从屏幕外滑入并渐显
+        public void StartIntro()
+        {
+            if (!Visible) { _show = 0f; _rendered = false; Show(); }
+            _show = 1f; _targetShow = 1f; _showAnimating = false;
+            _intro = true; _introT = 0f; _introAt = DateTime.Now;
+            _introDur = Math.Min(3.4f, 1.5f + 0.13f * _store.Items.Count);
+            _scales.Clear(); _enterT0.Clear();
+            for (int i = 0; i < _store.Items.Count; i++)
+                _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(0.45 + i * 0.13);
+            Render();
+        }
+
+        // 开启动画里每个元素的进度（1 = 完全就位）；delay 越大越晚出场
+        float IntroP(float delay)
+        {
+            if (!_intro) return 1f;
+            float t = _introT * _introDur;             // 秒
+            if (t <= delay) return 0f;
+            return Gfx.EaseOut((t - delay) / 0.55f);
+        }
+
+        // 从屏幕外滑进来的位移（朝角落方向，也就是朝屏幕外）
+        PointF IntroShift(float p)
+        {
+            if (!_intro) return new PointF(0f, 0f);
+            float off = (1f - p) * 110f;
+            return new PointF((Sx() > 0 ? -off : off), (Sy() > 0 ? -off : off));
+        }
+
         public void HideWheel() { SetShow(0f); }
         public void ToggleWheel() { if (_targetShow > 0.5f) HideWheel(); else ShowWheel(); }
 
@@ -1804,8 +1904,7 @@ namespace SnapWheel
             {
                 float tgt;
                 if (_store.Items[i] == _dragOutItem) tgt = 0f;
-                else if (i == _enlarged) tgt = PeekScale;
-                else if (i == _hover) tgt = HoverScale;
+                else if (i == _enlarged) tgt = PeekScale;                else if (i == _hover) tgt = HoverScale;
                 else tgt = 1f;
                 float cur;
                 if (!_scales.TryGetValue(i, out cur)) cur = 1f;
@@ -1850,6 +1949,23 @@ namespace SnapWheel
             {
                 if ((DateTime.Now - _toastAt).TotalSeconds > 2.6f) _toast = "";
                 else need = true;
+            }
+
+            // 开启动画进度
+            if (_intro)
+            {
+                float t = (float)(DateTime.Now - _introAt).TotalSeconds / Math.Max(0.5f, _introDur);
+                if (t >= 1f) { t = 1f; _intro = false; }
+                _introT = t;
+                need = true;
+            }
+
+            // 万能键按下/松开 的弹性反馈
+            {
+                float kt = _keyDown ? 1f : 0f;
+                float cur = _keyT;
+                if (Math.Abs(cur - kt) > 0.004f) { _keyT = cur + (kt - cur) * (kt > cur ? 0.35f : 0.22f); need = true; }
+                else if (cur != kt) { _keyT = kt; need = true; }
             }
 
             // 万能键：长按展开圆盘 / 滑动切换
@@ -1959,13 +2075,16 @@ namespace SnapWheel
             return t * t * (3f - 2f * t);      // smoothstep -> eased, silky
         }
 
+        // 只有“真的拉得很长”的图才进特殊方框：宽高比超过 ExtremeRatio:1（或反过来）才算。
+        // 想改判定松紧，只动这一个数就行：越小越容易进方框，越大越严格。
+        public const float ExtremeRatio = 4.5f;
+
         // very extreme aspect ratios get a fixed square box with a distinctive border colour
         static bool IsExtreme(StoreItem it)
         {
             if (it == null || it.Image == null) return false;
             float a = it.Image.Width / (float)Math.Max(1, it.Image.Height);
-            // only markedly stretched shots (beyond ~2.8:1) get the special box treatment
-            return a > 2.8f || a < (1f / 2.8f);
+            return a > ExtremeRatio || a < (1f / ExtremeRatio);
         }
 
         // card size == the image's exact aspect; extreme ones become a square box
@@ -2204,12 +2323,13 @@ namespace SnapWheel
 
         PointF HintPos(SizeF sz)
         {
+            // 计数标签放到环外侧的 45° 对角线上，彻底离开万能键和角上的按钮
             PointF c = Center();
-            float bx = (Sx() > 0) ? c.X + 50 : c.X - 50 - sz.Width;
-            float dy = 216f;
-            float by = c.Y + Sy() * dy;
-            if (Sy() > 0) by -= sz.Height;
-            return new PointF(bx, by);
+            float d = EffR() + 78f;
+            float dx = d * 0.7071f, dy = d * 0.7071f;
+            float bx = (Sx() > 0) ? c.X + dx : c.X - dx;
+            float by = (Sy() > 0) ? c.Y + dy : c.Y - dy;
+            return new PointF(bx - sz.Width / 2f, by - sz.Height / 2f);
         }
 
         bool OverContent(Point p)
@@ -2340,6 +2460,69 @@ namespace SnapWheel
                 g.FillEllipse(kb, kr);
         }
 
+        // 万能键的“材质”：外发光 + 球面渐变 + 顶弧高光 + 玻璃内圈 + 摇杆点，按下时轻微放大并加亮
+        void DrawKeyDisc(Graphics g, int a, Color acc, Rectangle kr, float kcx, float kcy, float krr)
+        {
+            float kt = Gfx.Clamp01(_keyT);
+            float rr = krr * (1f + 0.05f * kt);
+            RectangleF disc = new RectangleF(kcx - rr, kcy - rr, rr * 2f, rr * 2f);
+
+            // 1) 外发光（径向渐变到透明）
+            using (GraphicsPath gp = new GraphicsPath())
+            {
+                float ho = rr + 16f + 10f * kt;
+                gp.AddEllipse(kcx - ho, kcy - ho, ho * 2f, ho * 2f);
+                using (PathGradientBrush halo = new PathGradientBrush(gp))
+                {
+                    halo.CenterPoint = new PointF(kcx, kcy);
+                    halo.CenterColor = Gfx.A(acc, (int)((70 + 70 * kt) * a / 255f));
+                    halo.SurroundColors = new Color[] { Gfx.A(acc, 0) };
+                    g.FillPath(halo, gp);
+                }
+            }
+
+            // 2) 球面本体
+            using (GraphicsPath body = new GraphicsPath())
+            {
+                body.AddEllipse(disc);
+                using (PathGradientBrush pgb = new PathGradientBrush(body))
+                {
+                    pgb.CenterPoint = new PointF(kcx - rr * 0.34f, kcy - rr * 0.38f);
+                    pgb.CenterColor = Gfx.A(Gfx.Shade(acc, 0.42f + 0.18f * kt), (int)((235 + 20 * kt) * a / 255f));
+                    pgb.SurroundColors = new Color[] { Gfx.A(Gfx.Shade(acc, -0.42f), (int)(210 * a / 255f)) };
+                    g.FillPath(pgb, body);
+                }
+                // 边缘细线
+                using (Pen rim = new Pen(Color.FromArgb((int)(120 * a / 255f), 255, 255, 255), 1.5f))
+                    g.DrawPath(rim, body);
+            }
+
+            // 3) 顶部弧线高光（玻璃感）
+            using (Pen hl = new Pen(Color.FromArgb((int)(120 * a / 255f), 255, 255, 255), 2.4f))
+            {
+                hl.StartCap = LineCap.Round; hl.EndCap = LineCap.Round;
+                g.DrawArc(hl, disc.X + rr * 0.20f, disc.Y + rr * 0.14f, rr * 1.60f, rr * 1.60f, 200f, 140f);
+            }
+
+            // 4) 玻璃内圈 + 摇杆点
+            using (Pen kin = new Pen(Color.FromArgb((int)(80 * a / 255f), 255, 255, 255), 1.1f))
+                g.DrawEllipse(kin, kcx - rr * 0.64f, kcy - rr * 0.64f, rr * 1.28f, rr * 1.28f);
+
+            float dsz = 6.8f + 1.6f * kt;
+            float spread = 15f + 2f * kt;
+            using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 255, 255, 255)))
+            {
+                for (int q = 0; q < 4; q++)
+                {
+                    double th = -Math.PI / 2 + q * Math.PI / 2;
+                    float px = (float)(kcx + Math.Cos(th) * spread), py = (float)(kcy + Math.Sin(th) * spread);
+                    g.FillEllipse(db, px - dsz / 2f, py - dsz / 2f, dsz, dsz);
+                }
+                float cs = 8f + 2.4f * kt;
+                g.FillEllipse(db, kcx - cs / 2f, kcy - cs / 2f, cs, cs);
+            }
+        }
+
         void DrawWheel(Graphics g, int w, int h)
         {
             int a = (int)(255 * Math.Max(0f, Math.Min(1f, _show)));
@@ -2351,24 +2534,28 @@ namespace SnapWheel
             // ring track (quarter of the ring that lies inside the screen)
             float rr = EffR();
             float st = ArcStart();
+            // 开启动画：环像彩虹一样从一端扫出来
+            float sweepP = IntroP(0f);
+            float sweep = 90f * (0.02f + 0.98f * Gfx.EaseInOut(sweepP));
+            float ringA = (int)(a * Math.Min(1f, 0.35f + 0.65f * sweepP));
             using (GraphicsPath gp = new GraphicsPath())
             {
-                gp.AddArc(c.X - rr, c.Y - rr, rr * 2f, rr * 2f, st, 90f);
+                gp.AddArc(c.X - rr, c.Y - rr, rr * 2f, rr * 2f, st, sweep);
                 if (_dropActive)
                 {
                     // drop-target feedback: blue glow + bright blue track（外部文件=偏绿，自己的图=偏蓝）
                     Color dc = _dropExternal ? Color.FromArgb(86, 214, 138) : Color.FromArgb(96, 170, 255);
                     Color dch = Color.FromArgb(255, Math.Min(255, dc.R + 24), Math.Min(255, dc.G + 24), Math.Min(255, dc.B + 24));
-                    using (Pen dg = new Pen(Color.FromArgb((int)(110 * a / 255f), dc.R, dc.G, dc.B), 40f))
+                    using (Pen dg = new Pen(Color.FromArgb((int)(110 * ringA / 255f), dc.R, dc.G, dc.B), 40f))
                     { dg.StartCap = LineCap.Round; dg.EndCap = LineCap.Round; g.DrawPath(dg, gp); }
-                    using (Pen dm = new Pen(Color.FromArgb((int)(235 * a / 255f), dch.R, dch.G, dch.B), 6f))
+                    using (Pen dm = new Pen(Color.FromArgb((int)(235 * ringA / 255f), dch.R, dch.G, dch.B), 6f))
                     { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
                 }
-                using (Pen glow = new Pen(Color.FromArgb((int)(55 * a / 255f), 255, 255, 255), 30f))
+                using (Pen glow = new Pen(Color.FromArgb((int)(55 * ringA / 255f), 255, 255, 255), 30f))
                 { glow.StartCap = LineCap.Round; glow.EndCap = LineCap.Round; g.DrawPath(glow, gp); }
-                using (Pen mid = new Pen(Color.FromArgb((int)(110 * a / 255f), 255, 255, 255), 3f))
+                using (Pen mid = new Pen(Color.FromArgb((int)(110 * ringA / 255f), 255, 255, 255), 3f))
                 { mid.StartCap = LineCap.Round; mid.EndCap = LineCap.Round; g.DrawPath(mid, gp); }
-                using (Pen hair = new Pen(Color.FromArgb((int)(200 * a / 255f), 255, 255, 255), 1.3f))
+                using (Pen hair = new Pen(Color.FromArgb((int)(200 * ringA / 255f), 255, 255, 255), 1.3f))
                 { g.DrawPath(hair, gp); }
                 if (_switchFlash > 0.01f)     // 切换 Wheel 时的一圈扩散闪光
                 {
@@ -2379,10 +2566,11 @@ namespace SnapWheel
             // end dots on the two visible ends of the quarter
             for (int e2 = 0; e2 < 2; e2++)
             {
+                if (sweep < (e2 == 0 ? 1f : 89f)) continue;         // 扫到哪儿亮到哪儿
                 double ang = (st + e2 * 90) * Math.PI / 180.0;
                 float ex = (float)(c.X + rr * Math.Cos(ang));
                 float ey = (float)(c.Y + rr * Math.Sin(ang));
-                using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(170 * a / 255f), 255, 255, 255)))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(170 * ringA / 255f), 255, 255, 255)))
                     g.FillEllipse(b, ex - 3.5f, ey - 3.5f, 7, 7);
             }
 
@@ -2408,7 +2596,8 @@ namespace SnapWheel
                     // staggered slide-in: items queue up and glide along the arc with eased motion
                     float pr = EnterProgress(i);
                     if (pr <= 0.001f) continue;
-                    float phi = ItemPhi(i) + (1f - pr) * 0.30f;      // slide along the arc
+                    float slide = _intro ? 0.62f : 0.30f;            // 开启动画时排得更开，像排队滑下来
+                    float phi = ItemPhi(i) + (1f - pr) * slide;      // slide along the arc
                     if (phi < _phiMin - 0.50f || phi > _phiMax + 0.50f) continue;
                     PointF pc = ItemCenterAtPhi(phi);
                     int ia = (int)(a * pr);
@@ -2473,37 +2662,57 @@ namespace SnapWheel
             // (the big preview is now just a larger card scale - no separate overlay, so no desync)
 
             Rectangle cbr = CloseButtonRect();
-            using (SolidBrush cbb = new SolidBrush(Color.FromArgb((int)((_closeHover ? 215 : 130) * a / 255f), 20, 22, 28)))
-                g.FillEllipse(cbb, cbr);
-            using (Pen cbp = new Pen(Color.FromArgb((int)(235 * a / 255f), 255, 255, 255), 1.8f))
+            float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
+            PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
+            int ab0 = (int)(a * pb0), ab1 = (int)(a * pb1), ab2 = (int)(a * pb2);
+
+            if (pb0 > 0.01f)
             {
-                g.DrawLine(cbp, cbr.Left + 10, cbr.Top + 10, cbr.Right - 10, cbr.Bottom - 10);
-                g.DrawLine(cbp, cbr.Right - 10, cbr.Top + 10, cbr.Left + 10, cbr.Bottom - 10);
+                System.Drawing.Drawing2D.Matrix m0 = g.Transform;
+                g.TranslateTransform(sh0.X, sh0.Y);
+                Rectangle cbr0 = cbr;
+                using (SolidBrush cbb = new SolidBrush(Color.FromArgb((int)((_closeHover ? 215 : 130) * ab0 / 255f), 20, 22, 28)))
+                    g.FillEllipse(cbb, cbr0);
+                using (Pen cbp = new Pen(Color.FromArgb((int)(235 * ab0 / 255f), 255, 255, 255), 1.8f))
+                {
+                    g.DrawLine(cbp, cbr0.Left + 10, cbr0.Top + 10, cbr0.Right - 10, cbr0.Bottom - 10);
+                    g.DrawLine(cbp, cbr0.Right - 10, cbr0.Top + 10, cbr0.Left + 10, cbr0.Bottom - 10);
+                }
+                g.Transform = m0;
             }
 
             // gear (settings) button
-            Rectangle gbr = GearButtonRect();
-            using (SolidBrush gbb = new SolidBrush(Color.FromArgb((int)((_gearHover ? 215 : 130) * a / 255f), 20, 22, 28)))
-                g.FillEllipse(gbb, gbr);
-            float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
-            float gro = gbr.Width * 0.28f;
-            using (Pen gp2 = new Pen(Color.FromArgb((int)(235 * a / 255f), 255, 255, 255), 1.8f))
+            if (pb1 > 0.01f)
             {
-                g.DrawEllipse(gp2, gcx - gro * 0.62f, gcy - gro * 0.62f, gro * 1.24f, gro * 1.24f);
-                for (int k = 0; k < 8; k++)
+                System.Drawing.Drawing2D.Matrix m1 = g.Transform;
+                g.TranslateTransform(sh1.X, sh1.Y);
+                Rectangle gbr = GearButtonRect();
+                using (SolidBrush gbb = new SolidBrush(Color.FromArgb((int)((_gearHover ? 215 : 130) * ab1 / 255f), 20, 22, 28)))
+                    g.FillEllipse(gbb, gbr);
+                float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
+                float gro = gbr.Width * 0.28f;
+                using (Pen gp2 = new Pen(Color.FromArgb((int)(235 * ab1 / 255f), 255, 255, 255), 1.8f))
                 {
-                    double th = k * Math.PI / 4.0;
-                    float x1 = (float)(gcx + Math.Cos(th) * gro * 0.7f), y1 = (float)(gcy + Math.Sin(th) * gro * 0.7f);
-                    float x2 = (float)(gcx + Math.Cos(th) * gro * 1.28f), y2 = (float)(gcy + Math.Sin(th) * gro * 1.28f);
-                    g.DrawLine(gp2, x1, y1, x2, y2);
+                    g.DrawEllipse(gp2, gcx - gro * 0.62f, gcy - gro * 0.62f, gro * 1.24f, gro * 1.24f);
+                    for (int k = 0; k < 8; k++)
+                    {
+                        double th = k * Math.PI / 4.0;
+                        float x1 = (float)(gcx + Math.Cos(th) * gro * 0.7f), y1 = (float)(gcy + Math.Sin(th) * gro * 0.7f);
+                        float x2 = (float)(gcx + Math.Cos(th) * gro * 1.28f), y2 = (float)(gcy + Math.Sin(th) * gro * 1.28f);
+                        g.DrawLine(gp2, x1, y1, x2, y2);
+                    }
                 }
+                g.Transform = m1;
             }
 
-            // 万能键（弧线内侧中点的摇杆式大圆盘，半透明）
+            // 万能键（弧线内侧中点的摇杆式大圆盘）
             Rectangle kr = KeyRect();
             Color acc = _accentCur;
             float kcx = kr.X + kr.Width / 2f, kcy = kr.Y + kr.Height / 2f;
             float krr = kr.Width / 2f;
+            float pk = IntroP(0.16f);
+            PointF sk = IntroShift(pk);
+            if (pk > 0.01f) { g.TranslateTransform(sk.X, sk.Y); }
 
             if (_delConfirm)
             {
@@ -2548,41 +2757,41 @@ namespace SnapWheel
             }
             else
             {
-            using (GraphicsPath kg = new GraphicsPath())
-            {
-                kg.AddEllipse(kr);
-                using (SolidBrush kb = new SolidBrush(Color.FromArgb((int)((_keyDown ? 165 : 120) * a / 255f), acc.R, acc.G, acc.B)))
-                    g.FillPath(kb, kg);
-                using (Pen kgp = new Pen(Color.FromArgb((int)(150 * a / 255f), 255, 255, 255), 1.4f))
-                    g.DrawPath(kgp, kg);
-                using (Pen kin = new Pen(Color.FromArgb((int)(70 * a / 255f), 255, 255, 255), 1f))
-                    g.DrawEllipse(kin, kcx - krr * 0.62f, kcy - krr * 0.62f, krr * 1.24f, krr * 1.24f);
+            // 万能键：拟物一点 —— 外发光 + 球面渐变 + 顶部高光 + 细边
+            DrawKeyDisc(g, (int)(a * pk), acc, kr, kcx, kcy, krr);
             }
-            using (Pen kp = new Pen(Color.FromArgb((int)(215 * a / 255f), 255, 255, 255), 2f))
+            if (pk > 0.01f) g.TranslateTransform(-sk.X, -sk.Y);       // 恢复，别影响后面的元素
+
+            // 当前 wheel 名：药丸底 + 主题色圆点（原来是硬邦邦一块黑底，很难看）
+            float pn = IntroP(0.62f);
+            if (a > 60 && pn > 0.01f)
             {
-                for (int q = 0; q < 4; q++)
-                {
-                    double th = -Math.PI / 2 + q * Math.PI / 2;
-                    float px = (float)(kcx + Math.Cos(th) * 15f), py = (float)(kcy + Math.Sin(th) * 15f);
-                    g.DrawEllipse(kp, px - 3.4f, py - 3.4f, 6.8f, 6.8f);
-                }
-                g.DrawEllipse(kp, kcx - 4f, kcy - 4f, 8f, 8f);
-            }
-            }
-            // 当前 wheel 名
-            if (a > 60)
-            {
+                PointF sn = IntroShift(pn);
+                int an = (int)(a * pn);
+                g.TranslateTransform(sn.X, sn.Y);
                 using (Font fw = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
-                using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(240 * a / 255f), 255, 255, 255)))
                 {
                     string wn = _mgr.ActiveWheel.Name;
                     SizeF ws = g.MeasureString(wn, fw);
-                    float wx = kcx - ws.Width / 2f;
+                    float dot = 9f;
+                    float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
+                    float wx = kcx - pw2 / 2f;
                     float wy = kr.Y + kr.Height + 4f;
-                    using (SolidBrush bgw = new SolidBrush(Color.FromArgb((int)(165 * a / 255f), 0, 0, 0)))
-                        g.FillRectangle(bgw, wx - 6, wy, ws.Width + 12, ws.Height + 2);
-                    g.DrawString(wn, fw, bw, wx, wy + 1);
+                    RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
+                    using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
+                    {
+                        using (SolidBrush bgw = new SolidBrush(Color.FromArgb((int)(175 * an / 255f), 14, 16, 20)))
+                            g.FillPath(bgw, pg2);
+                        using (Pen bp2 = new Pen(Color.FromArgb((int)(150 * an / 255f), acc.R, acc.G, acc.B), 1.3f))
+                            g.DrawPath(bp2, pg2);
+                    }
+                    float dy2 = pill2.Y + ph2 / 2f;
+                    using (SolidBrush db2 = new SolidBrush(Color.FromArgb((int)(250 * an / 255f), acc.R, acc.G, acc.B)))
+                        g.FillEllipse(db2, pill2.X + 11f, dy2 - dot / 2f, dot, dot);
+                    using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
+                        g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
                 }
+                g.TranslateTransform(-sn.X, -sn.Y);
             }
 
             // 圆盘菜单
@@ -2621,14 +2830,19 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = ShootButtonRect();
-            using (SolidBrush sbb = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * a / 255f), 0, 122, 204)))
-                g.FillEllipse(sbb, sbr);
-            using (Pen sp = new Pen(Color.FromArgb((int)(245 * a / 255f), 255, 255, 255), 1.8f))
+            if (pb2 > 0.01f)
             {
-                float cx2 = sbr.X + sbr.Width / 2f, cy2 = sbr.Y + sbr.Height / 2f;
-                g.DrawRectangle(sp, cx2 - 8f, cy2 - 5f, 16f, 11f);
-                g.DrawEllipse(sp, cx2 - 3.4f, cy2 - 2.6f, 6.8f, 6.8f);
-                g.DrawLine(sp, cx2 - 4f, cy2 - 8f, cx2 + 4f, cy2 - 8f);
+                g.TranslateTransform(sh2.X, sh2.Y);
+                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * ab2 / 255f), 0, 122, 204)))
+                    g.FillEllipse(sbbs, sbr);
+                using (Pen sp = new Pen(Color.FromArgb((int)(245 * ab2 / 255f), 255, 255, 255), 1.8f))
+                {
+                    float cx2 = sbr.X + sbr.Width / 2f, cy2 = sbr.Y + sbr.Height / 2f;
+                    g.DrawRectangle(sp, cx2 - 8f, cy2 - 5f, 16f, 11f);
+                    g.DrawEllipse(sp, cx2 - 3.4f, cy2 - 2.6f, 6.8f, 6.8f);
+                    g.DrawLine(sp, cx2 - 4f, cy2 - 8f, cx2 + 4f, cy2 - 8f);
+                }
+                g.TranslateTransform(-sh2.X, -sh2.Y);
             }
 
             if (_store.Items.Count > 0)
@@ -2638,16 +2852,32 @@ namespace SnapWheel
                 if (cur > _store.Items.Count) cur = _store.Items.Count;
                 string idx = cur + " / " + _store.Items.Count;
                 float fs = Math.Max(9f, Math.Min(40f, _settings.LabelSize));
+                float pc2 = IntroP(0.72f);
+                if (pc2 > 0.01f)
+                {
+                PointF sc2 = IntroShift(pc2);
+                int ac2 = (int)(a * pc2);
+                g.TranslateTransform(sc2.X, sc2.Y);
                 using (Font f = new Font("Microsoft YaHei UI", fs, FontStyle.Bold, GraphicsUnit.Pixel))
                 {
                     SizeF sz = g.MeasureString(idx, f);
-                    PointF pp = HintPos(sz);
-                    RectangleF pill = new RectangleF(pp.X, pp.Y + 24, sz.Width + 16, sz.Height + 8);
+                    float ip = sz.Height * 0.72f;                    // 前置的小圆点
+                    PointF tp = HintPos(new SizeF(sz.Width + ip + 8f, sz.Height));
+                    RectangleF pill = new RectangleF(tp.X - 9f, tp.Y - 3f, sz.Width + ip + 26f, sz.Height + 6f);
                     using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
-                    using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(120 * a / 255f), 12, 14, 18)))
-                        g.FillPath(pb, pg);
-                    using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(245 * a / 255f), 255, 255, 255)))
-                        g.DrawString(idx, f, br, pill.X + 8, pill.Y + (pill.Height - sz.Height) / 2f + 1);
+                    {
+                        using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(150 * ac2 / 255f), 10, 12, 16)))
+                            g.FillPath(pb, pg);
+                        using (Pen pp2 = new Pen(Color.FromArgb((int)(110 * ac2 / 255f), acc.R, acc.G, acc.B), 1.2f))
+                            g.DrawPath(pp2, pg);
+                    }
+                    float dotY = pill.Y + pill.Height / 2f;
+                    using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
+                        g.FillEllipse(db, pill.X + 10f, dotY - ip / 2f, ip, ip);
+                    using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
+                        g.DrawString(idx, f, br, pill.X + 12f + ip, pill.Y + (pill.Height - sz.Height) / 2f + 1);
+                }
+                g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
             }
 
@@ -3324,6 +3554,14 @@ namespace SnapWheel
             NumericUpDown numLabel = Num(9, 40, s.LabelSize);
             root.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel));
 
+            NumericUpDown numPeek = Num(120, 500, s.PeekPercent);
+            CheckBox chkIntroAnim = new CheckBox();
+            chkIntroAnim.AutoSize = true;
+            chkIntroAnim.Text = "启动时播放开启动画";
+            chkIntroAnim.Checked = s.IntroAnim;
+            chkIntroAnim.Margin = new Padding(0, 10, 0, 0);
+            root.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim));
+
             CheckBox chkAuto = new CheckBox();
             chkAuto.AutoSize = true;
             chkAuto.Text = "空闲后自动收起轮盘";
@@ -3379,7 +3617,7 @@ namespace SnapWheel
             ok.FillHover = Color.FromArgb(0, 140, 232);
             ok.TextColor = Color.White;
             ok.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            ok.Margin = new Padding(0, 10, 12, 0);
+            ok.Margin = new Padding(10, 0, 0, 0);
             ok.Click += new EventHandler(delegate(object o, EventArgs e2) {
                 s.SaveToDisk = chkDisk.Checked;
                 s.Dir = txtDir.Text.Trim();
@@ -3395,6 +3633,8 @@ namespace SnapWheel
                 s.AutoStart = chkAutoStart.Checked;
                 s.DeleteMode = (cmbDel.SelectedIndex == 1) ? "single" : "double";
                 s.SwitchMode = (cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
+                s.PeekPercent = (int)numPeek.Value;
+                s.IntroAnim = chkIntroAnim.Checked;
                 if (cmb.SelectedItem != null) s.Hotkey = cmb.SelectedItem.ToString();
                 AutoRun.Apply(s.AutoStart);
                 s.Save();
@@ -3408,9 +3648,38 @@ namespace SnapWheel
             cancel.FillHover = Color.FromArgb(222, 224, 230);
             cancel.TextColor = Color.FromArgb(58, 60, 66);
             cancel.Font = new Font("Microsoft YaHei UI", 10f);
-            cancel.Margin = new Padding(0, 10, 0, 0);
+            cancel.Margin = new Padding(10, 0, 0, 0);
             cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
-            root.Controls.Add(Row(Gap(250), ok, cancel));
+
+            RoundButton guide = new RoundButton();
+            guide.Text = "新手引导";
+            guide.Size = new Size(104, 36);
+            guide.Fill = Color.FromArgb(236, 240, 246);
+            guide.FillHover = Color.FromArgb(226, 233, 243);
+            guide.TextColor = Color.FromArgb(40, 90, 150);
+            guide.Font = new Font("Microsoft YaHei UI", 10f);
+            guide.Margin = new Padding(0, 0, 0, 0);
+            guide.Click += new EventHandler(delegate(object o, EventArgs e2)
+            { GuideForm gf = new GuideForm(); gf.ShowDialog(this); });
+
+            // 按钮行：用四列表格把确定/取消靠右对齐。
+            // 原来是一个 250px 的假占位控件硬顶 + FlowLayoutPanel，窗口 AutoSize 一算就错位/被裁
+            TableLayoutPanel btnRow = new TableLayoutPanel();
+            btnRow.ColumnCount = 4;
+            btnRow.RowCount = 1;
+            btnRow.AutoSize = true;
+            btnRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnRow.Dock = DockStyle.Fill;
+            btnRow.Margin = new Padding(0, 14, 0, 0);
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            btnRow.Controls.Add(guide, 0, 0);
+            btnRow.Controls.Add(new Panel(), 1, 0);
+            btnRow.Controls.Add(ok, 2, 0);
+            btnRow.Controls.Add(cancel, 3, 0);
+            root.Controls.Add(btnRow);
 
             Label about = new Label();
             about.AutoSize = true;
@@ -3487,6 +3756,92 @@ namespace SnapWheel
         }
     }
 
+    // 新手引导：第一次打开时自动出现一次，之后可以从托盘/设置里再叫出来
+    class GuideForm : Form
+    {
+        public GuideForm()
+        {
+            Text = AppInfo.Name + " 新手上路";
+            Icon = Brand.Get();
+            AutoScaleMode = AutoScaleMode.None;
+            Font = new Font("Microsoft YaHei UI", 9.5f);
+            BackColor = Color.FromArgb(252, 252, 254);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false; MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(540, 100);         // 先占位，最后按内容重算
+            SuspendLayout();
+
+            Label head = new Label();
+            head.Text = "欢迎用 SnapWheel 截图轮盘";
+            head.Font = new Font("Microsoft YaHei UI", 15f, FontStyle.Bold);
+            head.ForeColor = Color.FromArgb(28, 30, 36);
+            head.AutoSize = true;
+            head.Location = new Point(28, 24);
+            Controls.Add(head);
+
+            Label sub = new Label();
+            sub.Text = "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。";
+            sub.ForeColor = Color.FromArgb(120, 124, 134);
+            sub.AutoSize = true;
+            sub.Location = new Point(31, 60);
+            Controls.Add(sub);
+
+            int y = 100;
+            AddTip(28, ref y, "截图", "按 " + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
+            AddTip(28, ref y, "存图与翻页", "截完的图会顺着弧线滑进轮盘；鼠标放在环上滚滚轮就能翻。");
+            AddTip(28, ref y, "拖出去 / 拖回来", "缩略图拖到微信或文件夹就用上了；从桌面把图片拖到环带上松手就收回来。");
+            AddTip(28, ref y, "长按看大图", "缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。");
+            AddTip(28, ref y, "万能键", "长按环内侧那个圆盘：上=新建 Wheel，右=下一个，下=删除，左=上一个；也可以改成左右滑动切。");
+            AddTip(28, ref y, "工具箱", "托盘右键还有：导入图片、新手引导、重播开启动画、设置。");
+
+            Label tip = new Label();
+            tip.Text = "小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。";
+            tip.ForeColor = Color.FromArgb(168, 122, 36);
+            tip.AutoSize = false;
+            tip.Size = new Size(486, 42);
+            tip.Location = new Point(31, y + 4);
+            Controls.Add(tip);
+            y += 52;
+
+            RoundButton go = new RoundButton();
+            go.Text = "开始使用";
+            go.Size = new Size(124, 38);
+            go.Fill = Color.FromArgb(0, 122, 204);
+            go.FillHover = Color.FromArgb(0, 140, 232);
+            go.TextColor = Color.White;
+            go.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            go.Location = new Point(540 - 28 - 124, y + 12);
+            go.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.OK; Close(); });
+            Controls.Add(go);
+            AcceptButton = go;
+
+            ClientSize = new Size(540, y + 12 + 38 + 24);
+            ResumeLayout();
+        }
+
+        void AddTip(int x, ref int y, string title, string body)
+        {
+            Label t = new Label();
+            t.Text = "• " + title;
+            t.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            t.ForeColor = Color.FromArgb(0, 110, 190);
+            t.AutoSize = true;
+            t.Location = new Point(x + 3, y);
+            Controls.Add(t);
+
+            Label b = new Label();
+            b.Text = body;
+            b.ForeColor = Color.FromArgb(70, 74, 84);
+            b.AutoSize = false;
+            b.Size = new Size(486, 20);
+            b.Location = new Point(x + 16, y + 21);
+            Controls.Add(b);
+            y += 51;
+        }
+    }
+
     class HotkeyForm : Form
     {
         public event EventHandler Hotkey;
@@ -3555,6 +3910,8 @@ namespace SnapWheel
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
             menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
+            menu.Items.Add("新手引导", null, new EventHandler(OnGuide));
+            menu.Items.Add("重播开启动画", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
             if (IsElevated())
                 menu.Items.Add("以普通权限重启（拖拽才有用）", null, new EventHandler(OnRelaunchNormal));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
@@ -3576,7 +3933,27 @@ namespace SnapWheel
                 }
                 catch { }
 
-            if (_settings.ShowWheelOnStart) _wheel.ShowWheel();
+            if (_settings.ShowWheelOnStart) _wheel.ShowWheelWithIntro();
+
+            // 第一次打开：先播开启动画，再弹一次新手引导（看过就不再弹）
+            if (!_settings.IntroSeen)
+            {
+                _settings.IntroSeen = true;
+                _settings.Save();
+                Timer g = new Timer();
+                g.Interval = 900;
+                g.Tick += new EventHandler(delegate(object o, EventArgs e2)
+                {
+                    g.Stop(); g.Dispose();
+                    try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
+                });
+                g.Start();
+            }
+        }
+
+        void OnGuide(object sender, EventArgs e)
+        {
+            try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
         }
 
         // 是不是以管理员身份在跑？管理员进程收不到（也发不出）普通权限程序的拖拽 —— Windows 的 UIPI 拦的
