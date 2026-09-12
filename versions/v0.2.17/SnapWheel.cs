@@ -2122,6 +2122,30 @@ namespace SnapWheel
         float NubDistOut() { return _nubOutDist >= 0f ? _nubOutDist : NubDistAuto(); }
         float NubDistIn() { return _nubInDist >= 0f ? _nubInDist : NubDistAuto(); }
 
+        // 光标是否还在关闭键附近（留 26px 余量：手抖不算离开，明显挪开才作废）
+        bool _testIgnoreLeave = false;      // 测试用：跳过光标判断（合成事件时真实光标不在按钮上）
+        bool CursorOverCloseButton()
+        {
+            if (_testIgnoreLeave) return true;
+            try
+            {
+                Point cp = ToLogicalPt(PointToClient(Cursor.Position));
+                Rectangle r = CloseButtonRect();
+                r.Inflate(26, 26);
+                return r.Contains(cp);
+            }
+            catch { return true; }   // 取不到就当作还在按钮上，别误取消
+        }
+
+        // 作废这次长按（红色渐变退回，完全不会触发退出）
+        public void CancelCloseHold()
+        {
+            if (!_closeHold && !_closeLong) return;
+            _closeHold = false;
+            _closeLong = false;
+            try { Capture = false; } catch { }
+        }
+
         // 按下时把矩形按比例缩小（以中心为基准）
         static Rectangle Shrink(Rectangle r, float k)
         {
@@ -2591,12 +2615,23 @@ namespace SnapWheel
             // 同时兜住"鼠标已经松开但 MouseUp 没收到"的情况（按住时轻微移动不该取消）。
             if (_closeHold)
             {
+                // 后悔机制：长按期间把鼠标挪开就作废（稍微留点余量，手抖不算离开）
+                if (!CursorOverCloseButton()) CancelCloseHold();
+            }
+            if (_closeHold)
+            {
                 float p = (float)Math.Min(1.0, (DateTime.Now - _closeDownAt).TotalMilliseconds / 650.0);
                 if (Math.Abs(p - _closeHoldP) > 0.004f) { _closeHoldP = p; need = true; }
                 if (p >= 1f && !_closeLong) { _closeLong = true; need = true; }
                 need = true;                     // 进度环一直动
             }
-            else if (_closeHoldP > 0.001f) { _closeHoldP = 0f; need = true; }
+            else if (_closeHoldP > 0.004f)
+            {
+                // 作废/松手之后，红色是"渐变退回去"的，不是瞬间复位
+                _closeHoldP += (0f - _closeHoldP) * 0.20f;
+                if (_closeHoldP < 0.004f) _closeHoldP = 0f;
+                need = true;
+            }
 
             // 圆钮按下反馈 + 延迟执行
             {
@@ -3707,6 +3742,25 @@ namespace SnapWheel
                     {
                         pr.StartCap = LineCap.Round; pr.EndCap = LineCap.Round;
                         g.DrawArc(pr, cbr0.X - 3f, cbr0.Y - 3f, cbr0.Width + 6f, cbr0.Height + 6f, -90f, 360f * hp);
+                    }
+                }
+                // 长按提示：让"松手会退出 / 移开就取消"变得明确
+                if (hp > 0.12f)
+                {
+                    int ta = (int)(Math.Min(1f, (hp - 0.12f) / 0.25f) * 235 * ab0 / 255f);
+                    string tip2 = _closeLong ? "松手就退出 · 移开则取消" : "按住…移开可取消";
+                    using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
+                    using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
+                    {
+                        SizeF ts2 = g.MeasureString(tip2, ft2);
+                        float px2 = cbr0.Right + 12f, py2 = cbr0.Y + cbr0.Height / 2f - ts2.Height / 2f;
+                        RectangleF pr2 = new RectangleF(px2 - 8f, py2 - 4f, ts2.Width + 16f, ts2.Height + 8f);
+                        using (GraphicsPath clPath = Gfx.Round(pr2, pr2.Height / 2f))
+                        {
+                            BackdropClip(g, clPath, ta);
+                            using (SolidBrush clBg = new SolidBrush(Color.FromArgb((int)(ta * 0.55f), 24, 26, 32))) g.FillPath(clBg, clPath);
+                        }
+                        g.DrawString(tip2, ft2, tb2, px2, py2);
                     }
                 }
                 using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown + 0.8f * (_closeLong ? 1f : 0f)))

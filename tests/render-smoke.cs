@@ -531,6 +531,57 @@ namespace SnapWheel
                     if (midState) pass++; else fail++;
                 }
 
+                // ---- 长按关闭键：变红 -> 移开作废（红色渐变退回）----
+                {
+                    Type wt2 = typeof(WheelForm);
+                    FieldInfo fLong = wt2.GetField("_closeLong", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo fP = wt2.GetField("_closeHoldP", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo fIgnore = wt2.GetField("_testIgnoreLeave", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo fUiK = wt2.GetField("UiK", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo cof = wt2.GetMethod("CursorOverCloseButton", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo ccancel = wt2.GetMethod("CancelCloseHold", BindingFlags.Public | BindingFlags.Instance);
+                    MethodInfo mCbr = wt2.GetMethod("CloseButtonRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo md2 = wt2.GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo mu2 = wt2.GetMethod("OnMouseUp", BindingFlags.NonPublic | BindingFlags.Instance);
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                    Application.DoEvents();
+                    float kU = (float)fUiK.GetValue(f);
+                    Rectangle cr = (Rectangle)mCbr.Invoke(f, null);
+                    Point cp2 = new Point((int)((cr.X + cr.Width / 2f) * kU), (int)((cr.Y + cr.Height / 2f) * kU));
+
+                    // A) 移开判断本身是工作的（真实光标不在这 -> False）
+                    bool cursorHere = (bool)cof.Invoke(f, null);
+                    Console.WriteLine("  {0} 光标不在关闭键上时「移开判断」返回 False（判断有效）",
+                        cursorHere ? "FAIL" : "OK  ");
+                    if (!cursorHere) pass++; else fail++;
+
+                    // B) 按住不动 -> 变红到位；然后移开作废 -> 红色渐变退回
+                    fIgnore.SetValue(f, true);         // 合成点击时真实光标不在按钮上，跳过移开判断
+                    bool exitFired2 = false;
+                    EventHandler eh2 = delegate(object o, EventArgs e2) { exitFired2 = true; };
+                    wt2.GetEvent("ExitRequested").GetAddMethod().Invoke(f, new object[] { eh2 });
+                    md2.Invoke(f, new object[] { new MouseEventArgs(MouseButtons.Left, 1, cp2.X, cp2.Y, 0) });
+                    for (int k = 0; k < 60; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    float armed = (float)fP.GetValue(f);
+                    bool isLong = (bool)fLong.GetValue(f);
+                    ccancel.Invoke(f, null);
+                    for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    float r1 = (float)fP.GetValue(f);
+                    for (int k = 0; k < 25; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    float r2 = (float)fP.GetValue(f);
+                    bool undoOk = armed > 0.99f && isLong && r1 < armed && r1 > 0f && r2 < r1 && r2 < 0.12f;
+                    Console.WriteLine("  {0} 长按到位后移开作废，红色渐变退回（{1:F2} -> {2:F2} -> {3:F2}）",
+                        undoOk ? "OK  " : "FAIL", armed, r1, r2);
+                    if (undoOk) pass++; else fail++;
+
+                    mu2.Invoke(f, new object[] { new MouseEventArgs(MouseButtons.Left, 1, cp2.X, cp2.Y, 0) });
+                    for (int k = 0; k < 10; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    bool noExit = !exitFired2;
+                    Console.WriteLine("  {0} 作废之后松手不退出、轮盘也还在（可见={1}）",
+                        (noExit && f.Visible) ? "OK  " : "FAIL", f.Visible);
+                    if (noExit && f.Visible) pass++; else fail++;
+                    fIgnore.SetValue(f, false);
+                }
                 // ---- 启动时把手要有出现动画（不能突然冒出来）----
                 {
                     MethodInfo nOut3 = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
