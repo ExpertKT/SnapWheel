@@ -14,6 +14,7 @@
 param(
     [switch]$Test,
     [switch]$Package,
+    [switch]$Deploy,
     [switch]$Clean,
     [string]$OutDir = "build"
 )
@@ -128,6 +129,36 @@ if ($Package) {
         Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
         Remove-Item $stage -Recurse -Force
         Ok ("{0,-14} v{1,-8} {2}" -f $pair.t, $pair.v, [System.IO.Path]::GetFileName($zip))
+    }
+}
+
+# ---- 部署到桌面（会自动核对字节数，防止复制到旧文件）----
+if ($Deploy) {
+    Info ""
+    Info "部署到桌面："
+    $desk = [Environment]::GetFolderPath('Desktop')
+    $full = Join-Path $out 'SnapWheel.exe'
+    $len = (Get-Item $full).Length
+    $targets = @( (Join-Path $desk 'SnapWheel 快照轮环.exe') )
+    $distDir = Join-Path $desk ('SnapWheel 快照轮环 v' + $vFull)
+    if (Test-Path $distDir) { $targets += (Join-Path $distDir 'SnapWheel 快照轮环.exe') }
+    # 关键：必须先停掉正在跑的程序，否则桌面上的 exe 被占用，Copy-Item 会失败
+    # （PowerShell 默认只报错不中断，会出现"以为复制成功了其实还是旧文件"的坑）
+    Get-Process | Where-Object { $_.ProcessName -like '*SnapWheel*' } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 900
+    $allOk = $true
+    foreach ($tg in $targets) {
+        try { Copy-Item $full $tg -Force } catch { Bad ("复制失败：{0}（{1}）" -f (Split-Path $tg -Leaf), $_.Exception.Message); $allOk = $false; continue }
+        Start-Sleep -Milliseconds 150
+        $l = (Get-Item $tg).Length
+        if ($l -ne $len) { Bad ("{0} 大小不一致（{1} != {2}）" -f (Split-Path $tg -Leaf), $l, $len); $allOk = $false }
+        else { Ok ("{0}  {1} 字节" -f (Split-Path $tg -Leaf), $l) }
+    }
+    if ($allOk) {
+        Start-Process explorer.exe -ArgumentList ('"' + $targets[0] + '"')
+        Ok "已重启（新实例）"
+    } else {
+        Bad "部署有问题，没有启动（桌面上可能还是旧文件）"
     }
 }
 
