@@ -533,7 +533,7 @@ namespace SnapWheel
                 // ---- 单把手模式 + 展开冷却 + 独立速度 ----
                 {
                     bool saveSingle = s.NubSingle, saveBalloon = s.ShowBalloon;
-                    int saveRing = s.RingSpeed;
+                    int saveExpand = s.ExpandSpeed, saveCollapse = s.CollapseSpeed;
                     MethodInfo nOut2 = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
                     MethodInfo nIn2 = wt.GetMethod("NubInRect", BindingFlags.NonPublic | BindingFlags.Instance);
                     MethodInfo dw4 = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -570,17 +570,14 @@ namespace SnapWheel
                         singleOk ? "OK  " : "FAIL", o1, i1, outIsContent);
                     if (singleOk) pass++; else fail++;
 
-                    // 收起冷却：刚收完点左边把手不能立刻展开；过了冷却才行
+                    // 两个方向都随时可点（不做冷却）
                     s.NubSingle = false;
                     MethodInfo canEx = wt.GetMethod("CanExpandByNub", BindingFlags.NonPublic | BindingFlags.Instance);
                     f.CollapseWheel();
                     for (int k = 0; k < 200 && !f.IsCollapsed; k++) { Application.DoEvents(); Thread.Sleep(15); }
-                    bool blocked = !(bool)canEx.Invoke(f, null);
-                    Thread.Sleep(750);
                     bool allowed = (bool)canEx.Invoke(f, null);
-                    Console.WriteLine("  {0} 收起后 0.65s 内不能再展开（刚收起={1}，冷却后={2}）",
-                        (blocked && allowed) ? "OK  " : "FAIL", blocked, allowed);
-                    if (blocked && allowed) pass++; else fail++;
+                    Console.WriteLine("  {0} 收起后可以立刻再展开（不做冷却）={1}", allowed ? "OK  " : "FAIL", allowed);
+                    if (allowed) pass++; else fail++;
 
                     // 独立速度：RingSpeed 变慢 -> 一趟更久
                     Action waitC = delegate { for (int k = 0; k < 400; k++) { if (f.IsCollapsed) return; Application.DoEvents(); Thread.Sleep(10); } };
@@ -594,18 +591,41 @@ namespace SnapWheel
                         Application.DoEvents(); Thread.Sleep(60);
                         return (DateTime.Now - t9).TotalMilliseconds;
                     };
-                    s.RingSpeed = 100; double d100 = measure();
-                    Thread.Sleep(750);
-                    s.RingSpeed = 200; double d200 = measure();
-                    Thread.Sleep(750);
-                    s.RingSpeed = 50; double d50 = measure();
-                    // 百分比越大越快：50% 应该更久，200% 应该更快
-                    bool speedOk = d50 > d100 * 1.35 && d200 < d100 * 0.75;
-                    Console.WriteLine("  {0} 独立速度生效：50%(慢)={1:F0}ms  100%={2:F0}ms  200%(快)={3:F0}ms",
-                        speedOk ? "OK  " : "FAIL", d50, d100, d200);
+                    // 展开/收起各自的速度：把展开调慢、收起调快，两边应该真的分开
+                    s.ExpandSpeed = 100; s.CollapseSpeed = 100;
+                    Thread.Sleep(700);
+                    double bothSame = measure();
+                    Thread.Sleep(800);
+                    s.ExpandSpeed = 50; s.CollapseSpeed = 200;      // 展开慢一倍、收起快一倍
+                    Thread.Sleep(700);
+                    DateTime tA = DateTime.Now;
+                    f.ExpandWheel(); waitE();
+                    Application.DoEvents(); Thread.Sleep(60);
+                    double slowExpand = (DateTime.Now - tA).TotalMilliseconds;
+                    DateTime tB = DateTime.Now;
+                    f.CollapseWheel(); waitC();
+                    Application.DoEvents(); Thread.Sleep(60);
+                    double fastCollapse = (DateTime.Now - tB).TotalMilliseconds;
+                    bool speedOk = fastCollapse < slowExpand * 0.55;
+                    Console.WriteLine("  {0} 展开/收起速度能分开调：展开(50%)={1:F0}ms  收起(200%)={2:F0}ms（同一档时 {3:F0}ms）",
+                        speedOk ? "OK  " : "FAIL", slowExpand, fastCollapse, bothSame);
                     if (speedOk) pass++; else fail++;
 
-                    s.RingSpeed = saveRing; s.NubSingle = saveSingle; s.ShowBalloon = saveBalloon;
+                    // 两个方向的时间要对称（同一档速度下）
+                    s.ExpandSpeed = 100; s.CollapseSpeed = 100;
+                    Thread.Sleep(700);
+                    f.ExpandWheel(); waitE(); Application.DoEvents(); Thread.Sleep(60);
+                    DateTime tC = DateTime.Now; f.CollapseWheel(); waitC(); Application.DoEvents(); Thread.Sleep(60);
+                    double cMs2 = (DateTime.Now - tC).TotalMilliseconds;
+                    DateTime tD = DateTime.Now; f.ExpandWheel(); waitE(); Application.DoEvents(); Thread.Sleep(60);
+                    double eMs2 = (DateTime.Now - tD).TotalMilliseconds;
+                    double r2 = eMs2 > cMs2 ? eMs2 / Math.Max(1.0, cMs2) : cMs2 / Math.Max(1.0, eMs2);
+                    bool symOk = r2 < 1.3;
+                    Console.WriteLine("  {0} 同档速度下两个方向耗时接近：展开 {1:F0}ms / 收起 {2:F0}ms（比值 {3:F2}）",
+                        symOk ? "OK  " : "FAIL", eMs2, cMs2, r2);
+                    if (symOk) pass++; else fail++;
+
+                    s.ExpandSpeed = saveExpand; s.CollapseSpeed = saveCollapse; s.NubSingle = saveSingle; s.ShowBalloon = saveBalloon;
                     f.ExpandWheel(); waitE();
                 }
 
@@ -673,6 +693,10 @@ namespace SnapWheel
                     for (int i = 0; i < 300; i++) { if (f.IsExpanded) return; Application.DoEvents(); Thread.Sleep(15); }
                 };
 
+                // 先把两边设成同一档速度，再比较两个方向的耗时（默认是"收起快一档"）
+                int keepE = s.ExpandSpeed, keepC = s.CollapseSpeed;
+                s.ExpandSpeed = 100; s.CollapseSpeed = 100;
+
                 // 展开耗时
                 f.CollapseWheel(); waitCollapsed();
                 Application.DoEvents(); Thread.Sleep(80);
@@ -715,6 +739,7 @@ namespace SnapWheel
                 bool back = f.IsExpanded;
                 Console.WriteLine("  {0} 掉头之后还能正常展开（IsExpanded={1}）", back ? "OK  " : "FAIL", back);
                 if (back) pass++; else fail++;
+                s.ExpandSpeed = keepE; s.CollapseSpeed = keepC;
             }
 
             Console.WriteLine();

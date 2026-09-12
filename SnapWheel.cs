@@ -156,6 +156,7 @@ namespace SnapWheel
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
+        public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
     }
 
     static class Native
@@ -1021,7 +1022,8 @@ namespace SnapWheel
         public bool ClipboardImport = true;   // 剪贴板里出现图片时自动收进轮盘
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
         public bool ShowBalloon = true;       // 托盘气泡提示（关掉就不再弹右下角通知）
-        public int RingSpeed = 100;           // 收起/展开动画速度 %（独立于整体动画速度）
+        public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
+        public int CollapseSpeed = 150;       // 收起动画速度 %（默认"快"一档，收起要干脆）
         public bool NubSingle = false;        // 只用一个把手：左边那个点一下展开、再点一下收起（底部不占地方）
 
         static string FilePath()
@@ -1077,7 +1079,9 @@ namespace SnapWheel
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
                         else if (k == "GlassRefresh") s.GlassRefresh = (v == "1");
                         else if (k == "ShowBalloon") s.ShowBalloon = (v == "1");
-                        else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.RingSpeed = n; }
+                        else if (k == "ExpandSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.ExpandSpeed = n; }
+                        else if (k == "CollapseSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.CollapseSpeed = n; }
+                        else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) { s.ExpandSpeed = n; s.CollapseSpeed = n; } }   // 兼容旧配置
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
                     }
                 }
@@ -1133,7 +1137,8 @@ namespace SnapWheel
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));
                 lines.Add("GlassRefresh=" + (GlassRefresh ? "1" : "0"));
                 lines.Add("ShowBalloon=" + (ShowBalloon ? "1" : "0"));
-                lines.Add("RingSpeed=" + RingSpeed);
+                lines.Add("ExpandSpeed=" + ExpandSpeed);
+                lines.Add("CollapseSpeed=" + CollapseSpeed);
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
@@ -2078,6 +2083,8 @@ namespace SnapWheel
         float _closeDown = 0f, _gearDown = 0f, _shootDown = 0f;
         bool _closePend = false, _gearPend = false, _shootPend = false;   // 已按下、等延迟
         bool _closeHold = false, _gearHold = false, _shootHold = false;   // 鼠标仍按着
+        DateTime _closeDownAt = DateTime.MinValue;                        // 关闭键按下的时刻（判长按）
+        bool _closeLong = false;                                          // 关闭键已长按到位（变红，松手退出）
         string _pendingBtn = "";
         DateTime _pendingAt = DateTime.MinValue;
         bool _intro = false;           // 正在播环的动画（拉出 / 收起都算）
@@ -2132,12 +2139,9 @@ namespace SnapWheel
         // 单把手模式：右下边那个把手不画、也不能点（任务栏自动隐藏时鼠标扫底边不会撞到它）
         public bool NubSingleMode() { return _settings.NubSingle; }
 
-        // 收起之后要等一小会儿才能再展开：防止"刚收起又手抖点开"。
-        // 反过来（展开后立刻收起）不受限制 —— 按你说的做成不对称的。
-        const double ExpandCooldownSec = 0.65;
         bool CanExpandByNub()
         {
-            return (DateTime.Now - _collapsedAt).TotalSeconds > ExpandCooldownSec;
+            return true;      // 不做冷却：收起后也可以立刻再展开（两个方向都随时可点）
         }
 
         RectangleF NubInRect()
@@ -2148,15 +2152,24 @@ namespace SnapWheel
             return new RectangleF(cx - NubLong / 2f, y, NubLong, NubThick);
         }
 
-        // 一整趟 0 -> 1 的时间基准：展开 / 收起共用，保证两个方向手感一致。
-        // 原来两边各一套公式（展开 1.5+0.13n、收起 1.15+0.07n），所以速度不一样。
-        float RingUnitDur()
+        // 一整趟 0 -> 1 的时间基准（不含速度设置）
+        float RingUnitDurBase()
         {
             float d = 0.82f + 0.050f * _store.Items.Count;     // 5 张图约 1.1s
             if (d < 0.75f) d = 0.75f;
             if (d > 1.65f) d = 1.65f;
-            // RingSpeed 是"速度百分比"：200% = 快一倍，50% = 慢一倍
-            return d * AnimK() * (100f / Math.Max(40, Math.Min(250, _settings.RingSpeed)));
+            return d;
+        }
+
+        // 一趟 0->1 的时长：展开和收起各用各的速度百分比（越大越快）
+        float RingUnitDur() { return RingUnitDur(false); }
+
+        float RingUnitDur(bool collapsing)
+        {
+            int sp = collapsing ? _settings.CollapseSpeed : _settings.ExpandSpeed;
+            if (sp < 40) sp = 40;
+            if (sp > 250) sp = 250;
+            return RingUnitDurBase() * AnimK() * (100f / sp);
         }
 
         // 展开（彩虹拉出）；fast=true 用于截图流程，快一点
@@ -2168,7 +2181,7 @@ namespace SnapWheel
             if (_settings.IntroAnim)
             {
                 StartIntro();
-                if (fast) { _introAt = DateTime.Now; _introDur = RingUnitDur() * 0.55f; }
+                if (fast) { _introAt = DateTime.Now; _introDur = RingUnitDur(false) * 0.55f; }
             }
             else { _collapsed = false; _collapsing = false; _intro = false; _introT = 1f; ShowWheel(); }
             _lastActive = DateTime.Now;
@@ -2202,7 +2215,7 @@ namespace SnapWheel
             _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
             _ringTo = 0f;
             _introAt = DateTime.Now;
-            _introDur = RingUnitDur() * (fast ? 0.14f : 1f);
+            _introDur = RingUnitDur(true) * (fast ? 0.14f : 1f);   // 收起用「收起速度」
             _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
             _lastActive = DateTime.Now;
             Render();                       // 立刻出一帧，点了就能看到动
@@ -2386,12 +2399,14 @@ namespace SnapWheel
         {
             if (_collapsed) return 0f;
             if (!_intro) return 1f;
-            const float span = 0.42f;                  // 单个元素自己的过渡长度（占总时长比例）
+            const float span = 0.46f;                  // 单个元素自己的过渡长度（占总时长比例）
             float start = delay * (1f - span);
             float x = (_introT - start) / span;
             if (x <= 0f) return 0f;
             if (x >= 1f) return 1f;
-            return Gfx.EaseOut(x);
+            // 每个元素自己用 easeOut：一进窗口就动起来，落点又是缓的
+            float u2 = 1f - x;
+            return 1f - u2 * u2 * u2;
         }
 
         // 从屏幕外滑进来的位移（朝角落方向，也就是朝屏幕外）
@@ -2546,11 +2561,10 @@ namespace SnapWheel
                 float dur = Math.Max(0.10f, _introDur * span);
                 float t = (float)((DateTime.Now - _introAt).TotalSeconds / dur);
                 if (t >= 1f) { t = 1f; _intro = false; }
-                // 用"开头就冲出去"的曲线：smoothstep 在前 100ms 几乎不动，
-                // 会让人觉得"点了一下卡一会才动"。easeOutCubic 一上来就有明显位移。
-                float u = 1f - t;
-                float e = 1f - u * u * u;
-                _introT = _ringFrom + (_ringTo - _ringFrom) * e;
+                // 主进度走"线性"：这样展开和收起在时间上是对称的
+                // （之前用 easeOutCubic 作用在主进度上，展开时动作集中在开头、
+                //   收起时集中在结尾，于是"展开比收起快太多"）
+                _introT = _ringFrom + (_ringTo - _ringFrom) * t;
                 if (!_intro)
                 {
                     _introT = _ringTo;
@@ -2558,6 +2572,10 @@ namespace SnapWheel
                 }
                 need = true;
             }
+
+            // 关闭键长按判定：按住 0.65s 就"变红"，松手退出
+            if (_closeHold && !_closeLong && (DateTime.Now - _closeDownAt).TotalMilliseconds > 650)
+            { _closeLong = true; need = true; }
 
             // 圆钮按下反馈 + 延迟执行
             {
@@ -3185,6 +3203,7 @@ namespace SnapWheel
             Render();
         }
         public event EventHandler CaptureRequested;
+        public event EventHandler ExitRequested;      // 长按关闭键 -> 完全退出
 
         // buttons stack up from the corner (kept well above an auto-hiding taskbar)
         Rectangle BtnRect(int order)
@@ -3603,10 +3622,12 @@ namespace SnapWheel
                 g.TranslateTransform(sh0.X, sh0.Y);
                 Rectangle cbr0 = cbr;
                 using (GraphicsPath cbp2 = new GraphicsPath()) { cbp2.AddEllipse(cbr0); BackdropClip(g, cbp2, ab0); cbp2.Dispose(); }
-                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f))),
-                    Gfx.A(acc, (int)(200 * ab0 / 255f)), false, false,
+                Color closeAcc = _closeLong ? Color.FromArgb(232, 72, 62) : acc;   // 长按变红 = 松手会退出
+                int closeFill = _closeLong ? 236 : (_closeHover ? 206 : 172);
+                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)(closeFill * ab0 / 255f))),
+                    Gfx.A(closeAcc, (int)(200 * ab0 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab0 / 255f), (int)((StyleNeu() ? 60 : 0) * ab0 / 255f));
-                using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown))
+                using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown + 0.8f * (_closeLong ? 1f : 0f)))
                 {
                     float pad = 10 + 2f * _closeDown;
                     g.DrawLine(cbp, cbr0.Left + pad, cbr0.Top + pad, cbr0.Right - pad, cbr0.Bottom - pad);
@@ -4314,7 +4335,7 @@ namespace SnapWheel
             {
                 if (_collapsed)
                 {
-                    if (CanExpandByNub()) ExpandWheel();     // 收起后有一小段冷却，避免手抖又点开
+                    if (CanExpandByNub()) ExpandWheel();
                 }
                 else if (NubSingleMode()) CollapseWheel();   // 单把手模式：同一个把手负责收起
                 return;
@@ -4324,7 +4345,11 @@ namespace SnapWheel
 
             if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location))
             {
-                _closePend = true; _closeHold = true; _pendingBtn = "close"; _pendingAt = DateTime.Now;
+                // 短按 = 关掉轮盘；长按（0.65s）= 变红，松手直接退出 SnapWheel
+                _closeHold = true;
+                _closeDownAt = DateTime.Now;
+                _closeLong = false;
+                _pendingBtn = "";                 // 不走那个 110ms 延迟
                 Render();
                 return;
             }
@@ -4371,7 +4396,15 @@ namespace SnapWheel
                 Render();
                 return;
             }
-            _closeHold = _gearHold = _shootHold = false;
+            if (_closeHold)
+            {
+                bool wasLong = _closeLong;
+                _closeHold = false; _closeLong = false;
+                if (wasLong) { ShowToast("正在退出 SnapWheel…"); Render(); if (ExitRequested != null) ExitRequested(this, EventArgs.Empty); return; }
+                HideWheel();          // 短按：直接关掉轮盘（不是收起）
+                return;
+            }
+            _gearHold = _shootHold = false;
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             if (_enlarged >= 0) { _enlarged = -1; Render(); }
         }
@@ -4799,17 +4832,32 @@ namespace SnapWheel
             cmbRing.FlatStyle = FlatStyle.Flat;
             cmbRing.Width = 130;
             cmbRing.Margin = new Padding(0, 6, 0, 0);
-            int[] ringVals = { 200, 150, 100, 75, 55, 40 };
+            int[] ringVals = { 220, 150, 100, 80, 60, 45 };
             string[] ringNames = { "极快", "快", "标准", "慢", "很慢", "最慢" };
             for (int i = 0; i < ringNames.Length; i++) cmbRing.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
             cmbRing.SelectedIndex = 2;
-            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.RingSpeed) cmbRing.SelectedIndex = i;
+            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.ExpandSpeed) cmbRing.SelectedIndex = i;
             Label hintRing = new Label();
             hintRing.AutoSize = true;
             hintRing.Text = "（只管收起 / 展开；百分比越大越快）";
             hintRing.ForeColor = Color.FromArgb(150, 152, 160);
             hintRing.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("收起展开速度"), cmbRing, Gap(10), hintRing));
+            colL.Controls.Add(Row(MkLabel("展开速度"), cmbRing, Gap(10), hintRing));
+
+            ComboBox cmbRing2 = new ComboBox();
+            cmbRing2.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbRing2.FlatStyle = FlatStyle.Flat;
+            cmbRing2.Width = 130;
+            cmbRing2.Margin = new Padding(0, 6, 0, 0);
+            for (int i = 0; i < ringNames.Length; i++) cmbRing2.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
+            cmbRing2.SelectedIndex = 2;
+            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.CollapseSpeed) cmbRing2.SelectedIndex = i;
+            Label hintRing2 = new Label();
+            hintRing2.AutoSize = true;
+            hintRing2.Text = "（默认比展开快一档，收起要干脆）";
+            hintRing2.ForeColor = Color.FromArgb(150, 152, 160);
+            hintRing2.Margin = new Padding(0, 10, 0, 0);
+            colL.Controls.Add(Row(MkLabel("收起速度"), cmbRing2, Gap(10), hintRing2));
 
             CheckBox chkSingle = new CheckBox();
             chkSingle.AutoSize = true;
@@ -4964,7 +5012,8 @@ namespace SnapWheel
                 s.CollapseMode = chkCollapse.Checked;
                 s.ClipboardImport = chkClip.Checked;
                 s.GlassRefresh = chkGlassRefresh.Checked;
-                s.RingSpeed = ringVals[cmbRing.SelectedIndex < 0 ? 2 : cmbRing.SelectedIndex];
+                s.ExpandSpeed = ringVals[cmbRing.SelectedIndex < 0 ? 2 : cmbRing.SelectedIndex];
+                s.CollapseSpeed = ringVals[cmbRing2.SelectedIndex < 0 ? 2 : cmbRing2.SelectedIndex];
                 s.NubSingle = chkSingle.Checked;
                 s.ShowBalloon = chkBalloon.Checked;
                 s.IntroAnim = chkIntroAnim.Checked;
@@ -5247,7 +5296,7 @@ namespace SnapWheel
             SuspendLayout();
 
             Label head = new Label();
-            head.Text = "欢迎用 SnapWheel 截图轮盘";
+            head.Text = "欢迎用 SnapWheel 快照轮环";
             head.Font = new Font("Microsoft YaHei UI", 15f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.AutoSize = true;
@@ -5372,10 +5421,11 @@ namespace SnapWheel
             _wheel = new WheelForm(_wheels, _settings);
             _wheel.SettingsRequested += new EventHandler(OnSettings);
             _wheel.CaptureRequested += new EventHandler(OnHotkey);
+            _wheel.ExitRequested += new EventHandler(delegate(object o, EventArgs e2) { Application.Exit(); });
 
             _tray = new NotifyIcon();
             _tray.Icon = Brand.Get();
-            _tray.Text = "SnapWheel 截图轮盘";
+            _tray.Text = "SnapWheel 快照轮环";
             _tray.Visible = true;
             Err.Notify = delegate(string msg)             // 出问题时托盘冒个泡，程序继续跑
             {
@@ -5494,7 +5544,7 @@ namespace SnapWheel
             string tip = ok ? ("已就绪，热键 " + _settings.Hotkey) : "热键注册失败，请在设置里换一个";
             try
             {
-                _tray.Text = "SnapWheel 截图轮盘 (" + _settings.Hotkey + ")";
+                _tray.Text = "SnapWheel 快照轮环 (" + _settings.Hotkey + ")";
                 if (_settings.ShowBalloon || !ok) _tray.ShowBalloonTip(3000, "SnapWheel", tip, ToolTipIcon.Info);
             }
             catch { }
