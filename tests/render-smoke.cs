@@ -530,6 +530,85 @@ namespace SnapWheel
                     if (midState) pass++; else fail++;
                 }
 
+                // ---- 单把手模式 + 展开冷却 + 独立速度 ----
+                {
+                    bool saveSingle = s.NubSingle, saveBalloon = s.ShowBalloon;
+                    int saveRing = s.RingSpeed;
+                    MethodInfo nOut2 = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo nIn2 = wt.GetMethod("NubInRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo dw4 = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    float uik2 = (float)wt.GetField("UiK", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f);
+                    Func<RectangleF, int> cnt = delegate(RectangleF rf)
+                    {
+                        int n = 0;
+                        using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                        {
+                            using (Graphics g = Graphics.FromImage(b)) dw4.Invoke(f, new object[] { g, f.Width, f.Height });
+                            int x0 = Math.Max(0, (int)(rf.X * uik2)), y0 = Math.Max(0, (int)(rf.Y * uik2));
+                            int x1 = Math.Min(b.Width - 1, (int)((rf.X + rf.Width) * uik2));
+                            int y1 = Math.Min(b.Height - 1, (int)((rf.Y + rf.Height) * uik2));
+                            for (int y = y0; y <= y1; y += 2) for (int x = x0; x <= x1; x += 2)
+                                if (b.GetPixel(x, y).A > 70) n++;
+                        }
+                        return n;
+                    };
+
+                    // 单把手模式：展开态下左边把手仍在、右下把手不存在、且右下那块不接收鼠标
+                    s.NubSingle = true;
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f);
+                    int o1 = cnt((RectangleF)nOut2.Invoke(f, null));
+                    int i1 = cnt((RectangleF)nIn2.Invoke(f, null));
+                    RectangleF ri2 = (RectangleF)nIn2.Invoke(f, null);
+                    Point pcIn = new Point((int)(ri2.X + ri2.Width / 2), (int)(ri2.Y + ri2.Height / 2));
+                    RectangleF ro2 = (RectangleF)nOut2.Invoke(f, null);
+                    Point pcOut = new Point((int)(ro2.X + ro2.Width / 2), (int)(ro2.Y + ro2.Height / 2));
+                    bool outIsContent = (bool)oc.Invoke(f, new object[] { pcOut });
+                    // 右下的点本身就落在环的命中带（半径 R）上，所以不要求它"穿透"，
+                    // 只要它在单把手模式下"不再被当成把手"（不画 + 不可点它来收起）
+                    bool singleOk = o1 > 60 && i1 < o1 / 4 && outIsContent;
+                    Console.WriteLine("  {0} 单把手模式：左边把手在（{1}）、右下把手不再绘制（{2}，只剩环的端点像素）、左边可点={3}",
+                        singleOk ? "OK  " : "FAIL", o1, i1, outIsContent);
+                    if (singleOk) pass++; else fail++;
+
+                    // 收起冷却：刚收完点左边把手不能立刻展开；过了冷却才行
+                    s.NubSingle = false;
+                    MethodInfo canEx = wt.GetMethod("CanExpandByNub", BindingFlags.NonPublic | BindingFlags.Instance);
+                    f.CollapseWheel();
+                    for (int k = 0; k < 200 && !f.IsCollapsed; k++) { Application.DoEvents(); Thread.Sleep(15); }
+                    bool blocked = !(bool)canEx.Invoke(f, null);
+                    Thread.Sleep(750);
+                    bool allowed = (bool)canEx.Invoke(f, null);
+                    Console.WriteLine("  {0} 收起后 0.65s 内不能再展开（刚收起={1}，冷却后={2}）",
+                        (blocked && allowed) ? "OK  " : "FAIL", blocked, allowed);
+                    if (blocked && allowed) pass++; else fail++;
+
+                    // 独立速度：RingSpeed 变慢 -> 一趟更久
+                    Action waitC = delegate { for (int k = 0; k < 400; k++) { if (f.IsCollapsed) return; Application.DoEvents(); Thread.Sleep(10); } };
+                    Action waitE = delegate { for (int k = 0; k < 400; k++) { if (f.IsExpanded) return; Application.DoEvents(); Thread.Sleep(10); } };
+                    Func<double> measure = delegate
+                    {
+                        f.ExpandWheel(); waitE();
+                        Application.DoEvents(); Thread.Sleep(60);
+                        DateTime t9 = DateTime.Now;
+                        f.CollapseWheel(); waitC();
+                        Application.DoEvents(); Thread.Sleep(60);
+                        return (DateTime.Now - t9).TotalMilliseconds;
+                    };
+                    s.RingSpeed = 100; double d100 = measure();
+                    Thread.Sleep(750);
+                    s.RingSpeed = 200; double d200 = measure();
+                    Thread.Sleep(750);
+                    s.RingSpeed = 50; double d50 = measure();
+                    // 百分比越大越快：50% 应该更久，200% 应该更快
+                    bool speedOk = d50 > d100 * 1.35 && d200 < d100 * 0.75;
+                    Console.WriteLine("  {0} 独立速度生效：50%(慢)={1:F0}ms  100%={2:F0}ms  200%(快)={3:F0}ms",
+                        speedOk ? "OK  " : "FAIL", d50, d100, d200);
+                    if (speedOk) pass++; else fail++;
+
+                    s.RingSpeed = saveRing; s.NubSingle = saveSingle; s.ShowBalloon = saveBalloon;
+                    f.ExpandWheel(); waitE();
+                }
+
                 // ---- 不同分辨率 / 界面缩放下的适配 ----
                 {
                     int[] scales = { 80, 100, 125, 150, 200, 250 };

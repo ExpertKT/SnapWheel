@@ -1020,6 +1020,9 @@ namespace SnapWheel
         public bool CollapseMode = true;      // 收起态：像贴边小球一样缩到屏幕边上，留个可点的小把手
         public bool ClipboardImport = true;   // 剪贴板里出现图片时自动收进轮盘
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
+        public bool ShowBalloon = true;       // 托盘气泡提示（关掉就不再弹右下角通知）
+        public int RingSpeed = 100;           // 收起/展开动画速度 %（独立于整体动画速度）
+        public bool NubSingle = false;        // 只用一个把手：左边那个点一下展开、再点一下收起（底部不占地方）
 
         static string FilePath()
         {
@@ -1073,6 +1076,9 @@ namespace SnapWheel
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
                         else if (k == "GlassRefresh") s.GlassRefresh = (v == "1");
+                        else if (k == "ShowBalloon") s.ShowBalloon = (v == "1");
+                        else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.RingSpeed = n; }
+                        else if (k == "NubSingle") s.NubSingle = (v == "1");
                     }
                 }
             }
@@ -1126,6 +1132,9 @@ namespace SnapWheel
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));
                 lines.Add("GlassRefresh=" + (GlassRefresh ? "1" : "0"));
+                lines.Add("ShowBalloon=" + (ShowBalloon ? "1" : "0"));
+                lines.Add("RingSpeed=" + RingSpeed);
+                lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
             catch { }
@@ -2084,6 +2093,7 @@ namespace SnapWheel
         bool _nubOutHover = false;     // 指针停在"拉出"把手上
         bool _nubInHover = false;      // 指针停在"收起"把手上
         float _nubHov = 0f;            // 把手悬停进度 0..1
+        DateTime _collapsedAt = DateTime.MinValue;       // 收起完成的时刻（之后一小段内不允许再展开）
         DateTime _selfClipboardAt = DateTime.MinValue;   // 我们自己写剪贴板的时间（避免自己抄自己）
         string _lastClipFp = "";                          // 上一张从剪贴板收进来的图（去重用）
 
@@ -2119,6 +2129,17 @@ namespace SnapWheel
             return new RectangleF(x, cy - NubLong / 2f, NubThick, NubLong);
         }
 
+        // 单把手模式：右下边那个把手不画、也不能点（任务栏自动隐藏时鼠标扫底边不会撞到它）
+        public bool NubSingleMode() { return _settings.NubSingle; }
+
+        // 收起之后要等一小会儿才能再展开：防止"刚收起又手抖点开"。
+        // 反过来（展开后立刻收起）不受限制 —— 按你说的做成不对称的。
+        const double ExpandCooldownSec = 0.65;
+        bool CanExpandByNub()
+        {
+            return (DateTime.Now - _collapsedAt).TotalSeconds > ExpandCooldownSec;
+        }
+
         RectangleF NubInRect()
         {
             SizeF ls = LogicalSize();
@@ -2134,7 +2155,8 @@ namespace SnapWheel
             float d = 0.82f + 0.050f * _store.Items.Count;     // 5 张图约 1.1s
             if (d < 0.75f) d = 0.75f;
             if (d > 1.65f) d = 1.65f;
-            return d * AnimK();
+            // RingSpeed 是"速度百分比"：200% = 快一倍，50% = 慢一倍
+            return d * AnimK() * (100f / Math.Max(40, Math.Min(250, _settings.RingSpeed)));
         }
 
         // 展开（彩虹拉出）；fast=true 用于截图流程，快一点
@@ -2174,13 +2196,13 @@ namespace SnapWheel
         {
             if (!_settings.CollapseMode) { HideWheel(); return; }
             if (_collapsed) return;
-            if (!Visible) { _collapsed = true; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; CaptureBackdrop(); Show(); Render(); return; }
+            if (!Visible) { _collapsed = true; _collapsing = false; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; _collapsedAt = DateTime.Now; CaptureBackdrop(); Show(); Render(); return; }
             _collapsing = true;
             _intro = true;
             _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
             _ringTo = 0f;
             _introAt = DateTime.Now;
-            _introDur = RingUnitDur() * (fast ? 0.25f : 1f);
+            _introDur = RingUnitDur() * (fast ? 0.14f : 1f);
             _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
             _lastActive = DateTime.Now;
             Render();                       // 立刻出一帧，点了就能看到动
@@ -2532,7 +2554,7 @@ namespace SnapWheel
                 if (!_intro)
                 {
                     _introT = _ringTo;
-                    if (_collapsing) { _collapsed = true; _collapsing = false; }   // 收完了：进入收起态
+                    if (_collapsing) { _collapsed = true; _collapsing = false; _collapsedAt = DateTime.Now; }   // 收完了：进入收起态
                 }
                 need = true;
             }
@@ -2564,6 +2586,7 @@ namespace SnapWheel
                 {
                     Point hp = ToLogicalPt(PointToClient(Cursor.Position));
                     if (_collapsed) wantOut = NubOutRect().Contains(hp);
+                    else if (NubSingleMode()) wantOut = NubOutRect().Contains(hp);
                     else if (!_intro) wantIn = NubInRect().Contains(hp);
                 }
                 if (wantOut != _nubOutHover) { _nubOutHover = wantOut; need = true; }
@@ -3188,9 +3211,12 @@ namespace SnapWheel
         bool OverContent(Point p)
         {
             // 贴边把手：收起态只有它可点；展开态它也算内容（不然点它会穿透到桌面）
-            if (_collapsed)
-                return NubOutRect().Contains(p);
-            if (NubInRect().Contains(p)) return true;
+            if (NubSingleMode())
+            {
+                if (NubOutRect().Contains(p)) return true;
+            }
+            else if (_collapsed) return NubOutRect().Contains(p);
+            if (!NubSingleMode() && NubInRect().Contains(p)) return true;
             if (HitTest(p) >= 0) return true;
             if (CloseButtonRect().Contains(p)) return true;
             if (GearButtonRect().Contains(p)) return true;
@@ -3840,6 +3866,11 @@ namespace SnapWheel
         void DrawNubs(Graphics g, int a)
         {
             float k = _collapsed ? 0f : (_intro ? _introT : 1f);    // 0=完全收起，1=完全展开
+            if (NubSingleMode())
+            {
+                DrawNubOne(g, a, true, 1f);                          // 只有一个把手，始终可见
+                return;
+            }
             if (k < 0.995f) DrawNubOne(g, a, true, 1f - k);
             if (k > 0.005f) DrawNubOne(g, a, false, k);
         }
@@ -3888,9 +3919,12 @@ namespace SnapWheel
             // 方向提示三角：拉出 = 指向屏幕里；收起 = 指向贴着的那条屏幕边
             //  竖着的把手（在竖直的屏幕边上）：箭头朝 左右
             //  横着的把手（在水平的屏幕边上）：箭头朝 上下
+            // 箭头指向"点一下会发生什么"：拉出->朝屏幕里；收起->朝屏幕边外
+            bool willExpand = outMode;
+            if (NubSingleMode()) willExpand = _collapsed;
             float ax2 = 0f, ay2 = 0f;
-            if (vertical) ax2 = outMode ? Sx() : -Sx();
-            else ay2 = outMode ? Sy() : -Sy();
+            if (vertical) ax2 = willExpand ? Sx() : -Sx();
+            else ay2 = willExpand ? Sy() : -Sy();
             // 三角放在"远离角落"的那一端旁边，避开中间的三个点
             float along = NubLong * 0.30f;
             float px0 = vertical ? cx : cx + along * (Sx() > 0 ? 1f : -1f);
@@ -4098,7 +4132,7 @@ namespace SnapWheel
                     _enterT0[it] = DateTime.Now;
                     _targetOffset = Math.Max(0, _store.Items.Count - 1);
                     _hover = -1; _enlarged = -1;
-                    if (_collapsed) Err.Notify("已从剪贴板收进 1 张图");
+                    if (_collapsed && _settings.ShowBalloon) Err.Notify("已从剪贴板收进 1 张图");
                     else ShowToast("已从剪贴板收进 1 张图");
                     if (Visible) Render();
                 }
@@ -4275,10 +4309,18 @@ namespace SnapWheel
                 Render();
                 return;
             }
-            // 贴边把手：拉出 / 收起
-            // 把手在动画中也能点：随时可以掉头（手感不拖沓）
-            if (e.Button == MouseButtons.Left && _collapsed && NubOutRect().Contains(e.Location)) { ExpandWheel(); return; }
-            if (e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location)) { CollapseWheel(); return; }
+            // 贴边把手：拉出 / 收起（动画中也能点，随时可掉头）
+            if (e.Button == MouseButtons.Left && NubOutRect().Contains(e.Location))
+            {
+                if (_collapsed)
+                {
+                    if (CanExpandByNub()) ExpandWheel();     // 收起后有一小段冷却，避免手抖又点开
+                }
+                else if (NubSingleMode()) CollapseWheel();   // 单把手模式：同一个把手负责收起
+                return;
+            }
+            if (!NubSingleMode() && e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location))
+            { CollapseWheel(); return; }
 
             if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location))
             {
@@ -4747,9 +4789,39 @@ namespace SnapWheel
             // 收起态：像贴边小球一样，缩到屏幕边上留个小把手
             CheckBox chkCollapse = new CheckBox();
             chkCollapse.AutoSize = true;
-            chkCollapse.Text = "收起状态：缩到屏幕边上留个小把手（点它拉出 / 收起）";
+            chkCollapse.Text = "收起状态：缩到屏幕边上留个小把手";
             chkCollapse.Checked = s.CollapseMode;
             colL.Controls.Add(Row(chkCollapse));
+
+            // 收起 / 展开的动画速度（独立于上面的"动画速度"）
+            ComboBox cmbRing = new ComboBox();
+            cmbRing.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbRing.FlatStyle = FlatStyle.Flat;
+            cmbRing.Width = 130;
+            cmbRing.Margin = new Padding(0, 6, 0, 0);
+            int[] ringVals = { 200, 150, 100, 75, 55, 40 };
+            string[] ringNames = { "极快", "快", "标准", "慢", "很慢", "最慢" };
+            for (int i = 0; i < ringNames.Length; i++) cmbRing.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
+            cmbRing.SelectedIndex = 2;
+            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.RingSpeed) cmbRing.SelectedIndex = i;
+            Label hintRing = new Label();
+            hintRing.AutoSize = true;
+            hintRing.Text = "（只管收起 / 展开；百分比越大越快）";
+            hintRing.ForeColor = Color.FromArgb(150, 152, 160);
+            hintRing.Margin = new Padding(0, 10, 0, 0);
+            colL.Controls.Add(Row(MkLabel("收起展开速度"), cmbRing, Gap(10), hintRing));
+
+            CheckBox chkSingle = new CheckBox();
+            chkSingle.AutoSize = true;
+            chkSingle.Text = "只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）";
+            chkSingle.Checked = s.NubSingle;
+            colL.Controls.Add(Row(chkSingle));
+
+            CheckBox chkBalloon = new CheckBox();
+            chkBalloon.AutoSize = true;
+            chkBalloon.Text = "显示托盘气泡提示（关掉就不再弹右下角通知）";
+            chkBalloon.Checked = s.ShowBalloon;
+            colL.Controls.Add(Row(chkBalloon));
 
             // 剪贴板自动收纳 + 玻璃底定时刷新
             CheckBox chkClip = new CheckBox();
@@ -4892,6 +4964,9 @@ namespace SnapWheel
                 s.CollapseMode = chkCollapse.Checked;
                 s.ClipboardImport = chkClip.Checked;
                 s.GlassRefresh = chkGlassRefresh.Checked;
+                s.RingSpeed = ringVals[cmbRing.SelectedIndex < 0 ? 2 : cmbRing.SelectedIndex];
+                s.NubSingle = chkSingle.Checked;
+                s.ShowBalloon = chkBalloon.Checked;
                 s.IntroAnim = chkIntroAnim.Checked;
                 s.UiStyle = (cmbStyle.SelectedIndex == 1) ? "flat" : (cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
                 s.AccentIndex = cmbAccent.SelectedIndex - 1;
@@ -5053,7 +5128,7 @@ namespace SnapWheel
             f.AutoSize = true;
             f.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             f.WrapContents = false;
-            f.Margin = new Padding(0, 7, 0, 7);
+            f.Margin = new Padding(0, 5, 0, 5);   // 行距：设置项变多了，压紧一点免得窗口太高
             for (int i = 0; i < cs.Length; i++) f.Controls.Add(cs[i]);
             return f;
         }
@@ -5304,6 +5379,7 @@ namespace SnapWheel
             _tray.Visible = true;
             Err.Notify = delegate(string msg)             // 出问题时托盘冒个泡，程序继续跑
             {
+                if (!_settings.ShowBalloon) return;        // 设置里可以关掉右下角通知
                 try { _tray.ShowBalloonTip(4000, "SnapWheel 遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
                 catch { }
             };
@@ -5324,7 +5400,7 @@ namespace SnapWheel
 
             RegisterHotkeyAndNotify();
 
-            if (IsElevated())
+            if (IsElevated() && _settings.ShowBalloon)
                 try
                 {
                     _tray.ShowBalloonTip(6000, "SnapWheel 以管理员身份运行",
@@ -5419,7 +5495,7 @@ namespace SnapWheel
             try
             {
                 _tray.Text = "SnapWheel 截图轮盘 (" + _settings.Hotkey + ")";
-                _tray.ShowBalloonTip(3000, "SnapWheel", tip, ToolTipIcon.Info);
+                if (_settings.ShowBalloon || !ok) _tray.ShowBalloonTip(3000, "SnapWheel", tip, ToolTipIcon.Info);
             }
             catch { }
         }
