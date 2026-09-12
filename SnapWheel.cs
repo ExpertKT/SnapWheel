@@ -150,9 +150,9 @@ namespace SnapWheel
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.15";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.16";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.4.5";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
+        public const string Version = "0.4.6";   // 完整版：含万能键摇杆 + 旋转 + 缩放修正
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -993,7 +993,7 @@ namespace SnapWheel
         public bool IntroAnim = true;         // 启动时播开启动画
         // ---- 外观风格（新拟态 + 扁平化 + 毛玻璃）----
         public string UiStyle = "neu";        // neu=新拟态+毛玻璃(默认) / flat=纯扁平 / solid=高对比不透明
-        public int GlassPercent = 55;         // 玻璃面板不透明度 40..100
+        public int GlassPercent = 40;         // 玻璃面板不透明度 20..100
         public int CardRadius = 14;           // 卡片圆角（占最小边的百分比）0..30
         public int ShadowPercent = 55;        // 阴影强度 0..100
         public int AnimSpeed = 100;           // 动画速度 %（70 慢 / 100 标准 / 140 快）
@@ -1043,7 +1043,7 @@ namespace SnapWheel
                         else if (k == "IntroSeen") s.IntroSeen = (v == "1");
                         else if (k == "IntroAnim") s.IntroAnim = (v == "1");
                         else if (k == "UiStyle" && (v == "neu" || v == "flat" || v == "solid")) s.UiStyle = v;
-                        else if (k == "GlassPercent") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 100) s.GlassPercent = n; }
+                        else if (k == "GlassPercent") { int n; if (int.TryParse(v, out n) && n >= 20 && n <= 100) s.GlassPercent = n; }
                         else if (k == "CardRadius") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 30) s.CardRadius = n; }
                         else if (k == "ShadowPercent") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 100) s.ShadowPercent = n; }
                         else if (k == "AnimSpeed") { int n; if (int.TryParse(v, out n) && n >= 50 && n <= 200) s.AnimSpeed = n; }
@@ -1108,7 +1108,11 @@ namespace SnapWheel
 
         public RoundButton()
         {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            // 圆角外的部分交给父容器去画：SupportsTransparentBackColor + OnPaintBackground。
+            // 角落永远是"父容器真实的背景"，不用自己猜颜色 ——
+            // 之前自己填色，半透明窗体上取不到色就退回白/黑，四角才会出现"鼠标移上去才好"的脏块。
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
             BackColor = Color.Transparent;
@@ -1116,20 +1120,12 @@ namespace SnapWheel
 
         protected override void OnPaint(PaintEventArgs pevent)
         {
+            // 先让父容器把背景铺到我们这块区域（含窗体底色）
+            try { base.OnPaintBackground(pevent); } catch { }
+
             Graphics g = pevent.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            RectangleF r = new RectangleF(0, 0, Width - 1, Height - 1);
-            // 圆角外那圈要跟"窗口背景"一个色。
-            // 之前取 Parent.BackColor：对话框背景是半透明毛玻璃（A<255）时取不到就退回纯白，
-            // 四角于是出现白块，直到某次重绘才恢复 —— 鼠标划过去就好了、重开又复现。
-            // 现在优先用整个窗体（连 alpha 一起）的底色。
-            Color bg;
-            Form host = FindForm();
-            if (host != null) bg = host.BackColor;
-            else if (Parent != null) bg = Parent.BackColor;
-            else bg = Color.FromArgb(246, 247, 250);
-            using (SolidBrush bb = new SolidBrush(bg))
-                g.FillRectangle(bb, ClientRectangle);
+            RectangleF r = new RectangleF(0, 0, Width, Height);
 
             bool hot = ClientRectangle.Contains(PointToClient(Cursor.Position));
             bool down = MouseButtons == MouseButtons.Left && hot;
@@ -2775,7 +2771,7 @@ namespace SnapWheel
                         0, 0, bw, bh, GraphicsUnit.Pixel, _iaBack);
                 }
                 // 压一层黑：不管背后是亮桌面还是暗桌面，面板都能保持"深色玻璃"、字看得清
-                int dk = (int)(34 * (StyleSolid() ? 1f : _settings.GlassPercent / 100f) * al / 255f);
+                int dk = (int)(26 * (StyleSolid() ? 1f : _settings.GlassPercent / 100f) * al / 255f);
                 if (dk > 0)
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(dk, 0, 0, 0)))
                         g.FillPath(sb, path);
@@ -2785,6 +2781,16 @@ namespace SnapWheel
         }
 
         ImageAttributes _iaBack = new ImageAttributes();
+
+        // 名字太长就把中间省略掉，免得药丸撑太宽压到别的东西
+        public static string FitName(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            if (s.Length <= max) return s;
+            if (max <= 1) return s.Substring(0, 1);
+            int head = (max - 1) / 2, tail = max - 1 - head;
+            return s.Substring(0, head) + "…" + s.Substring(s.Length - tail, tail);
+        }
 
         // Wheel 名药丸的矩形（画的时候记下来，命中测试用同一个，改了名字也不会错位）
         RectangleF _namePillRect = RectangleF.Empty;
@@ -3073,7 +3079,7 @@ namespace SnapWheel
                 body.AddEllipse(disc);
                 BackdropClip(g, body, a);
                 Gfx.GlassPanel(g, body, disc,
-                    Gfx.A(GlassBase(), GlassA((int)((200 + 26 * kt) * a / 255f))),
+                    Gfx.A(GlassBase(), GlassA((int)((178 + 28 * kt) * a / 255f))),
                     (int)((neu ? 46 : 22) * a / 255f),
                     (int)((neu ? 52 : 0) * a / 255f),
                     !StyleFlatOnly());
@@ -3226,7 +3232,7 @@ namespace SnapWheel
                     {
                         // 毛玻璃底（真背景）+ 新拟态的上下明暗边
                         BackdropClip(g, card, ia);
-                        int baseA = GlassA(206);
+                        int baseA = GlassA(188);
                         Color fill = Gfx.A(GlassBase(), (int)(baseA * ia / 255f));
                         Gfx.GlassPanel(g, card, rr2, fill,
                             (int)((StyleNeu() ? 34 : 16) * ia / 255f),
@@ -3282,7 +3288,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh0.X, sh0.Y);
                 Rectangle cbr0 = cbr;
                 using (GraphicsPath cbp2 = new GraphicsPath()) { cbp2.AddEllipse(cbr0); BackdropClip(g, cbp2, ab0); cbp2.Dispose(); }
-                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 222 : 188) * ab0 / 255f))),
+                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f))),
                     Gfx.A(acc, (int)(200 * ab0 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab0 / 255f), (int)((StyleNeu() ? 60 : 0) * ab0 / 255f));
                 using (Pen cbp = new Pen(Color.FromArgb((int)(238 * ab0 / 255f), 255, 255, 255), 1.8f))
@@ -3300,7 +3306,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = GearButtonRect();
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
-                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 222 : 188) * ab1 / 255f))),
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 206 : 172) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
@@ -3365,7 +3371,7 @@ namespace SnapWheel
                 using (Font f3 = new Font("Microsoft YaHei UI", 9f))
                 using (SolidBrush b3 = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 255, 210, 210)))
                 {
-                    string t3 = "删除「" + _mgr.ActiveWheel.Name + "」？点左半取消 / 右半确认";
+                    string t3 = "删除「" + FitName(_mgr.ActiveWheel.Name, 12) + "」？点左半取消 / 右半确认";
                     SizeF s3 = g.MeasureString(t3, f3);
                     g.DrawString(t3, f3, b3, kcx - s3.Width / 2f, kr.Y - s3.Height - 4);
                 }
@@ -3386,7 +3392,7 @@ namespace SnapWheel
                 g.TranslateTransform(sn.X, sn.Y);
                 using (Font fw = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
                 {
-                    string wn = _mgr.ActiveWheel.Name;
+                    string wn = FitName(_mgr.ActiveWheel.Name, 12);
                     SizeF ws = g.MeasureString(wn, fw);
                     float dot = 9f;
                     float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
@@ -3397,7 +3403,7 @@ namespace SnapWheel
                     using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
                     {
                         BackdropClip(g, pg2, an);
-                        Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 226 : 192) * an / 255f))),
+                        Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
                             (int)((StyleNeu() ? 40 : 18) * an / 255f), (int)((StyleNeu() ? 34 : 0) * an / 255f), !StyleFlatOnly());
                         using (Pen bp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)((_nameHover ? 235 : 120) * an / 255f)), _nameHover ? 1.6f : 1.1f))
                             g.DrawPath(bp2, pg2);
@@ -3497,7 +3503,7 @@ namespace SnapWheel
                     using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
                     {
                         BackdropClip(g, pg, ac2);
-                        Gfx.GlassPanel(g, pg, pill, Gfx.A(GlassBase(), GlassA((int)(192 * ac2 / 255f))),
+                        Gfx.GlassPanel(g, pg, pill, Gfx.A(GlassBase(), GlassA((int)(176 * ac2 / 255f))),
                             (int)((StyleNeu() ? 38 : 16) * ac2 / 255f), (int)((StyleNeu() ? 32 : 0) * ac2 / 255f), !StyleFlatOnly());
                         using (Pen pp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)(110 * ac2 / 255f)), 1.1f))
                             g.DrawPath(pp2, pg);
@@ -3515,7 +3521,7 @@ namespace SnapWheel
             // 外部文件拖到轮盘上方：提示松手加入
             if (_dropActive && _dropExternal && a > 90)
             {
-                string tip = "松手把 " + _dropCount + " 张图片加入「" + _mgr.ActiveWheel.Name + "」";
+                string tip = "松手把 " + _dropCount + " 张图片加入「" + FitName(_mgr.ActiveWheel.Name, 12) + "」";
                 using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
                 {
                     SizeF sz = g.MeasureString(tip, f);
@@ -3999,16 +4005,6 @@ namespace SnapWheel
             }
         }
 
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            if (Blur.Supported)
-            {
-                using (SolidBrush b = new SolidBrush(BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
-                return;
-            }
-            base.OnPaintBackground(e);
-        }
-
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
@@ -4159,11 +4155,10 @@ namespace SnapWheel
         // 应用真·毛玻璃：窗口背景半透明 + 系统 acrylic 模糊；系统不支持就退回不透明浅底
         void ApplyGlass()
         {
-            if (!Blur.Supported) { BackColor = Color.FromArgb(248, 249, 252); return; }
-            BackColor = Color.FromArgb(240, 247, 248, 251);
-            bool ok = false;
-            try { ok = Blur.Apply(Handle, 232, 246, 248, 252, true); } catch { }
-            if (!ok) BackColor = Color.FromArgb(246, 247, 250);
+            // 对话框用干净的浅色实底：半透明窗体 + 子控件（按钮/输入框）在 Windows 上
+            // 容易出现"四角没画到、重绘才恢复"的脏块，实测得不偿失。
+            // 真正需要毛玻璃的地方是轮盘本体，那边是自己绘制的，好控制。
+            BackColor = Color.FromArgb(248, 249, 252);
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -4192,7 +4187,7 @@ namespace SnapWheel
 
         public SettingsForm(Settings s)
         {
-            Text = AppInfo.Name + " 设置";
+            Text = AppInfo.Name + " 设置  ·  BETA";
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -4324,7 +4319,7 @@ namespace SnapWheel
             cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
             colR.Controls.Add(Row(MkLabel("界面风格"), cmbStyle, Gap(24), MkLabel("主题色"), cmbAccent));
 
-            NumericUpDown numGlass = Num(40, 100, s.GlassPercent);
+            NumericUpDown numGlass = Num(20, 100, s.GlassPercent);
             NumericUpDown numRadius = Num(0, 30, s.CardRadius);
             NumericUpDown numShadow = Num(0, 100, s.ShadowPercent);
             colR.Controls.Add(Row(MkLabel("玻璃不透明度"), numGlass, Gap(16), MkLabel("圆角(%)"), numRadius,
@@ -4484,7 +4479,7 @@ namespace SnapWheel
 
             Label about = new Label();
             about.AutoSize = true;
-            about.Text = AppInfo.Name + "   v" + AppInfo.Version + "        作者：" + AppInfo.Author;
+            about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
             about.ForeColor = Color.FromArgb(150, 150, 160);
             about.Margin = new Padding(0, 16, 0, 0);
             root.Controls.Add(about);
@@ -4568,6 +4563,7 @@ namespace SnapWheel
     // 点 Wheel 名药丸弹出来的小改名框
     class RenameForm : Form
     {
+        public const int MaxName = 12;      // 名字最长 12 个字（药丸宽度可控）
         public string Value = "";
         TextBox _box;
 
@@ -4585,7 +4581,7 @@ namespace SnapWheel
             ClientSize = new Size(360, 128);
 
             Label l = new Label();
-            l.Text = "名字（之后还会显示在轮盘上）";
+            l.Text = "名字（最多 " + MaxName + " 个字，会显示在轮盘上）";
             l.ForeColor = Color.FromArgb(110, 114, 124);
             l.AutoSize = true;
             l.Location = new Point(22, 18);
@@ -4596,7 +4592,8 @@ namespace SnapWheel
             _box.Font = new Font("Microsoft YaHei UI", 11f);
             _box.BorderStyle = BorderStyle.FixedSingle;
             _box.Location = new Point(24, 44);
-            _box.Width = 312;
+            _box.Width = 250;
+            _box.MaxLength = MaxName;      // 直接限制输入长度，避免打到超长
             Controls.Add(_box);
 
             RoundButton ok = new RoundButton();
@@ -4611,8 +4608,8 @@ namespace SnapWheel
             ok.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
                 Value = _box.Text.Trim();
-                if (Value.Length == 0) Value = cur;
-                if (Value.Length > 24) Value = Value.Substring(0, 24);
+                if (Value == null || Value.Length == 0) Value = cur;
+                if (Value.Length > MaxName) Value = Value.Substring(0, MaxName);   // 名字太长会把药丸撑宽、挡住旁边
                 DialogResult = DialogResult.OK;
                 Close();
             });
@@ -4653,16 +4650,6 @@ namespace SnapWheel
                 BackColor = Color.FromArgb(240, 247, 248, 251);
                 try { Blur.Apply(Handle, 232, 246, 248, 252, true); } catch { }
             }
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            if (Blur.Supported)
-            {
-                using (SolidBrush b = new SolidBrush(BackColor)) e.Graphics.FillRectangle(b, ClientRectangle);
-                return;
-            }
-            base.OnPaintBackground(e);
         }
 
         protected override void OnShown(EventArgs e)
