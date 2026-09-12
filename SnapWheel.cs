@@ -2101,6 +2101,8 @@ namespace SnapWheel
         bool _nubOutHover = false;     // 指针停在"拉出"把手上
         bool _nubInHover = false;      // 指针停在"收起"把手上
         float _nubHov = 0f;            // 把手悬停进度 0..1
+        float _nubAppearT = 1f;        // 把手"出现"进度 0..1（启动时不要突然冒出来）
+        DateTime _nubAppearAt = DateTime.MinValue;
         DateTime _collapsedAt = DateTime.MinValue;       // 收起完成的时刻（之后一小段内不允许再展开）
         DateTime _selfClipboardAt = DateTime.MinValue;   // 我们自己写剪贴板的时间（避免自己抄自己）
         string _lastClipFp = "";                          // 上一张从剪贴板收进来的图（去重用）
@@ -2195,6 +2197,8 @@ namespace SnapWheel
             _collapsing = false;
             _intro = false;
             _introT = 0f;
+            _nubAppearT = 0f;                      // 把手从屏幕边滑出来，不要"啪"地出现
+            _nubAppearAt = DateTime.Now;
             CaptureBackdrop();
             _show = 1f; _targetShow = 1f; _showAnimating = false;
             _rendered = false;
@@ -2571,6 +2575,15 @@ namespace SnapWheel
                     _introT = _ringTo;
                     if (_collapsing) { _collapsed = true; _collapsing = false; _collapsedAt = DateTime.Now; }   // 收完了：进入收起态
                 }
+                need = true;
+            }
+
+            // 把手出现动画（启动时）
+            if (_nubAppearT < 1f)
+            {
+                _nubAppearT += (float)((DateTime.Now - _nubAppearAt).TotalSeconds / 0.55f);
+                if (_nubAppearT >= 1f) _nubAppearT = 1f;
+                _nubAppearAt = DateTime.Now;
                 need = true;
             }
 
@@ -3956,12 +3969,13 @@ namespace SnapWheel
         void DrawNubs(Graphics g, int a)
         {
             float k = _collapsed ? 0f : (_intro ? _introT : 1f);    // 0=完全收起，1=完全展开
+            float ap = _nubAppearT >= 1f ? 1f : 1f - (1f - _nubAppearT) * (1f - _nubAppearT);   // 出现用 easeOut
             if (NubSingleMode())
             {
-                DrawNubOne(g, a, true, 1f);                          // 只有一个把手，始终可见
+                DrawNubOne(g, a, true, ap);                          // 只有一个把手，始终可见
                 return;
             }
-            if (k < 0.995f) DrawNubOne(g, a, true, 1f - k);
+            if (k < 0.995f) DrawNubOne(g, a, true, (1f - k) * ap);
             if (k > 0.005f) DrawNubOne(g, a, false, k);
         }
 

@@ -531,6 +531,39 @@ namespace SnapWheel
                     if (midState) pass++; else fail++;
                 }
 
+                // ---- 启动时把手要有出现动画（不能突然冒出来）----
+                {
+                    MethodInfo nOut3 = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo apF = wt.GetField("_nubAppearT", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo dwA = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    float uikA = (float)wt.GetField("UiK", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f);
+                    Func<int> nubPix = delegate
+                    {
+                        int n = 0;
+                        RectangleF rf = (RectangleF)nOut3.Invoke(f, null);
+                        using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                        {
+                            using (Graphics g = Graphics.FromImage(b)) dwA.Invoke(f, new object[] { g, f.Width, f.Height });
+                            int x0 = Math.Max(0, (int)((rf.X - 20) * uikA)), y0 = Math.Max(0, (int)(rf.Y * uikA));
+                            int x1 = Math.Min(b.Width - 1, (int)((rf.X + rf.Width + 20) * uikA));
+                            int y1 = Math.Min(b.Height - 1, (int)((rf.Y + rf.Height) * uikA));
+                            for (int y = y0; y <= y1; y += 2) for (int x = x0; x <= x1; x += 2) if (b.GetPixel(x, y).A > 40) n++;
+                        }
+                        return n;
+                    };
+                    f.StartCollapsed();
+                    float a0 = (float)apF.GetValue(f);
+                    int p0 = nubPix();                       // 刚启动：几乎看不见
+                    for (int k = 0; k < 10; k++) { Application.DoEvents(); Thread.Sleep(15); }   // 推进动画（Sleep 会挡住定时器）
+                    int p1 = nubPix();                       // 中途：一半左右
+                    for (int k = 0; k < 40 && (float)apF.GetValue(f) < 0.999f; k++) { Application.DoEvents(); Thread.Sleep(30); }
+                    int p2 = nubPix();                       // 结束：完全出现
+                    bool ok = a0 < 0.2f && p0 < p1 && p1 < p2 && p2 > 60;
+                    Console.WriteLine("  {0} 启动时把手渐显（起点 ap={1:F2} 像素 {2} -> 中途 {3} -> 完全 {4}）",
+                        ok ? "OK  " : "FAIL", a0, p0, p1, p2);
+                    if (ok) pass++; else fail++;
+                }
+
                 // ---- 万能键圆盘：松手要淡出，不能瞬灭 ----
                 {
                     Rectangle krK = (Rectangle)keyR2.Invoke(f, null);
