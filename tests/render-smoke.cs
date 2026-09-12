@@ -372,6 +372,7 @@ namespace SnapWheel
             Console.WriteLine("--- 淡出动画：玻璃底必须跟着一起变淡 ---");
             {
                 // 保证有玻璃底（之前的问题是模糊背景没乘淡出 alpha，面板像"卡住"不消失）
+                F(f, "_backdropOld", null); F(f, "_backdropFade", 1f);   // 清掉交叉淡入态，保证这条用例不受执行顺序影响
                 try { f.CaptureBackdrop(); } catch { }
                 MethodInfo dw = typeof(WheelForm).GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
                 double a100 = 0, a50 = 0, a25 = 0;
@@ -528,6 +529,77 @@ namespace SnapWheel
                     if (colState) pass++; else fail++;
                     Console.WriteLine("  {0} 切换中途两个把手交叉淡入淡出（拉出={1} 收起={2}）", midState ? "OK  " : "FAIL", mOut, mIn);
                     if (midState) pass++; else fail++;
+                }
+
+                // ---- 万能键圆盘：松手要淡出，不能瞬灭 ----
+                {
+                    Rectangle krK = (Rectangle)keyR2.Invoke(f, null);
+                    if (krK.Width >= 8)
+                    {
+                        Point kc = new Point(krK.X + krK.Width / 2, krK.Y + krK.Height / 2);
+                        FieldInfo fdKey = typeof(WheelForm).GetField("_keyDown", BindingFlags.NonPublic | BindingFlags.Instance);
+                        FieldInfo fdMenuOpen = typeof(WheelForm).GetField("_menuOpen", BindingFlags.NonPublic | BindingFlags.Instance);
+                        FieldInfo fdMenuT = typeof(WheelForm).GetField("_menuT", BindingFlags.NonPublic | BindingFlags.Instance);
+                        MethodInfo mdK = typeof(WheelForm).GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+                        MethodInfo muK = typeof(WheelForm).GetMethod("OnMouseUp", BindingFlags.NonPublic | BindingFlags.Instance);
+                        F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                        F(f, "_menuOpen", false); F(f, "_menuT", 0f);
+                        Application.DoEvents();
+                        mdK.Invoke(f, new object[] { new MouseEventArgs(MouseButtons.Left, 1, kc.X, kc.Y, 0) });
+                        for (int k = 0; k < 30; k++) { Application.DoEvents(); Thread.Sleep(20); }
+                        bool opened = (bool)fdMenuOpen.GetValue(f) && (float)fdMenuT.GetValue(f) > 0.9f;
+                        muK.Invoke(f, new object[] { new MouseEventArgs(MouseButtons.Left, 1, kc.X, kc.Y, 0) });
+                        float t0 = (float)fdMenuT.GetValue(f);
+                        Application.DoEvents(); Thread.Sleep(70);
+                        float t1 = (float)fdMenuT.GetValue(f);
+                        Application.DoEvents(); Thread.Sleep(70);
+                        float t2 = (float)fdMenuT.GetValue(f);
+                        bool fadeOk = opened && t0 > 0.5f && t1 < t0 && t1 > 0f && t2 < t1;
+                        Console.WriteLine("  {0} 万能键圆盘松手淡出（开={1}，松手瞬间={2:F2} -> 70ms={3:F2} -> 140ms={4:F2}）",
+                            fadeOk ? "OK  " : "FAIL", opened, t0, t1, t2);
+                        if (fadeOk) pass++; else fail++;
+                        F(f, "_menuOpen", false); F(f, "_menuT", 0f);
+                    }
+                }
+
+                // ---- 毛玻璃换背景要有渐变（不能突然变深/变浅）----
+                {
+                    MethodInfo dwF = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo fadeF = wt.GetField("_backdropFade", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo oldF = wt.GetField("_backdropOld", BindingFlags.NonPublic | BindingFlags.Instance);
+                    F(f, "_collapsed", false); F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                    Application.DoEvents();
+                    f.CaptureBackdrop();
+                    Application.DoEvents();
+                    f.CaptureBackdrop();          // 再抓一次：这一下应该触发交叉淡入
+                    Application.DoEvents();
+                    bool started = ((float)fadeF.GetValue(f)) < 0.999f && oldF.GetValue(f) != null;
+                    // 抓两帧看画面确实在变（而不是"啪"地换掉）
+                    Func<byte[]> grab = delegate
+                    {
+                        using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                        {
+                            using (Graphics g = Graphics.FromImage(b)) dwF.Invoke(f, new object[] { g, f.Width, f.Height });
+                            byte[] raw = new byte[64 * 3];
+                            int k = 0;
+                            for (int y = 40; y < f.Height - 40 && k < raw.Length - 3; y += 37)
+                                for (int x = 40; x < f.Width - 40 && k < raw.Length - 3; x += 53)
+                                { Color c = b.GetPixel(x, y); raw[k++] = c.R; raw[k++] = c.G; raw[k++] = c.B; }
+                            return raw;
+                        }
+                    };
+                    byte[] s1 = grab();
+                    Application.DoEvents(); Thread.Sleep(120);
+                    byte[] s2 = grab();
+                    int diff = 0;
+                    for (int k = 0; k < s1.Length; k++) diff += Math.Abs(s1[k] - s2[k]);
+                    // 等淡入结束，确认最终稳定
+                    for (int k = 0; k < 40 && (float)fadeF.GetValue(f) < 0.999f; k++) { Application.DoEvents(); Thread.Sleep(30); }
+                    float done = (float)fadeF.GetValue(f);
+                    bool ok = started && done >= 0.999f;
+                    Console.WriteLine("  {0} 换背景有淡入过渡（起始淡入中={1}，淡入完成={2:F2}，期间画面差异={3}）",
+                        ok ? "OK  " : "FAIL", started, done, diff);
+                    if (ok) pass++; else fail++;
                 }
 
                 // ---- 单把手模式 + 展开冷却 + 独立速度 ----

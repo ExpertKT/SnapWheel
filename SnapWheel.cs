@@ -2085,6 +2085,7 @@ namespace SnapWheel
         bool _closeHold = false, _gearHold = false, _shootHold = false;   // 鼠标仍按着
         DateTime _closeDownAt = DateTime.MinValue;                        // 关闭键按下的时刻（判长按）
         bool _closeLong = false;                                          // 关闭键已长按到位（变红，松手退出）
+        float _closeHoldP = 0f;                                           // 长按进度 0..1（画红色进度环）
         string _pendingBtn = "";
         DateTime _pendingAt = DateTime.MinValue;
         bool _intro = false;           // 正在播环的动画（拉出 / 收起都算）
@@ -2493,7 +2494,7 @@ namespace SnapWheel
                 if (nh != _nameHover) { _nameHover = nh; need = true; }
             }
 
-            if (_closeHold) { Point cp3 = ToLogicalPt(PointToClient(Cursor.Position)); if (!CloseButtonRect().Contains(cp3)) _closeHold = false; }
+
             if (_gearHold) { Point cp4 = ToLogicalPt(PointToClient(Cursor.Position)); if (!GearButtonRect().Contains(cp4)) _gearHold = false; }
             if (_shootHold) { Point cp5 = ToLogicalPt(PointToClient(Cursor.Position)); if (!ShootButtonRect().Contains(cp5)) _shootHold = false; }
 
@@ -2573,9 +2574,16 @@ namespace SnapWheel
                 need = true;
             }
 
-            // 关闭键长按判定：按住 0.65s 就"变红"，松手退出
-            if (_closeHold && !_closeLong && (DateTime.Now - _closeDownAt).TotalMilliseconds > 650)
-            { _closeLong = true; need = true; }
+            // 关闭键长按：画一条红色进度环，按住 0.65s 变满 -> 变红，松手退出。
+            // 同时兜住"鼠标已经松开但 MouseUp 没收到"的情况（按住时轻微移动不该取消）。
+            if (_closeHold)
+            {
+                float p = (float)Math.Min(1.0, (DateTime.Now - _closeDownAt).TotalMilliseconds / 650.0);
+                if (Math.Abs(p - _closeHoldP) > 0.004f) { _closeHoldP = p; need = true; }
+                if (p >= 1f && !_closeLong) { _closeLong = true; need = true; }
+                need = true;                     // 进度环一直动
+            }
+            else if (_closeHoldP > 0.001f) { _closeHoldP = 0f; need = true; }
 
             // 圆钮按下反馈 + 延迟执行
             {
@@ -2613,6 +2621,15 @@ namespace SnapWheel
                 if (Math.Abs(_nubHov - wantH) > 0.006f) { _nubHov += (wantH - _nubHov) * 0.24f; need = true; }
                 else if (_nubHov != wantH) { _nubHov = wantH; need = true; }
                 if (_nubHov > 0.01f) need = true;
+            }
+
+            // 背景交叉淡入（换背景时玻璃颜色渐变，不跳）
+            if (_backdropOld != null && _backdropFade < 1f)
+            {
+                _backdropFade += (float)((DateTime.Now - _backdropFadeAt).TotalSeconds / 0.38f);
+                if (_backdropFade >= 1f) { _backdropFade = 1f; try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
+                _backdropFadeAt = DateTime.Now;
+                need = true;
             }
 
             // 玻璃底定时重抓：轮盘一直挂着也不会"糊的是半小时前的桌面"
@@ -2665,7 +2682,7 @@ namespace SnapWheel
             }
             else if (_menuT > 0.001f)
             {
-                _menuT += (0f - _menuT) * 0.30f;
+                _menuT += (0f - _menuT) * 0.22f;
                 if (_menuT < 0.01f) { _menuT = 0f; _menuOpen = false; _sector = -1; }
                 need = true;
             }
@@ -2957,17 +2974,21 @@ namespace SnapWheel
         Bitmap _backdropBlur;
         bool _backdropValid;
         Point _backdropOffset = new Point(0, 0);
+        Bitmap _backdropOld;                 // 上一张模糊背景（换背景时交叉淡入，避免玻璃颜色突然一跳）
+        float _backdropFade = 1f;            // 1 = 新背景完全不透明
+        DateTime _backdropFadeAt = DateTime.MinValue;
 
         void FreeBackdrop()
         {
             if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } _backdropBlur = null; }
+            if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
+            _backdropFade = 1f;
             _backdropValid = false;
         }
 
         public void CaptureBackdrop()
         {
-            FreeBackdrop();
-            if (StyleFlatOnly()) return;
+            if (StyleFlatOnly()) { FreeBackdrop(); return; }
             try
             {
                 if (Width < 20 || Height < 20) return;
@@ -2975,15 +2996,30 @@ namespace SnapWheel
                 Rectangle want = new Rectangle(Left, Top, Width, Height);
                 Rectangle got = Rectangle.Intersect(want, vs);
                 if (got.Width < 8 || got.Height < 8) return;
+                Bitmap fresh = null;
                 using (Bitmap full = new Bitmap(got.Width, got.Height, PixelFormat.Format32bppArgb))
                 {
                     using (Graphics g = Graphics.FromImage(full))
                         g.CopyFromScreen(got.Left, got.Top, 0, 0, new Size(got.Width, got.Height), CopyPixelOperation.SourceCopy);
-                    _backdropBlur = BlurBitmap(full, 6);
-                    _backdropOffset = new Point(got.Left - want.Left, got.Top - want.Top);
-                    _backdropValid = true;
-                    _backdropAt = DateTime.Now;
+                    fresh = BlurBitmap(full, 6);
                 }
+                // 换背景不要"啪"地一跳：把旧图留着做交叉淡入（只有显示中才有必要看着它过渡）
+                if (_backdropBlur != null && Visible)
+                {
+                    if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
+                    _backdropOld = _backdropBlur;
+                    _backdropFade = 0f;
+                    _backdropFadeAt = DateTime.Now;
+                }
+                else
+                {
+                    if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } }
+                    if (!Visible && _backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; _backdropFade = 1f; }
+                }
+                _backdropBlur = fresh;
+                _backdropOffset = new Point(got.Left - want.Left, got.Top - want.Top);
+                _backdropValid = true;
+                _backdropAt = DateTime.Now;
             }
             catch { FreeBackdrop(); }
         }
@@ -3077,11 +3113,24 @@ namespace SnapWheel
                 RectangleF dest = new RectangleF(_backdropOffset.X / UiK, _backdropOffset.Y / UiK,
                                                  bw / UiK, bh / UiK);
                 int al = alpha > 255 ? 255 : alpha;
-                if (al >= 250) g.DrawImage(_backdropBlur, dest);
+                bool crossFade = _backdropOld != null && _backdropFade < 0.999f;
+                if (crossFade)
+                {
+                    // 旧背景也要按元素 alpha 淡（漏乘的话，轮盘淡出时这层背景会一直是不透明的）
+                    float ow = _backdropOld.Width, oh = _backdropOld.Height;
+                    Rectangle dr0 = new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
+                        Math.Max(1, (int)Math.Round(ow / UiK)), Math.Max(1, (int)Math.Round(oh / UiK)));
+                    ColorMatrix cmo = new ColorMatrix(); cmo.Matrix33 = al / 255f;
+                    _iaBack.SetColorMatrix(cmo);
+                    g.DrawImage(_backdropOld, dr0, 0, 0, ow, oh, GraphicsUnit.Pixel, _iaBack);
+                }
+                float newMul = crossFade ? Math.Max(0.06f, _backdropFade) : 1f;
+                int alNew = (int)(al * newMul);
+                if (alNew >= 250 && !crossFade) g.DrawImage(_backdropBlur, dest);
                 else
                 {
                     ColorMatrix cm = new ColorMatrix();
-                    cm.Matrix33 = al / 255f;
+                    cm.Matrix33 = alNew / 255f;
                     _iaBack.SetColorMatrix(cm);
                     g.DrawImage(_backdropBlur,
                         new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
@@ -3622,11 +3671,31 @@ namespace SnapWheel
                 g.TranslateTransform(sh0.X, sh0.Y);
                 Rectangle cbr0 = cbr;
                 using (GraphicsPath cbp2 = new GraphicsPath()) { cbp2.AddEllipse(cbr0); BackdropClip(g, cbp2, ab0); cbp2.Dispose(); }
-                Color closeAcc = _closeLong ? Color.FromArgb(232, 72, 62) : acc;   // 长按变红 = 松手会退出
-                int closeFill = _closeLong ? 236 : (_closeHover ? 206 : 172);
-                Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)(closeFill * ab0 / 255f))),
-                    Gfx.A(closeAcc, (int)(200 * ab0 / 255f)), false, false,
+                // 长按时：底色由玻璃色渐变到红色（用 _closeHoldP 过渡，不是突然变），
+                // 外边再画一圈红色进度环 —— 按下去就知道还差多久松手
+                float hp = _closeHoldP;
+                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f)));
+                Color redSurf = Gfx.A(Color.FromArgb(236, 74, 62), (int)(238 * ab0 / 255f));
+                Color closeSurf = hp > 0.001f
+                    ? Color.FromArgb(
+                        (int)(glassSurf.A + (redSurf.A - glassSurf.A) * hp),
+                        (int)(glassSurf.R + (redSurf.R - glassSurf.R) * hp),
+                        (int)(glassSurf.G + (redSurf.G - glassSurf.G) * hp),
+                        (int)(glassSurf.B + (redSurf.B - glassSurf.B) * hp))
+                    : glassSurf;
+                Color closeAcc = hp > 0.001f
+                    ? Color.FromArgb((int)(236 * hp + 255 * (1 - hp)), (int)(74 + 181 * (1 - hp)), (int)(62 + 193 * (1 - hp)))
+                    : acc;
+                Gfx.NeuCircle(g, cbr0, closeSurf, Gfx.A(closeAcc, (int)(200 * ab0 / 255f)), hp > 0.5f, false,
                     (int)((StyleNeu() ? 60 : 24) * ab0 / 255f), (int)((StyleNeu() ? 60 : 0) * ab0 / 255f));
+                if (hp > 0.01f)
+                {
+                    using (Pen pr = new Pen(Color.FromArgb((int)(240 * ab0 / 255f), 236, 74, 62), 3.2f))
+                    {
+                        pr.StartCap = LineCap.Round; pr.EndCap = LineCap.Round;
+                        g.DrawArc(pr, cbr0.X - 3f, cbr0.Y - 3f, cbr0.Width + 6f, cbr0.Height + 6f, -90f, 360f * hp);
+                    }
+                }
                 using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown + 0.8f * (_closeLong ? 1f : 0f)))
                 {
                     float pad = 10 + 2f * _closeDown;
@@ -4349,6 +4418,8 @@ namespace SnapWheel
                 _closeHold = true;
                 _closeDownAt = DateTime.Now;
                 _closeLong = false;
+                _closeHoldP = 0f;
+                try { Capture = true; } catch { }     // 捕获鼠标：手抖移出按钮也不会漏掉 MouseUp
                 _pendingBtn = "";                 // 不走那个 110ms 延迟
                 Render();
                 return;
@@ -4391,15 +4462,17 @@ namespace SnapWheel
                     else if (s2 == 1) SwitchWheel(1);
                     else if (s2 == 3) SwitchWheel(-1);
                     else if (s2 == 2) { _delConfirm = true; _delConfirmAt = DateTime.Now; }   // 松开后进入左右两半确认态
-                    _menuOpen = false; _menuT = 0f; _sector = -1;
+                    // 这里别再 _menuT = 0，否则圆盘是"啪"地消失；留给 AnimTick 收缩淡出
+                    _menuOpen = false; _sector = -1;
                 }
                 Render();
                 return;
             }
             if (_closeHold)
             {
-                bool wasLong = _closeLong;
-                _closeHold = false; _closeLong = false;
+                try { Capture = false; } catch { }
+                bool wasLong = _closeLong || _closeHoldP >= 0.999f;
+                _closeHold = false; _closeLong = false; _closeHoldP = 0f;
                 if (wasLong) { ShowToast("正在退出 SnapWheel…"); Render(); if (ExitRequested != null) ExitRequested(this, EventArgs.Empty); return; }
                 HideWheel();          // 短按：直接关掉轮盘（不是收起）
                 return;
@@ -5430,7 +5503,7 @@ namespace SnapWheel
             Err.Notify = delegate(string msg)             // 出问题时托盘冒个泡，程序继续跑
             {
                 if (!_settings.ShowBalloon) return;        // 设置里可以关掉右下角通知
-                try { _tray.ShowBalloonTip(4000, "SnapWheel 遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
+                try { _tray.ShowBalloonTip(4000, "SnapWheel 快照轮环遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
                 catch { }
             };
             ContextMenuStrip menu = new ContextMenuStrip();
@@ -5453,7 +5526,7 @@ namespace SnapWheel
             if (IsElevated() && _settings.ShowBalloon)
                 try
                 {
-                    _tray.ShowBalloonTip(6000, "SnapWheel 以管理员身份运行",
+                    _tray.ShowBalloonTip(6000, "SnapWheel 快照轮环以管理员身份运行",
                         "Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（右键托盘图标 → 以普通权限重启）。",
                         ToolTipIcon.Warning);
                 }
@@ -5545,7 +5618,9 @@ namespace SnapWheel
             try
             {
                 _tray.Text = "SnapWheel 快照轮环 (" + _settings.Hotkey + ")";
-                if (_settings.ShowBalloon || !ok) _tray.ShowBalloonTip(3000, "SnapWheel", tip, ToolTipIcon.Info);
+                // 热键提示只在"第一次运行"或"注册失败"时弹，平时开机不打扰
+                if ((_settings.ShowBalloon && !_settings.IntroSeen) || !ok)
+                    _tray.ShowBalloonTip(3000, "SnapWheel 快照轮环", tip, ToolTipIcon.Info);
             }
             catch { }
         }
@@ -5611,6 +5686,10 @@ namespace SnapWheel
                 Store st = _wheels.ActiveStore;
                 StoreItem ni = st.Add(ov.Result);
                 _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
+                // 关键：浮层关掉之后重抓一次背景。
+                // 之前是拿着"截图浮层还在时抓的"背景去显示玻璃，所以截图完轮盘是暗的，
+                // 过一会儿定时刷新才突然变亮 —— 现在这里立刻换新背景（带淡入过渡）。
+                try { _wheel.CaptureBackdrop(); } catch { }
                 // 截完播拉出动画（收起态拉出来最自然；原来是展开的就直接显示）
                 if (_settings.CollapseMode) _wheel.ExpandWheel(true);   // 截图流程：拉出也快一点
                 else _wheel.ShowWheel();
