@@ -16,6 +16,9 @@ $RECYCLE.BIN/
 # 本地构建产物（build.ps1 的输出）
 build/
 
+# 渲染草稿（ui-shot 的原始输出，可随时重新生成）
+docs/_raw/
+
 # 临时与调试产物
 *.tmp
 *_dbg.exe

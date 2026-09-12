@@ -2065,6 +2065,12 @@ namespace SnapWheel
         float _keyHov = 0f;            // 万能键悬停进度 0..1（指针压上去要有反应）
         bool _keyHover = false;
         bool _nameHover = false;       // 指针停在 Wheel 名药丸上（提示"点一下改名"）
+        // 圆钮按下反馈：按下先变暗缩一下，过 ~110ms 再真正执行，这样"按下去"是看得见的
+        float _closeDown = 0f, _gearDown = 0f, _shootDown = 0f;
+        bool _closePend = false, _gearPend = false, _shootPend = false;   // 已按下、等延迟
+        bool _closeHold = false, _gearHold = false, _shootHold = false;   // 鼠标仍按着
+        string _pendingBtn = "";
+        DateTime _pendingAt = DateTime.MinValue;
         bool _intro = false;           // 正在播环的动画（拉出 / 收起都算）
         float _introT = 0f;            // 0..1：环"露出来"的程度
         float _introDur = 1.8f;        // 秒（完成一整趟 0->1 的时间基准）
@@ -2088,10 +2094,22 @@ namespace SnapWheel
         const float NubLong = 78f;     // 把手长边
         const float NubThick = 13f;    // 把手厚度（贴着屏幕边）
 
-        // 把手的中心离角落多远（沿屏幕边方向）；<0 表示用默认值，调参时可以覆盖
-        float _nubOutDist = -1f, _nubInDist = -1f;
-        float NubDistOut() { return _nubOutDist >= 0f ? _nubOutDist : (_R * 0.60f); }
-        float NubDistIn() { return _nubInDist >= 0f ? _nubInDist : (_R + _thumb + 46f); }
+        // 把手 = 卷轴的两端。环的圆弧从"竖直那条边上距角落 R 处"扫到"水平那条边上距角落 R 处"，
+        // 这两个端点就是卷轴的两头，把手就钉在端点上，正好接住弧的末端。
+        // 卡片都往内缩了一个安全角（phiMin），所以把手不会压到最边上的那张卡。
+        float _nubOutDist = -1f, _nubInDist = -1f;   // <0 = 用自动值；调参时可覆盖
+        float NubDistAuto() { return _R; }
+        float NubDistOut() { return _nubOutDist >= 0f ? _nubOutDist : NubDistAuto(); }
+        float NubDistIn() { return _nubInDist >= 0f ? _nubInDist : NubDistAuto(); }
+
+        // 按下时把矩形按比例缩小（以中心为基准）
+        static Rectangle Shrink(Rectangle r, float k)
+        {
+            if (k <= 0.001f) return r;
+            float s = 1f - 0.10f * k;
+            int w = (int)Math.Round(r.Width * s), h = (int)Math.Round(r.Height * s);
+            return new Rectangle(r.X + (r.Width - w) / 2, r.Y + (r.Height - h) / 2, w, h);
+        }
 
         RectangleF NubOutRect()
         {
@@ -2113,7 +2131,7 @@ namespace SnapWheel
         // 原来两边各一套公式（展开 1.5+0.13n、收起 1.15+0.07n），所以速度不一样。
         float RingUnitDur()
         {
-            float d = 0.92f + 0.055f * _store.Items.Count;     // 5 张图约 1.2s
+            float d = 0.82f + 0.050f * _store.Items.Count;     // 5 张图约 1.1s
             if (d < 0.75f) d = 0.75f;
             if (d > 1.65f) d = 1.65f;
             return d * AnimK();
@@ -2144,7 +2162,9 @@ namespace SnapWheel
         }
 
         // 收起（彩虹缩回）—— 收起态没开的话就退回原来的"直接隐藏"
-        public void CollapseWheel()
+        public void CollapseWheel() { CollapseWheel(false); }
+
+        public void CollapseWheel(bool fast)
         {
             if (!_settings.CollapseMode) { HideWheel(); return; }
             if (_collapsed) return;
@@ -2154,9 +2174,10 @@ namespace SnapWheel
             _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
             _ringTo = 0f;
             _introAt = DateTime.Now;
-            _introDur = RingUnitDur();
+            _introDur = RingUnitDur() * (fast ? 0.42f : 1f);
             _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
             _lastActive = DateTime.Now;
+            Render();                       // 立刻出一帧，点了就能看到动
         }
 
         // 界面上"关掉轮盘"的动作：收起态开着就收起，否则完全隐藏
@@ -2422,6 +2443,10 @@ namespace SnapWheel
                 if (nh != _nameHover) { _nameHover = nh; need = true; }
             }
 
+            if (_closeHold) { Point cp3 = ToLogicalPt(PointToClient(Cursor.Position)); if (!CloseButtonRect().Contains(cp3)) _closeHold = false; }
+            if (_gearHold) { Point cp4 = ToLogicalPt(PointToClient(Cursor.Position)); if (!GearButtonRect().Contains(cp4)) _gearHold = false; }
+            if (_shootHold) { Point cp5 = ToLogicalPt(PointToClient(Cursor.Position)); if (!ShootButtonRect().Contains(cp5)) _shootHold = false; }
+
             if (_holdIndex >= 0 && _maybeDrag && _enlarged < 0)
                 if ((DateTime.Now - _holdStart).TotalMilliseconds > 300) { _enlarged = _holdIndex; need = true; }
 
@@ -2486,7 +2511,10 @@ namespace SnapWheel
                 float dur = Math.Max(0.10f, _introDur * span);
                 float t = (float)((DateTime.Now - _introAt).TotalSeconds / dur);
                 if (t >= 1f) { t = 1f; _intro = false; }
-                float e = t * t * (3f - 2f * t);                   // smoothstep
+                // 用"开头就冲出去"的曲线：smoothstep 在前 100ms 几乎不动，
+                // 会让人觉得"点了一下卡一会才动"。easeOutCubic 一上来就有明显位移。
+                float u = 1f - t;
+                float e = 1f - u * u * u;
                 _introT = _ringFrom + (_ringTo - _ringFrom) * e;
                 if (!_intro)
                 {
@@ -2494,6 +2522,26 @@ namespace SnapWheel
                     if (_collapsing) { _collapsed = true; _collapsing = false; }   // 收完了：进入收起态
                 }
                 need = true;
+            }
+
+            // 圆钮按下反馈 + 延迟执行
+            {
+                float cd = (_closePend || _closeHold) ? 1f : 0f;
+                float gd = (_gearPend || _gearHold) ? 1f : 0f;
+                float sd = (_shootPend || _shootHold) ? 1f : 0f;
+                if (Math.Abs(_closeDown - cd) > 0.01f) { _closeDown += (cd - _closeDown) * 0.35f; need = true; }
+                if (Math.Abs(_gearDown - gd) > 0.01f) { _gearDown += (gd - _gearDown) * 0.35f; need = true; }
+                if (Math.Abs(_shootDown - sd) > 0.01f) { _shootDown += (sd - _shootDown) * 0.35f; need = true; }
+                if (_pendingBtn.Length > 0 && (DateTime.Now - _pendingAt).TotalMilliseconds > 110)
+                {
+                    string b = _pendingBtn; _pendingBtn = "";
+                    _closePend = _gearPend = _shootPend = false;
+                    if (b == "close") DismissWheel();
+                    else if (b == "gear") { if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); }
+                    else if (b == "shoot") { if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty); }
+                    need = true;
+                }
+                if (_closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f) need = true;
             }
 
             // 把手悬停反馈
@@ -2523,7 +2571,11 @@ namespace SnapWheel
                     if (_hover < 0 && !_menuOpen && _enlarged < 0 && !_dropActive && _dragOutItem == null && _deletingItem == null)
                     {
                         bool hoverAny = _gearHover || _closeHover || _shootHover || _keyHover || _nameHover;
-                        if (!hoverAny && !_keyDown)
+                        // 把手悬停/按钮按下时绝不重抓：抓屏+模糊要几十毫秒，会让人觉得"点了没反应"
+                        bool busy = _nubHov > 0.01f || _nubOutHover || _nubInHover
+                                    || _closePend || _gearPend || _shootPend
+                                    || _closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f;
+                        if (!hoverAny && !_keyDown && !busy)
                         {
                             CaptureBackdrop();
                             _rendered = false;
@@ -3499,7 +3551,8 @@ namespace SnapWheel
 
             // (the big preview is now just a larger card scale - no separate overlay, so no desync)
 
-            Rectangle cbr = CloseButtonRect();
+            // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
+            Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
             Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
             PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
@@ -3514,10 +3567,11 @@ namespace SnapWheel
                 Gfx.NeuCircle(g, cbr0, Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f))),
                     Gfx.A(acc, (int)(200 * ab0 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab0 / 255f), (int)((StyleNeu() ? 60 : 0) * ab0 / 255f));
-                using (Pen cbp = new Pen(Color.FromArgb((int)(238 * ab0 / 255f), 255, 255, 255), 1.8f))
+                using (Pen cbp = new Pen(Color.FromArgb((int)((238 + 17 * _closeDown) * ab0 / 255f), 255, 255, 255), 1.8f + 1.4f * _closeDown))
                 {
-                    g.DrawLine(cbp, cbr0.Left + 10, cbr0.Top + 10, cbr0.Right - 10, cbr0.Bottom - 10);
-                    g.DrawLine(cbp, cbr0.Right - 10, cbr0.Top + 10, cbr0.Left + 10, cbr0.Bottom - 10);
+                    float pad = 10 + 2f * _closeDown;
+                    g.DrawLine(cbp, cbr0.Left + pad, cbr0.Top + pad, cbr0.Right - pad, cbr0.Bottom - pad);
+                    g.DrawLine(cbp, cbr0.Right - pad, cbr0.Top + pad, cbr0.Left + pad, cbr0.Bottom - pad);
                 }
                 g.Transform = m0;
             }
@@ -3527,7 +3581,7 @@ namespace SnapWheel
             {
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
-                Rectangle gbr = GearButtonRect();
+                Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
                 Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 206 : 172) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
@@ -3687,7 +3741,7 @@ namespace SnapWheel
                     }
                 }
             }
-            Rectangle sbr = ShootButtonRect();
+            Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
             if (pb2 > 0.01f)
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
@@ -4186,12 +4240,14 @@ namespace SnapWheel
             }
             if (e.Button == MouseButtons.Left && ShootButtonRect().Contains(e.Location))
             {
-                if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty);
+                _shootPend = true; _shootHold = true; _pendingBtn = "shoot"; _pendingAt = DateTime.Now;
+                Render();
                 return;
             }
             if (e.Button == MouseButtons.Left && GearButtonRect().Contains(e.Location))
             {
-                if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty);
+                _gearPend = true; _gearHold = true; _pendingBtn = "gear"; _pendingAt = DateTime.Now;
+                Render();
                 return;
             }
             // 贴边把手：拉出 / 收起
@@ -4199,7 +4255,12 @@ namespace SnapWheel
             if (e.Button == MouseButtons.Left && _collapsed && NubOutRect().Contains(e.Location)) { ExpandWheel(); return; }
             if (e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location)) { CollapseWheel(); return; }
 
-            if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location)) { DismissWheel(); return; }
+            if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location))
+            {
+                _closePend = true; _closeHold = true; _pendingBtn = "close"; _pendingAt = DateTime.Now;
+                Render();
+                return;
+            }
             int hh = HitTest(e.Location);
             if (e.Button == MouseButtons.Left && hh >= 0)
             {
@@ -4243,6 +4304,7 @@ namespace SnapWheel
                 Render();
                 return;
             }
+            _closeHold = _gearHold = _shootHold = false;
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             if (_enlarged >= 0) { _enlarged = -1; Render(); }
         }
@@ -5373,8 +5435,14 @@ namespace SnapWheel
 
         void CaptureRegion()
         {
-            bool wasWheelVisible = _wheel.Visible;
-            if (wasWheelVisible) _wheel.Hide();      // don't let the topmost wheel sit over the capture overlay
+            bool wasExpanded = _wheel.Visible && _wheel.IsExpanded;
+            if (wasExpanded && _settings.CollapseMode)
+            {
+                // 先播收起动画，收完了再弹截图浮层（有过程感，也不挡浮层）
+                _wheel.CollapseWheel(true);
+                for (int i = 0; i < 90 && !_wheel.IsCollapsed; i++) { Application.DoEvents(); System.Threading.Thread.Sleep(8); }
+            }
+            else if (_wheel.Visible) _wheel.Hide();   // don't let the topmost wheel sit over the capture overlay
 
             Rectangle vs = SystemInformation.VirtualScreen;
             Bitmap shot = new Bitmap(vs.Width, vs.Height);
@@ -5383,7 +5451,7 @@ namespace SnapWheel
                 using (Graphics g = Graphics.FromImage(shot))
                     g.CopyFromScreen(vs.Left, vs.Top, 0, 0, vs.Size, CopyPixelOperation.SourceCopy);
             }
-            catch { shot.Dispose(); if (wasWheelVisible) { if (_wheel.IsCollapsed) _wheel.StartCollapsed(); else _wheel.ShowWheel(); } return; }
+            catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
 
             OverlayForm ov = new OverlayForm(vs, shot);
             ov.ShowDialog();
@@ -5392,13 +5460,13 @@ namespace SnapWheel
                 Store st = _wheels.ActiveStore;
                 StoreItem ni = st.Add(ov.Result);
                 _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
-                if (_wheel.IsCollapsed) _wheel.ExpandWheel();   // 收起态时截完自动拉出来看新图
+                // 截完播拉出动画（收起态拉出来最自然；原来是展开的就直接显示）
+                if (_settings.CollapseMode) _wheel.ExpandWheel();
                 else _wheel.ShowWheel();
             }
-            else if (wasWheelVisible)
+            else if (wasExpanded)
             {
-                if (_wheel.IsCollapsed) _wheel.StartCollapsed();
-                else _wheel.ShowWheel();
+                _wheel.ExpandWheel();            // 取消了截图，也把轮盘拉回来
             }
         }
 

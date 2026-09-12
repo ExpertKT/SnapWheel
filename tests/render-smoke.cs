@@ -456,6 +456,48 @@ namespace SnapWheel
                     thin ? "OK  " : "FAIL", opaqueCollapsed, opaqueExpanded);
                 if (thin) pass++; else fail++;
 
+                // ---- 不同分辨率 / 界面缩放下的适配 ----
+                {
+                    int[] scales = { 80, 100, 125, 150, 200, 250 };
+                    bool allOk = true;
+                    MethodInfo nrOut = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo nrIn = wt.GetMethod("NubInRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo dra = wt.GetMethod("DrawnRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    int save = s.UiScale;
+                    foreach (int sc in scales)
+                    {
+                        s.UiScale = sc;
+                        f.ApplyLayout();
+                        Application.DoEvents();
+                        RectangleF o = (RectangleF)nrOut.Invoke(f, null);
+                        RectangleF n2 = (RectangleF)nrIn.Invoke(f, null);
+                        float lw = f.Width / (float)1.0, lh = f.Height / (float)1.0;
+                        SizeF ls = (SizeF)wt.GetMethod("LogicalSize", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(f, null);
+                        // 1) 拉出把手贴左边、收起把手贴下边
+                        bool touchL = o.X <= 0.5f;
+                        bool touchB = (n2.Y + n2.Height) >= ls.Height - 0.5f;
+                        // 2) 都在窗口内
+                        bool inWin = o.X >= -0.5f && o.Y >= -0.5f && o.Y + o.Height <= ls.Height + 0.5f
+                                     && n2.X >= -0.5f && n2.X + n2.Width <= ls.Width + 0.5f && n2.Y + n2.Height <= ls.Height + 0.5f;
+                        // 3) 不压到最边上的卡片
+                        bool noOverlap = true;
+                        for (int k = 0; k < st.Items.Count; k++)
+                        {
+                            RectangleF cr = (RectangleF)dra.Invoke(f, new object[] { k });
+                            if (cr.Width <= 0) continue;
+                            if (cr.IntersectsWith(o) || cr.IntersectsWith(n2)) { noOverlap = false; break; }
+                        }
+                        bool okOne = touchL && touchB && inWin && noOverlap;
+                        Console.WriteLine("    {0} 缩放 {1,3}%  窗口 {2}x{3}  贴边 L={4} B={5}  窗口内={6}  不压卡片={7}",
+                            okOne ? "OK " : "FAIL", sc, f.Width, f.Height, touchL, touchB, inWin, noOverlap);
+                        if (okOne) pass++; else { fail++; allOk = false; }
+                    }
+                    s.UiScale = save;
+                    f.ApplyLayout();
+                    Application.DoEvents();
+                    Console.WriteLine("  {0} 各种分辨率 / 尺寸缩放下把手位置都合规", allOk ? "OK  " : "FAIL");
+                }
+
                 RectangleF nr2 = (RectangleF)nubIn.Invoke(f, null);
                 bool inEdge = (nr2.Y + nr2.Height) >= f.Height - 1.5f;     // 贴着屏幕下边
                 Point nc2 = new Point((int)(nr2.X + nr2.Width / 2), (int)(nr2.Y + nr2.Height / 2));
