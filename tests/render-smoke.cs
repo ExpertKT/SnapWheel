@@ -406,6 +406,130 @@ namespace SnapWheel
                 F(f, "_show", 1f);
             }
 
+            Console.WriteLine();
+            Console.WriteLine("--- 收起态（贴边小把手）---");
+            {
+                Type wt = typeof(WheelForm);
+                MethodInfo oc = wt.GetMethod("OverContent", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo nubOut = wt.GetMethod("NubOutRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo nubIn = wt.GetMethod("NubInRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo keyR2 = wt.GetMethod("KeyRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo dw2 = wt.GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                f.CollapseWheel();                       // 走一次真实的收起动画
+                for (int i = 0; i < 40 && !f.IsCollapsed; i++) { Application.DoEvents(); Thread.Sleep(60); }
+                bool collapsed = f.IsCollapsed;
+                Console.WriteLine("  {0} 收起动画跑完进入收起态（IsCollapsed={1}）", collapsed ? "OK  " : "FAIL", collapsed);
+                if (collapsed) pass++; else fail++;
+
+                RectangleF nr = (RectangleF)nubOut.Invoke(f, null);
+                bool atEdge = (nr.X <= 0.5f) && nr.Width > 4 && nr.Height > 20;      // 贴着屏幕左边
+                Point nubC = new Point((int)(nr.X + nr.Width / 2), (int)(nr.Y + nr.Height / 2));
+                bool nubClickable = (bool)oc.Invoke(f, new object[] { nubC });
+                Console.WriteLine("  {0} 拉出把手贴左边={1} 可点={2}",
+                    (atEdge && nubClickable) ? "OK  " : "FAIL", atEdge, nubClickable);
+                if (atEdge && nubClickable) pass++; else fail++;
+
+                Rectangle kr = (Rectangle)keyR2.Invoke(f, null);
+                Point keyC = new Point(kr.X + kr.Width / 2, kr.Y + kr.Height / 2);
+                bool keyOver = (bool)oc.Invoke(f, new object[] { keyC });
+                Console.WriteLine("  {0} 收起时环上区域不可点（点上去穿透给底下的窗口）", keyOver ? "FAIL" : "OK  ");
+                if (!keyOver) pass++; else fail++;
+
+                int opaqueCollapsed = 0, opaqueExpanded = 0;
+                using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b)) dw2.Invoke(f, new object[] { g, f.Width, f.Height });
+                    for (int y = 0; y < b.Height; y += 4) for (int x = 0; x < b.Width; x += 4) if (b.GetPixel(x, y).A > 60) opaqueCollapsed++;
+                }
+                f.ExpandWheel();
+                F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                Application.DoEvents();
+                using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b)) dw2.Invoke(f, new object[] { g, f.Width, f.Height });
+                    for (int y = 0; y < b.Height; y += 4) for (int x = 0; x < b.Width; x += 4) if (b.GetPixel(x, y).A > 60) opaqueExpanded++;
+                }
+                // 收起时可见面积应该远小于展开（NO_KEY 变体没有万能键盘，整体像素本来就少）
+                bool thin = opaqueCollapsed > 0 && opaqueCollapsed * 5 < opaqueExpanded * 2;
+                Console.WriteLine("  {0} 收起时画面里只剩把手（采样点 收起={1} vs 展开={2}）",
+                    thin ? "OK  " : "FAIL", opaqueCollapsed, opaqueExpanded);
+                if (thin) pass++; else fail++;
+
+                RectangleF nr2 = (RectangleF)nubIn.Invoke(f, null);
+                bool inEdge = (nr2.Y + nr2.Height) >= f.Height - 1.5f;     // 贴着屏幕下边
+                Point nc2 = new Point((int)(nr2.X + nr2.Width / 2), (int)(nr2.Y + nr2.Height / 2));
+                bool inClickable = (bool)oc.Invoke(f, new object[] { nc2 });
+                Console.WriteLine("  {0} 展开后出现「收起」把手，贴下边={1} 可点={2}",
+                    (inEdge && inClickable) ? "OK  " : "FAIL", inEdge, inClickable);
+                if (inEdge && inClickable) pass++; else fail++;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("--- 剪贴板自动收纳 ---");
+            {
+                string oldText = null; Bitmap oldImg = null;
+                try
+                {
+                    if (Clipboard.ContainsImage()) oldImg = new Bitmap(Clipboard.GetImage());
+                    else if (Clipboard.ContainsText()) oldText = Clipboard.GetText();
+                }
+                catch { }
+                Type wt = typeof(WheelForm);
+                MethodInfo occ = wt.GetMethod("OnClipboardChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+                FieldInfo selfAt = wt.GetField("_selfClipboardAt", BindingFlags.NonPublic | BindingFlags.Instance);
+                int baseCount = st.Items.Count;
+                bool on = s.ClipboardImport;
+
+                s.ClipboardImport = true;
+                selfAt.SetValue(f, DateTime.MinValue);
+                using (Bitmap b = new Bitmap(320, 200, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b)) { g.Clear(Color.CornflowerBlue); g.FillEllipse(Brushes.Orange, 20, 20, 90, 90); }
+                    Clipboard.SetImage(b);
+                }
+                Application.DoEvents(); Thread.Sleep(150);
+                occ.Invoke(f, null);
+                int after1 = st.Items.Count;
+                selfAt.SetValue(f, DateTime.MinValue);
+                occ.Invoke(f, null);                 // 同一张图再来一次：指纹应该挡住
+                int after2 = st.Items.Count;
+                bool dedupOk = (after1 == baseCount + 1) && (after2 == after1);
+                Console.WriteLine("  {0} 剪贴板图自动收进轮盘（{1} -> {2}），同一张不重收（{3}）",
+                    dedupOk ? "OK  " : "FAIL", baseCount, after1, after2);
+                if (dedupOk) pass++; else fail++;
+
+                using (Bitmap b2 = new Bitmap(200, 200, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b2)) g.Clear(Color.SeaGreen);
+                    Clipboard.SetImage(b2);
+                }
+                selfAt.SetValue(f, DateTime.Now);    // 模拟"是我们自己写进去的"
+                Application.DoEvents(); Thread.Sleep(150);
+                occ.Invoke(f, null);
+                bool selfOk = st.Items.Count == after2;
+                Console.WriteLine("  {0} 自己写进剪贴板的图不会回环再收一遍", selfOk ? "OK  " : "FAIL");
+                if (selfOk) pass++; else fail++;
+
+                s.ClipboardImport = false;
+                selfAt.SetValue(f, DateTime.MinValue);
+                occ.Invoke(f, null);
+                bool offOk = st.Items.Count == after2;
+                Console.WriteLine("  {0} 关掉开关后不再自动收纳", offOk ? "OK  " : "FAIL");
+                if (offOk) pass++; else fail++;
+                s.ClipboardImport = on;
+
+                try
+                {
+                    if (oldImg != null) Clipboard.SetImage(oldImg);
+                    else if (oldText != null) Clipboard.SetText(oldText);
+                    else Clipboard.Clear();
+                }
+                catch { }
+                if (oldImg != null) oldImg.Dispose();
+                while (st.Items.Count > baseCount) st.Items.RemoveAt(st.Items.Count - 1);
+            }
+
             try { f.HideWheel(); } catch { }
             try { f.Close(); f.Dispose(); } catch { }
 

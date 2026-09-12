@@ -157,6 +157,57 @@ namespace SnapWheel
             add(160, 220, Color.FromArgb(170, 110, 200));
             add(300, 180, Color.FromArgb(200, 90, 110));
 
+            Console.WriteLine("收起态 / 把手:");
+            {
+                WheelForm cf = new WheelForm(mgr, s);
+                cf.StartCollapsed();
+                Pump(300);
+                using (Bitmap b = new Bitmap(cf.Width, cf.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b))
+                        typeof(WheelForm).GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance)
+                            .Invoke(cf, new object[] { g, cf.Width, cf.Height });
+                    b.Save(Path.Combine(outDir, "collapsed.png"), ImageFormat.Png);
+                }
+                Console.WriteLine("  写出 collapsed.png  ({0}x{1})  收起={2}", cf.Width, cf.Height, cf.IsCollapsed);
+
+                // 收起动画中途（看环在缩回）
+                cf.ExpandWheel();
+                Pump(1200);
+                F(cf, "_collapsing", true);
+                F(cf, "_intro", true);
+                F(cf, "_introT", 0.45f);
+                F(cf, "_introDur", 1.6f);
+                F(cf, "_introAt", DateTime.Now);
+                FakeBackdrop(cf);
+                using (Bitmap b = new Bitmap(cf.Width, cf.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b))
+                        typeof(WheelForm).GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance)
+                            .Invoke(cf, new object[] { g, cf.Width, cf.Height });
+                    b.Save(Path.Combine(outDir, "collapsing.png"), ImageFormat.Png);
+                }
+                Console.WriteLine("  写出 collapsing.png");
+
+                // 展开态（看在另一条边上出现的"收起"把手）
+                F(cf, "_collapsing", false);
+                F(cf, "_intro", false);
+                F(cf, "_introT", 1f);
+                F(cf, "_collapsed", false);
+                F(cf, "_show", 1f);
+                FakeBackdrop(cf);
+                Pump(120);
+                using (Bitmap b = new Bitmap(cf.Width, cf.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(b))
+                        typeof(WheelForm).GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance)
+                            .Invoke(cf, new object[] { g, cf.Width, cf.Height });
+                    b.Save(Path.Combine(outDir, "expanded_nub.png"), ImageFormat.Png);
+                }
+                Console.WriteLine("  写出 expanded_nub.png");
+                try { cf.Close(); cf.Dispose(); } catch { }
+            }
+
             Console.WriteLine("轮盘:");
             ShotWheel(mgr, s, Path.Combine(outDir, "wheel_bl.png"), null);
 
