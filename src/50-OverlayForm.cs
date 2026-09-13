@@ -454,8 +454,16 @@ namespace SnapWheel
             }
             PlaceToolbar();
             PaintToolbar(g, 255);
-            PaintAnnotCoach(g);
+            PaintShapeSelection(g);
+            PaintIntroPanel(g);
             DrawChips(g);
+        }
+
+        // 滚轮：选中了标注图元就调它的大小（文字改字号），否则不动
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            if (AnnotWheel(e)) return;
+            base.OnMouseWheel(e);
         }
 
         // ---------- 交互 ----------
@@ -712,6 +720,7 @@ namespace SnapWheel
                 if (e.KeyCode == Keys.Escape) { EndText(false); e.SuppressKeyPress = true; return; }
                 return;                       // 其它键交给输入框
             }
+            if (_annotHint) { _annotHint = false; Invalidate(); }   // 按任意键 = 开始用（键本身照常生效）
             if (AnnotKey(e)) return;
             if (e.KeyCode == Keys.Escape) Cancel();
             else if (e.KeyCode == Keys.Enter && _hasSel) Confirm();

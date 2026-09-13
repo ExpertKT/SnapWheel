@@ -203,6 +203,33 @@ namespace SnapWheel
             return n;
         }
 
+        // 读任意对象的字段（Shape 是私有嵌套类，字段是 public）
+        static object Field2(object o, string name)
+        {
+            FieldInfo fi = o.GetType().GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (fi == null) throw new Exception("找不到字段 " + name);
+            return fi.GetValue(o);
+        }
+
+        // 画一行字然后确认，数图里的红色像素（用来验证字号变化真的画出来了）
+        static int TextRedPixels(float size)
+        {
+            Bitmap shot = Solid(400, 300, Color.White);
+            OverlayForm o = MakeOverlay(shot, "Text");
+            Call(o, "SetNextTextSize", size);
+            Mouse(o, "OnMouseDown", 120, 130);
+            TextBox tb = null;
+            foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+            if (tb == null) { o.Dispose(); return -1; }
+            tb.Text = "重点";
+            Call(o, "EndText", true);
+            Call(o, "Confirm");
+            Bitmap res = o.Result;
+            int n = RedPixels(res, new Rectangle(0, 0, res.Width, res.Height));
+            o.Dispose();
+            return n;
+        }
+
         [STAThread]
         public static void Main()
         {
@@ -628,6 +655,122 @@ namespace SnapWheel
                 if (!b.AnnotHintDone || !b.PinHintDone) return "提示开关没存住";
                 if (b.GuideSeenVersion != "9.9.9") return "引导版本没存住：" + b.GuideSeenVersion;
                 if (b.TextBg) return "文字底开关没存住";
+                return null;
+            });
+
+            // ================= 19. 文字画完能拖动 =================
+            Run("文字画完自动选中：能拖着挪到别的位置", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Text");
+                Call(o, "SetNextTextSize", 20f);
+                Mouse(o, "OnMouseDown", 150, 140);
+                TextBox tb = null;
+                foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+                if (tb == null) { o.Dispose(); return "输入框没出来"; }
+                tb.Text = "重点";
+                Call(o, "EndText", true);
+
+                object sel = G(o, "_sel");
+                if (sel == null) { o.Dispose(); return "画完没有自动选中（那就拖不动）"; }
+                PointF before = (PointF)Field2(sel, "A");
+
+                Mouse(o, "OnMouseDown", (int)before.X + 6, (int)before.Y + 8);
+                Mouse(o, "OnMouseMove", (int)before.X + 46, (int)before.Y + 33);
+                Mouse(o, "OnMouseUp", (int)before.X + 46, (int)before.Y + 33);
+                PointF after = (PointF)Field2(sel, "A");
+                o.Dispose();
+                if (Math.Abs(after.X - before.X - 40) > 2 || Math.Abs(after.Y - before.Y - 25) > 2)
+                    return "没拖到位：（" + before.X + "," + before.Y + "）->（" + after.X + "," + after.Y + "）";
+                return null;
+            });
+
+            // ================= 20. 字号：滚轮和 A+/A- 按钮 =================
+            Run("文字改大小：滚轮和 A+ 按钮都能改，画出来真的更大", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Text");
+                Call(o, "SetNextTextSize", 20f);
+                Mouse(o, "OnMouseDown", 150, 140);
+                TextBox tb = null;
+                foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+                if (tb == null) { o.Dispose(); return "输入框没出来"; }
+                tb.Text = "重点";
+                Call(o, "EndText", true);
+
+                object sel = G(o, "_sel");
+                if (sel == null) { o.Dispose(); return "画完没有自动选中"; }
+                float s0 = (float)Field2(sel, "Size");
+
+                Call(o, "AnnotWheel", new MouseEventArgs(MouseButtons.None, 0, 0, 0, 120));   // 滚轮往上
+                float s1 = (float)Field2(sel, "Size");
+                if (!(s1 > s0)) { o.Dispose(); return "滚轮没把字号改大（" + s0 + " -> " + s1 + "）"; }
+
+                Call(o, "PlaceToolbar");
+                Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
+                if (btns.Length < 12) { o.Dispose(); return "工具条按钮数不对：" + btns.Length; }
+                Rectangle plus = btns[11];                    // A+（0-4 工具、5-8 颜色、9 文字底、10 A-、11 A+、12 撤销）
+                Mouse(o, "OnMouseDown", plus.X + plus.Width / 2, plus.Y + plus.Height / 2);
+                float s2 = (float)Field2(sel, "Size");
+                o.Dispose();
+                if (!(s2 > s1)) return "A+ 按钮没生效（" + s1 + " -> " + s2 + "）";
+
+                int small = TextRedPixels(20f);
+                int big = TextRedPixels(40f);
+                if (small < 0 || big < 0) return "输入框没建起来";
+                if (!(big > small * 1.5)) return "放大后图里的字没明显变大（红像素 " + small + " -> " + big + "）";
+                return null;
+            });
+
+            // ================= 21. 选中后 Del 删除 =================
+            Run("选中文字按 Del：删掉这一个，不影响别的", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Rect");
+                Mouse(o, "OnMouseDown", 120, 120); Mouse(o, "OnMouseMove", 180, 170); Mouse(o, "OnMouseUp", 180, 170);
+                Mouse(o, "OnMouseDown", 210, 120); Mouse(o, "OnMouseMove", 280, 190); Mouse(o, "OnMouseUp", 280, 190);
+                if (ShapeCount(o) != 2) { o.Dispose(); return "两个方框没画上（" + ShapeCount(o) + "）"; }
+
+                // 选择工具下点中第二个方框
+                F(o, "_tool", AnnotKindValue("Select"));
+                Mouse(o, "OnMouseDown", 240, 150);
+                if (G(o, "_sel") == null) { o.Dispose(); return "点方框没有选中"; }
+                Mouse(o, "OnMouseUp", 240, 150);
+
+                Call(o, "AnnotKey", new KeyEventArgs(Keys.Delete));
+                int left = ShapeCount(o);
+                o.Dispose();
+                if (left != 1) return "Del 之后剩 " + left + " 个（应为 1）";
+                return null;
+            });
+
+            // ================= 22. 首次进截图界面的教程面板 =================
+            Run("第一次进截图界面：教程面板真的画在画面中间，点一下才没", delegate
+            {
+                int W = 900, H = 620;
+                Bitmap shot = Solid(W, H, Color.White);
+                OverlayForm o = new OverlayForm(new Rectangle(0, 0, W, H), shot);
+                F(o, "_hasSel", true);
+                F(o, "_c", new PointF(450f, 300f));
+                F(o, "_sz", new SizeF(560f, 340f));
+                F(o, "_ang", 0f);
+                F(o, "_annotHint", true);
+                Call(o, "PlaceToolbar");
+
+                Bitmap b = new Bitmap(W, H, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(b))
+                    Call(o, "PaintOverlay", new PaintEventArgs(g, new Rectangle(0, 0, W, H)));
+                Rectangle panel = (Rectangle)G(o, "_introRect");
+                if (panel.Width < 150 || panel.Height < 120) { b.Dispose(); o.Dispose(); return "教程面板没画出来（rect=" + panel + "）"; }
+                Color c = b.GetPixel(panel.Left + panel.Width / 2, panel.Top + panel.Height / 2);
+                b.Dispose();
+                if (c.R > 120 && c.G > 120 && c.B > 120) { o.Dispose(); return "面板位置还是浅色底，看不出画了面板"; }
+                if (panel.Left < 0 || panel.Top < 0 || panel.Right > W || panel.Bottom > H) { o.Dispose(); return "面板跑到屏幕外了：" + panel; }
+
+                Mouse(o, "OnMouseDown", panel.Left + panel.Width / 2, panel.Top + panel.Height / 2);
+                bool gone = !(bool)G(o, "_annotHint");
+                o.Dispose();
+                if (!gone) return "点了一下教程面板还在";
                 return null;
             });
 
