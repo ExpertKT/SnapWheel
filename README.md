@@ -5,9 +5,9 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.5.0-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.5.1-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-188%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-191%20KB-lightgrey?style=flat-square)
 
 <p align="center">
   <img src="docs/wheel.png" width="330" alt="SnapWheel">
@@ -19,9 +19,21 @@
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 188 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 191 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
-## 这次更新（v0.5.0）：能拿图干的事变多了
+## 这次更新（v0.5.1）：删错了能找回来
+
+| 新功能 | 怎么用 |
+|---|---|
+| **撤销删除（后悔药）** | 删掉 / 一键清空的图不再一去不回：托盘右键 →「**撤销上一次删除**」，最近删掉的那批（一次清空就是整批）立刻放回原盘。**最近 8 次删除**都记得住；第一次删图时轮盘上会当场告诉你这件事 |
+
+刻意**不做"回收站"**：不建目录、不写索引、不加管理窗口。图本来就还在内存里，多留一份引用就能立刻撤回，
+退出程序即清空 —— 不会像回收站那样越堆越大、也不用你定期去清理它。
+
+顺手修掉一个一直在偷偷拖慢程序的老问题：**窗口关掉后动画定时器没停**（15ms 的定时器还在后台空转，
+还在对着已经关掉的窗口重绘、重抓玻璃背景）。同一个缺陷让行为测试套件从 **331.7 秒降到 8.7 秒**。
+
+### 上一个版本 v0.5.0：能拿图干的事变多了
 
 <p align="center">
   <img src="docs/annotate.png" width="640" alt="截图标注">
@@ -59,6 +71,7 @@
 - **取字（OCR）**：浮层工具条上的「字」（`O`）拖框圈住文字就能认出来并复制；窗口里能一键翻译成中文/英文；托盘也能识别剪贴板里的图。用系统自带引擎、不打包模型
 - **轮盘交互**：滚轮翻图、按住缩略图看大图（倍数可调）、拖出去用、从外部拖回来、拖放时整条环变绿提示
 - **贴图到屏幕（图钉）**：缩略图上按中键，把图钉在屏幕上对照看；滚轮缩放、拖动挪位置、双击或 `Esc` 关掉
+- **撤销删除**：删掉 / 一键清空的图能找回 —— 托盘右键「撤销上一次删除」（最近 8 次都记得住），第一次删图时轮盘上会当场说明
 - **收起状态（默认关）**：打开后不用时会缩成屏幕边上一个**小把手**（像贴边小球），点它用彩虹动画拉出来。**但开机一律是展开的** —— 不会让人一开机只看到一小条、以为没启动
 - **剪贴板自动收纳**：任何地方复制一张图（截图工具 / 网页右键 / 微信），自动滑进轮盘，不用手动拖
 - **毛玻璃不过期**：轮盘挂着时后台每 3.5 秒重抓一次背景（在后台线程做，不卡动画），玻璃里始终是当前桌面；而且轮盘**不会出现在你的截图里**
@@ -86,11 +99,11 @@
 
 ### 该下哪个？两条产品线
 
-同一份源码用编译开关产出两条线，功能同步推进（当前：v0.5.0 ↔ v0.2.20）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.5.1 ↔ v0.2.21）：
 
 | 你想要的 | 下这个 | 区别 |
 |---|---|---|
-| 长按**万能键**切 Wheel / 新建 / 删除 | **v0.4.x 完整版** ⭐ 推荐 | 多一个摇杆圆盘交互 |
+| 长按**万能键**切 Wheel / 新建 / 删除 | **v0.5.x 完整版** ⭐ 推荐 | 多一个摇杆圆盘交互 |
 | 不想有那个圆盘，只要多 Wheel + 缩放/锁定 | **v0.2.x 无万能键版** | 其余功能完全一样 |
 
 到 [Releases](https://github.com/ExpertKT/SnapWheel/releases) 选版本下载（完整版是 Latest）；
@@ -112,8 +125,8 @@
 ```
 build\SnapWheel.exe                 完整版（含万能键）
 build\SnapWheel-nokey.exe           无万能键版
-build\SnapWheel-v0.5.0-full.zip     完整版分发包
-build\SnapWheel-v0.2.20-nokey.zip   无万能键版分发包
+build\SnapWheel-v0.5.1-full.zip     完整版分发包
+build\SnapWheel-v0.2.21-nokey.zip   无万能键版分发包
 ```
 
 <details>
@@ -222,6 +235,7 @@ src/                    源码（按类型分文件，编号 = 阅读顺序）
   10-Native.cs 15-Gfx.cs  Win32 声明 / 绘制与毛玻璃工具
   20-ImageIO.cs           图片格式解析、存盘
   25-Store.cs 30-Wheel.cs 图片容器 / 轮盘与多 Wheel 管理
+  27-Undo.cs              撤销删除（后悔药：只留内存引用，退出即清空）
   35-Settings.cs          设置读写 + 热键 + 开机自启 + 配置迁移
   40-RoundButton.cs       自绘按钮
   50-OverlayForm.cs       截图框选浮层 + 拖拽预览 + 分辨率/角度面板
@@ -247,7 +261,7 @@ tests/                  10 套可复跑的测试与工具（build.ps1 -Test 自�
   resize-geometry-test.cs   缩放几何仿真（角度 × 比例 × 四角 × 摆位）
   io-test.cs                图片格式解析 / 导入落盘
   render-smoke.cs           绘制状态矩阵 + 风格组合 + DPI 缩放 + 淡出（两个变体各跑一遍）
-  behavior-test.cs          行为/持久化（删除是否落盘、连点删除、设置后轮盘是否还在、万能键动作是否真执行）
+  behavior-test.cs          行为/持久化 37 项（删除是否落盘、连点删除、设置后轮盘是否还在、万能键动作是否真执行、撤销删除、取字准确率…）
   drop-test.cs              真实 OLE 拖放 + 处理器级校验（会动鼠标，需手动跑）
   exclude-test.cs           极端比例 / 排除区域判定
   probe-test.cs             窗口命中测试探针
@@ -256,7 +270,7 @@ tests/                  10 套可复跑的测试与工具（build.ps1 -Test 自�
   promo-shot.cs             生成宣传图（合成假桌面，不泄露真实屏幕）
 docs/                   README 用的界面截图
 dist/                  给用户的使用说明
-versions/              43 个历史版本快照（源码 + exe + 图标 + 说明）
+versions/              45 个历史版本快照（源码 + exe + 图标 + 说明）
 CHANGELOG.md           完整更新日志（含两条产品线说明）
 ```
 

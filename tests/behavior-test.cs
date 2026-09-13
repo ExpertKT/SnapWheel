@@ -10,6 +10,7 @@
 // 安全：全程把设置文件和轮盘清单指到临时目录（Settings.OverridePath /
 // WheelManager.OverrideMetaPath），绝不碰用户真实的 %APPDATA%\SnapWheel。
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -46,6 +47,25 @@ namespace SnapWheel
             return m.Invoke(o, args);
         }
 
+        // ---- 每个窗口都登记，测完就释放 ----
+        // 为什么必须这样：轮盘窗口带着"整屏毛玻璃底图"（虚拟屏 3755x1152 ≈ 17MB 一张），
+        // 测试里几十个窗口不释放 → 内存一路涨、GC 一路抖，一条测试能从 0.1 秒拖到 90 秒。
+        // 慢到那种程度会掩盖真正的问题（曾经就是这样误判成"卡死"）。
+        static readonly List<Form> _liveForms = new List<Form>();
+
+        static T Track<T>(T f) where T : Form { _liveForms.Add(f); return f; }
+
+        static WheelForm NewWheel(WheelManager mgr, Settings s) { return Track(new WheelForm(mgr, s)); }
+
+        static void CleanupForms()
+        {
+            for (int i = 0; i < _liveForms.Count; i++)
+            {
+                try { _liveForms[i].Dispose(); } catch { }
+            }
+            _liveForms.Clear();
+        }
+
         static void Check(string what, bool ok, string detail)
         {
             Console.WriteLine("  {0} {1}{2}", ok ? "OK  " : "FAIL", what,
@@ -53,18 +73,36 @@ namespace SnapWheel
             if (ok) pass++; else fail++;
         }
 
+        // 心跳：万一哪条测试卡住（比如某个后台定时器抛异常→WinForms 弹出错框→卡死），
+        // 至少能看出卡在哪一条上，而不是看着半天没有输出。
+        static volatile string currentTest = "(还没开始)";
+        static volatile bool finished = false;
+        static DateTime testStart = DateTime.Now;
+
         static void Run(string what, Func<string> test)
         {
+            // 只跑名字里含 SW_TEST_ONLY 的那几条（调试用，比如只跑"撤销删除"那几条）
+            string only = Environment.GetEnvironmentVariable("SW_TEST_ONLY");
+            if (!string.IsNullOrEmpty(only) && what.IndexOf(only, StringComparison.Ordinal) < 0)
+            {
+                Console.WriteLine("  跳过 {0}", what);
+                return;
+            }
+            currentTest = what;
+            testStart = DateTime.Now;
             try
             {
                 string detail = test();
-                Check(what, detail == null, detail);
+                double sec = (DateTime.Now - testStart).TotalSeconds;
+                // 只有明显慢的才把秒数带出来：整套应该几秒跑完，超过 5 秒就值得看一眼
+                Check(what, detail == null, detail + (sec >= 5.0 ? "  [这条跑了 " + sec.ToString("0.0") + " 秒]" : ""));
             }
             catch (Exception ex)
             {
                 Exception real = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
                 Check(what, false, real.GetType().Name + ": " + real.Message);
             }
+            CleanupForms();     // 不留窗口：否则内存越跑越大，后面每条都变慢
         }
 
         static Bitmap Solid(int w, int h, Color c)
@@ -93,7 +131,7 @@ namespace SnapWheel
             s.SaveToDisk = false;
             s.CollapseMode = startCollapse;
             WheelManager mgr = new WheelManager(s);
-            WheelForm f = new WheelForm(mgr, s);
+            WheelForm f = NewWheel(mgr, s);
             f.ShowWheel();
             Application.DoEvents();
 
@@ -167,7 +205,7 @@ namespace SnapWheel
         // 造一个"选好区、工具已选"的浮层（不显示出来，免得测试时满屏闪一个遮罩）
         static OverlayForm MakeOverlay(Bitmap shot, string tool)
         {
-            OverlayForm o = new OverlayForm(new Rectangle(0, 0, 1920, 1080), shot);
+            OverlayForm o = Track(new OverlayForm(new Rectangle(0, 0, 1920, 1080), shot));
             F(o, "_hasSel", true);
             F(o, "_c", new PointF(200f, 150f));
             F(o, "_sz", new SizeF(200f, 100f));
@@ -234,6 +272,27 @@ namespace SnapWheel
         public static void Main()
         {
             Application.EnableVisualStyles();
+            // 界面线程里的异常默认会弹一个"未处理的异常"模态框 —— 测试里没人去点它，整个套件就永远卡住。
+            // 改成捕获并打印：卡死变成一条 FAIL，还顺带告诉我们是谁抛的。
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object so, ThreadExceptionEventArgs se)
+            {
+                Console.WriteLine("  !! 界面线程抛异常（已拦下，避免弹框卡死）: {0}", se.Exception);
+                fail++;
+            };
+
+            // 卡住超过 20 秒就报一次"现在卡在哪条"，方便定位
+            Thread watchdog = new Thread(delegate()
+            {
+                while (!finished)
+                {
+                    Thread.Sleep(20000);
+                    if (finished) break;
+                    Console.WriteLine("  .. 还在跑：{0}（已 {1:0.0} 秒）", currentTest, (DateTime.Now - testStart).TotalSeconds);
+                }
+            });
+            watchdog.IsBackground = true;
+            watchdog.Start();
 
             tmp = Path.Combine(Path.GetTempPath(), "snapwheel_behavior_" + Guid.NewGuid().ToString("N").Substring(0, 8));
             Directory.CreateDirectory(tmp);
@@ -272,7 +331,7 @@ namespace SnapWheel
                 st.Dir = Path.Combine(tmp, "imgs");
                 Directory.CreateDirectory(st.Dir);
 
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -296,7 +355,7 @@ namespace SnapWheel
                 st.Dir = Path.Combine(tmp, "imgs3");
                 Directory.CreateDirectory(st.Dir);
 
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -319,7 +378,7 @@ namespace SnapWheel
                 st.Dir = Path.Combine(tmp, "imgs4");
                 Directory.CreateDirectory(st.Dir);
 
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -364,7 +423,7 @@ namespace SnapWheel
                 WheelManager mgr = new WheelManager(s);
                 mgr.New();                                  // 两个轮盘，next 才有得换
                 mgr.Active = 0;
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -419,7 +478,7 @@ namespace SnapWheel
                 Settings s = new Settings();
                 s.SaveToDisk = false;
                 WheelManager mgr = new WheelManager(s);
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -451,7 +510,7 @@ namespace SnapWheel
             Run("贴图窗口：尺寸跟图走、缩放夹在 10%~400%、不跑出屏幕、能关掉", delegate
             {
                 Bitmap img = Solid(120, 60, Color.SteelBlue);
-                PinForm p = new PinForm(img, new Point(240, 200));
+                PinForm p = Track(new PinForm(img, new Point(240, 200)));
                 p.Show();
                 Application.DoEvents();
 
@@ -487,7 +546,7 @@ namespace SnapWheel
                 Store st = mgr.ActiveStore;
                 st.SaveToDisk = false;
                 st.Add(Solid(80, 50, Color.Orange));
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -632,7 +691,7 @@ namespace SnapWheel
             Run("贴图：比屏幕还大的图自动先缩小，不糊满整个桌面", delegate
             {
                 Bitmap big = Solid(4000, 2400, Color.SteelBlue);
-                PinForm p = new PinForm(big, new Point(600, 400));
+                PinForm p = Track(new PinForm(big, new Point(600, 400)));
                 p.Show();
                 Application.DoEvents();
                 float z = p.Zoom;
@@ -749,7 +808,7 @@ namespace SnapWheel
             {
                 int W = 900, H = 620;
                 Bitmap shot = Solid(W, H, Color.White);
-                OverlayForm o = new OverlayForm(new Rectangle(0, 0, W, H), shot);
+                OverlayForm o = Track(new OverlayForm(new Rectangle(0, 0, W, H), shot));
                 F(o, "_hasSel", true);
                 F(o, "_c", new PointF(450f, 300f));
                 F(o, "_sz", new SizeF(560f, 340f));
@@ -814,7 +873,7 @@ namespace SnapWheel
             Run("取字按钮：没框选时点它直接返回，不弹窗卡住", delegate
             {
                 Bitmap shot = Solid(400, 300, Color.White);
-                OverlayForm o = new OverlayForm(new Rectangle(0, 0, 400, 300), shot);
+                OverlayForm o = Track(new OverlayForm(new Rectangle(0, 0, 400, 300), shot));
                 F(o, "_hasSel", false);
                 o.DoOcr();
                 Call(o, "PlaceToolbar");
@@ -834,7 +893,7 @@ namespace SnapWheel
                 Store st = mgr.ActiveStore;
                 st.SaveToDisk = false;
                 StoreItem it = st.Add(Solid(80, 50, Color.Orange));
-                WheelForm f = new WheelForm(mgr, s);
+                WheelForm f = NewWheel(mgr, s);
                 f.ShowWheel();
                 Application.DoEvents();
 
@@ -997,8 +1056,143 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 34. 撤销删除（后悔药） =================
+            Run("撤销删除：删掉的图能放回轮盘，文件也重新落盘", delegate
+            {
+                Undo.Clear();
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                st.SaveToDisk = true;
+                st.Dir = Path.Combine(tmp, "undo_imgs1");
+                Directory.CreateDirectory(st.Dir);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel(); Application.DoEvents();
+
+                StoreItem it = st.Add(Solid(60, 40, Color.Orange));
+                string orig = it.FilePath;
+                if (orig == null || !File.Exists(orig)) { f.Dispose(); return "前置条件不成立：发图时没落盘"; }
+
+                f.RemoveItem(it, true);
+                if (st.Items.Count != 0) { f.Dispose(); return "删完轮盘里还有 " + st.Items.Count + " 张"; }
+                if (File.Exists(orig)) { f.Dispose(); return "原文件没删掉（那下次启动又会被扫回来）"; }
+                if (!Undo.CanUndo) { f.Dispose(); return "删完却说没有可撤销的"; }
+
+                string wheel;
+                int n = Undo.UndoLast(mgr, out wheel);
+                int back = st.Items.Count;
+                int w = back > 0 ? st.Items[0].Image.Width : 0;
+                string newPath = back > 0 ? st.Items[0].FilePath : null;
+                bool fileBack = newPath != null && File.Exists(newPath);
+                f.Dispose();
+                if (n != 1) return "撤回了 " + n + " 张（应该 1）";
+                if (back != 1) return "撤回后轮盘里是 " + back + " 张";
+                if (w != 60) return "放回来的图不对（宽 " + w + "，应该 60）";
+                if (!fileBack) return "撤回后文件没重新落盘";
+                if (Undo.CanUndo) return "撤回一次之后栈里还留着东西";
+                return null;
+            });
+
+            Run("撤销删除：连删两张，一次撤一张，两张都能回来", delegate
+            {
+                Undo.Clear();
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel(); Application.DoEvents();
+
+                StoreItem a = st.Add(Solid(70, 50, Color.Red));
+                StoreItem b = st.Add(Solid(30, 30, Color.Blue));
+                f.RemoveItem(a, true);
+                f.RemoveItem(b, true);
+                if (st.Items.Count != 0) { f.Dispose(); return "删完还剩 " + st.Items.Count + " 张"; }
+
+                string wheel;
+                int n1 = Undo.UndoLast(mgr, out wheel);      // 先回来的是后删的那张
+                int afterFirst = st.Items.Count;
+                int w1 = afterFirst > 0 ? st.Items[0].Image.Width : 0;
+                int n2 = Undo.UndoLast(mgr, out wheel);
+                int afterSecond = st.Items.Count;
+                bool canMore = Undo.CanUndo;
+                f.Dispose();
+                if (n1 != 1 || n2 != 1) return "每次应该各撤回 1 张，实际 " + n1 + " / " + n2;
+                if (afterFirst != 1) return "第一次撤回后是 " + afterFirst + " 张";
+                if (w1 != 30) return "第一次撤回来的不对（宽 " + w1 + "，应该是后删的 30）";
+                if (afterSecond != 2) return "第二次撤回后是 " + afterSecond + " 张";
+                if (canMore) return "两次都撤完了还能继续撤";
+                return null;
+            });
+
+            Run("撤销删除：整盘清空也能一次全撤回（张数和内容都对）", delegate
+            {
+                Undo.Clear();
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel(); Application.DoEvents();
+
+                st.Add(Solid(40, 40, Color.Red));
+                st.Add(Solid(50, 50, Color.Green));
+                st.Add(Solid(60, 60, Color.Blue));
+                f.ClearCurrentWheel();
+                if (st.Items.Count != 0) { f.Dispose(); return "清空后还剩 " + st.Items.Count + " 张"; }
+                if (!Undo.CanUndo) { f.Dispose(); return "清空后没有可撤销的"; }
+
+                string wheel;
+                int n = Undo.UndoLast(mgr, out wheel);
+                int back = st.Items.Count;
+                bool has40 = false, has50 = false, has60 = false;
+                for (int i = 0; i < back; i++)
+                {
+                    int w = st.Items[i].Image.Width;
+                    if (w == 40) has40 = true; else if (w == 50) has50 = true; else if (w == 60) has60 = true;
+                }
+                f.Dispose();
+                if (n != 3) return "撤回了 " + n + " 张（应该 3）";
+                if (back != 3) return "撤回后轮盘里是 " + back + " 张";
+                if (!has40 || !has50 || !has60) return "放回来的内容不对（40/50/60 三张要都在）";
+                return null;
+            });
+
+            Run("撤销删除：没删过时撤回是空操作；删太多次只留最近几批", delegate
+            {
+                Undo.Clear();
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel(); Application.DoEvents();
+
+                string wheel;
+                if (Undo.CanUndo) { f.Dispose(); return "刚清空还说能撤销"; }
+                if (Undo.UndoLast(mgr, out wheel) != 0) { f.Dispose(); return "空栈撤回居然返回了东西"; }
+                if (st.Items.Count != 0) { f.Dispose(); return "空撤回把轮盘弄脏了"; }
+
+                // 删 12 次：栈必须有上限，否则删图删得越多，内存里堆得越多
+                for (int i = 0; i < 12; i++)
+                {
+                    StoreItem it = st.Add(Solid(20, 20, Color.Gray));
+                    f.RemoveItem(it, true);
+                }
+                int batches = Undo.BatchCount;
+                int items = Undo.ItemCount;
+                f.Dispose();
+                if (batches > Undo.MaxBatches) return "批次没被裁到上限：留着 " + batches + " 批（上限 " + Undo.MaxBatches + "）";
+                if (batches < 2) return "只留了 " + batches + " 批，裁太狠了";
+                if (items > batches) return "每批张数记错了：" + batches + " 批却有 " + items + " 张";
+                return null;
+            });
+
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
+            finished = true;
 
             try { Directory.Delete(tmp, true); } catch { }
         }

@@ -68,9 +68,13 @@ $curNoKey = $rxNoKey.Groups[2].Value
 # 没给新版本号就沿用当前（等于只重新归档，不改号）
 if ([string]::IsNullOrWhiteSpace($Version)) { $Version = $curFull }
 if ([string]::IsNullOrWhiteSpace($NoKeyVersion)) {
+    # 两条线的对应关系：完整线 0.3.x / 0.4.x / 0.5.x 依次对应无万能键线 0.2.(x) / 0.2.(x+10) / 0.2.(x+20)
+    #   0.3.9 -> 0.2.9    0.4.7 -> 0.2.17    0.5.0 -> 0.2.20    0.5.1 -> 0.2.21
+    # 以前这里是写死的 +10，遇到 0.5.x 就推成 0.2.11（还覆盖了老存档）—— 改成按次版本号算。
     $seg = $Version.Split('.')
+    $minor = [int]$seg[1]
     $fp = [int]$seg[2]
-    $guess = if ([int]$seg[1] -ge 4) { $fp + 10 } else { $fp }   # 0.4.7 -> 0.2.17；0.3.9 -> 0.2.9
+    $guess = $fp + [Math]::Max(0, $minor - 3) * 10
     $NoKeyVersion = "0.2.$guess"
 }
 if ([string]::IsNullOrWhiteSpace($Note)) { $Note = "（未填写说明）" }
