@@ -63,10 +63,6 @@ namespace SnapWheel
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             Padding = new Padding(20, 14, 20, 12);
 
-            // 关键性能：这窗口是一堆 AutoSize 嵌套容器（TableLayoutPanel / FlowLayoutPanel）。
-            // 每 Add 一个控件都会触发一次整棵树的重排，60 多个控件下来是 O(n²) ——
-            // 实测"打开设置要 700ms"就是耗在这儿。整个构造期间先把布局挂起，最后只排一次。
-            SuspendLayout();
             TableLayoutPanel root = new TableLayoutPanel();
             root.ColumnCount = 2;
             root.AutoSize = true;
@@ -87,8 +83,6 @@ namespace SnapWheel
             colR.AutoSize = true;
             colR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             colR.Margin = new Padding(0);
-            colL.SuspendLayout();
-            colR.SuspendLayout();
 
             Label head = new Label();
             head.AutoSize = true;
@@ -575,8 +569,6 @@ namespace SnapWheel
                 MaximumSize = new Size((int)(wa.Width * 0.95), (int)(wa.Height * 0.94));
             }
             catch { }
-            ResumeLayout(false);
-            PerformLayout();
         }
 
         static int CornerIndex(string c)
