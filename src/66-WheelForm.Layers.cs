@@ -73,6 +73,13 @@ namespace SnapWheel
             h = Mix(h, _settings.Corner); h = Mix(h, _settings.Radius);
             h = Mix(h, _settings.ThumbSize); h = Mix(h, _settings.CardRadius);
             h = Mix(h, Left); h = Mix(h, Top);
+            // 悬停/按下的**进度值**也必须进签名：按钮的反馈是"渐变"出来的（_keyHov/_closeDown…），
+            // 只看那几个 bool 的话，过渡期间会一直贴旧层 —— 表现就是"鼠标放上去没反应"。
+            h = Mix(h, (double)_keyHov); h = Mix(h, (double)_keyT);
+            h = Mix(h, (double)_closeDown); h = Mix(h, (double)_gearDown); h = Mix(h, (double)_shootDown);
+            h = Mix(h, (double)_closeHoldP); h = Mix(h, (double)_nubHov);
+            h = Mix(h, (double)_nubAppearT); h = Mix(h, (double)_nubHintT);
+            h = Mix(h, (double)_nubOutDist); h = Mix(h, (double)_nubInDist);
             if (which == 0)
             {
                 h = Mix(h, (double)EffR());

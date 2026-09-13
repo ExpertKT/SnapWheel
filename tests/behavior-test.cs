@@ -1309,6 +1309,32 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 42. 收起动画半路也能展开 =================
+            Run("收起动画走到一半也能立刻展开（半路点把手不该再收一次）", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.CollapseMode = true;
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+
+                f.CollapseWheel(true);
+                for (int i = 0; i < 400 && Convert.ToSingle(G(f, "_introT")) > 0.5f; i++) { Call(f, "AnimTickCore"); Thread.Sleep(4); }
+                float mid = Convert.ToSingle(G(f, "_introT"));
+                if (mid >= 0.45f) { f.Dispose(); return "前置条件不成立：收起动画没走到一半（introT=" + mid.ToString("0.00") + "）"; }
+
+                f.ExpandWheel();          // 相当于"收起到一半时点了把手"
+                for (int i = 0; i < 400 && Convert.ToSingle(G(f, "_introT")) < 0.99f; i++) { Call(f, "AnimTickCore"); Thread.Sleep(4); }
+                float end = Convert.ToSingle(G(f, "_introT"));
+                bool collapsed = f.IsCollapsed;
+                f.Dispose();
+                if (end < 0.99f) return "半路展开没生效：introT 停在中途 " + end.ToString("0.00") + "（点了没反应，动画还在往回缩）";
+                if (collapsed) return "展开完了还是收起态";
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             finished = true;

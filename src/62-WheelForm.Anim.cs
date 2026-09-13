@@ -59,7 +59,10 @@ namespace SnapWheel
 
         public void ExpandWheel(bool fast)
         {
-            if (IsExpanded && Visible) { _lastActive = DateTime.Now; return; }
+            // _collapsing 时 _collapsed 还是 false（收完才置位），所以这里必须把"正在收起"排除掉：
+            // 否则收起动画走到一半时点展开会被当成"已经展开了"直接 return ——
+            // 用户看到的就是"收起后半夜没法立马展开"（点了没反应，动画继续缩回去）。
+            if (IsExpanded && Visible && !_collapsing) { _lastActive = DateTime.Now; return; }
             if (_settings.IntroAnim)
             {
                 StartIntro();
