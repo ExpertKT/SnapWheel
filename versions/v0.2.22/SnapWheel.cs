@@ -8147,11 +8147,20 @@ namespace SnapWheel
             return on ? Plate(key, area, draw) : null;
         }
 
+        // 同一帧最多新建这么多张贴片：滚动时同时冒出来好几张新卡片的话，
+        // 一帧里连做五六张贴片会把这一帧顶到 20ms 以上（尖峰就是这么来的）。
+        // 超出的那些这一帧走"直接画"（画出来一样，只是没那么便宜），下一帧再建。
+        const int MaxPlateGenPerFrame = 2;
+        int _plateGenFrame = -1, _plateGenCount = 0;
+
         Bitmap Plate(string key, RectangleF area, Action<Graphics> draw)
         {
             Bitmap b;
             if (_plates.TryGetValue(key, out b)) return b;
             if (area.Width < 1f || area.Height < 1f) return null;
+            if (_plateGenFrame != _frameNo) { _plateGenFrame = _frameNo; _plateGenCount = 0; }
+            if (_plateGenCount >= MaxPlateGenPerFrame) return null;
+            _plateGenCount++;
             if (_plates.Count > 120)
             {
                 foreach (Bitmap v in _plates.Values) { try { v.Dispose(); } catch { } }
