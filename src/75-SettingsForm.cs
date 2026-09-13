@@ -70,6 +70,7 @@ namespace SnapWheel
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
             _root = root;
+            Controls.Add(root);
 
             // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
             TableLayoutPanel colL = new TableLayoutPanel();
@@ -89,6 +90,10 @@ namespace SnapWheel
             head.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(32, 34, 38);
             head.Margin = new Padding(0, 0, 0, 10);
+            root.Controls.Add(head);
+            root.SetColumnSpan(head, 2);
+            root.Controls.Add(colL, 0, 1);
+            root.Controls.Add(colR, 1, 1);
 
             CheckBox chkDisk = new CheckBox();
             chkDisk.AutoSize = true;
@@ -564,14 +569,6 @@ namespace SnapWheel
                 MaximumSize = new Size((int)(wa.Width * 0.95), (int)(wa.Height * 0.94));
             }
             catch { }
-            // 两栏都建好了，这时候才挂上去：整棵树只排一次
-            root.Controls.Add(head);
-            root.SetColumnSpan(head, 2);
-            root.Controls.Add(colL, 0, 1);
-            root.Controls.Add(colR, 1, 1);
-            Controls.Add(root);
-            PerformLayout();
-
         }
 
         static int CornerIndex(string c)
