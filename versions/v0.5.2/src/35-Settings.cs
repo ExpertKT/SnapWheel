@@ -22,8 +22,17 @@ namespace SnapWheel
         public bool ShowWheelOnStart = true;
         public bool AlwaysOnTop = true;
         public string Hotkey = "Ctrl+Shift+S";
+#if NO_KEY
+        // 无万能键版：内圈不用留摇杆盘的地方，默认整体小一号（用户要求"按钮集中的同时缩小默认轮盘"）
+        public int ThumbSize = 80;      // nominal thumbnail long side
+#else
         public int ThumbSize = 96;      // nominal thumbnail long side
+#endif
+#if NO_KEY
+        public int Radius = 250;        // ring radius from the screen corner（无万能键版：小一号）
+#else
         public int Radius = 300;        // ring radius from the screen corner
+#endif
         public int Slots = 5;           // how many cards visible on the arc
         public int LabelSize = 16;      // index label font size (px)
         public string Corner = "BL";    // BL / BR / TL / TR - which screen corner the ring docks to

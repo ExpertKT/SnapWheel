@@ -73,6 +73,13 @@ namespace SnapWheel
             h = Mix(h, _settings.Corner); h = Mix(h, _settings.Radius);
             h = Mix(h, _settings.ThumbSize); h = Mix(h, _settings.CardRadius);
             h = Mix(h, Left); h = Mix(h, Top);
+            // 悬停/按下的**进度值**也必须进签名：按钮的反馈是"渐变"出来的（_keyHov/_closeDown…），
+            // 只看那几个 bool 的话，过渡期间会一直贴旧层 —— 表现就是"鼠标放上去没反应"。
+            h = Mix(h, (double)_keyHov); h = Mix(h, (double)_keyT);
+            h = Mix(h, (double)_closeDown); h = Mix(h, (double)_gearDown); h = Mix(h, (double)_shootDown);
+            h = Mix(h, (double)_closeHoldP); h = Mix(h, (double)_nubHov);
+            h = Mix(h, (double)_nubAppearT); h = Mix(h, (double)_nubHintT);
+            h = Mix(h, (double)_nubOutDist); h = Mix(h, (double)_nubInDist);
             if (which == 0)
             {
                 h = Mix(h, (double)EffR());
@@ -134,7 +141,9 @@ namespace SnapWheel
                     if (which == 0) DrawRing(lg, a); else DrawControls(lg, a);
                 }
                 if (which == 0) _layerBackSig = LayerSig(0); else _layerFrontSig = LayerSig(1);
-                BlitLayer(g, bmp);          // 本帧也要看到（否则会慢一帧）
+                // 注意：**不要再贴一次**。调用方在 store 之前已经直接画过一遍了，
+                // 再贴一层等于半透明元素叠两遍 —— 用户看到的就是"一放万能键所有 UI 一起闪"。
+                // 缓存从下一帧开始生效，那一帧省下的时间才是我们要的。
             }
             catch { /* 缓存失败就当没缓存：外面已经照常画过了 */ }
         }

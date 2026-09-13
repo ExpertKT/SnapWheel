@@ -454,7 +454,7 @@ namespace SnapWheel
         protected override void OnMouseDown(MouseEventArgs e)
         {
             _lastActive = DateTime.Now;
-            e = LogicalArgs(e);          // 鼠标物理坐标 -> 逻辑坐标（缩放后命中测试才对得上）
+            e = LogicalArgs(e);
 
             // 删除确认态：摇杆已分成左右两半，点哪边执行哪边
             if (_delConfirm)
@@ -502,11 +502,20 @@ namespace SnapWheel
                 {
                     if (CanExpandByNub()) ExpandWheel();
                 }
+                else if (_collapsing)
+                {
+                    // 收起动画正走在半路上：这时候点把手应当是"我改主意了，拉回来"。
+                    // 以前这里会再收一次（等于没反应），用户看到的就是"收起到后半程没法立马展开"。
+                    ExpandWheel();
+                }
                 else if (NubSingleMode()) CollapseWheel();   // 单把手模式：同一个把手负责收起
                 return;
             }
             if (!NubSingleMode() && e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location))
-            { CollapseWheel(); return; }
+            {
+                if (_collapsing) ExpandWheel(); else CollapseWheel();
+                return;
+            }
 
             if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location))
             {

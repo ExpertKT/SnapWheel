@@ -19,31 +19,29 @@ namespace SnapWheel
             // 目标尺寸跟位图**正好 1:1** 时绕开重采样：
             // 画布上开着 HighQualityBicubic，即便一张图是 1:1 贴上去，GDI+ 也会老老实实走双三次插值
             // —— 实测每张约 0.5ms（一张卡片三块贴片 + 一张缩略图 ≈ 2ms，8 张卡片一帧就是 13ms）。
-            // 1:1 时把变换临时复位、用 NearestNeighbor 直接贴（设备像素级对齐，画面完全一致）。
+            // 关键：**不能取整坐标、也不能复位变换**。取整会让贴片/缩略图相对卡片边框跳 1 个像素
+            // （卡片边框是按精确小数坐标画的），用户看到的就是"缩略图边框抽搐"。
+            // 所以保留变换，只在 1:1 时把插值换成最近邻：既省掉重采样，位置也跟原来一模一样。
             if (Math.Abs(dest.Width * UiK - bmp.Width) < 0.6f && Math.Abs(dest.Height * UiK - bmp.Height) < 0.6f)
             {
-                System.Drawing.Drawing2D.Matrix m = g.Transform;
                 InterpolationMode oldIm = g.InterpolationMode;
                 PixelOffsetMode oldPo = g.PixelOffsetMode;
                 try
                 {
-                    g.ResetTransform();
                     g.InterpolationMode = InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = PixelOffsetMode.Half;
-                    int dx = (int)Math.Round(dest.X * UiK), dy = (int)Math.Round(dest.Y * UiK);
-                    if (alpha >= 250) g.DrawImageUnscaled(bmp, dx, dy);
+                    if (alpha >= 250) g.DrawImage(bmp, dest);
                     else
                     {
                         ColorMatrix cm = new ColorMatrix();
                         cm.Matrix33 = Math.Max(0f, Math.Min(1f, alpha / 255f));
                         _ia.SetColorMatrix(cm);
-                        g.DrawImage(bmp, new Rectangle(dx, dy, bmp.Width, bmp.Height),
+                        g.DrawImage(bmp, new Rectangle((int)dest.X, (int)dest.Y, (int)dest.Width, (int)dest.Height),
                             0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, _ia);
                     }
                 }
                 finally
                 {
-                    try { g.Transform = m; } catch { }
                     g.InterpolationMode = oldIm;
                     g.PixelOffsetMode = oldPo;
                 }
@@ -262,6 +260,9 @@ namespace SnapWheel
         // 范围 = 环带（含一点余量）+ 摇杆键，也就是“看上去是轮盘”的那一片。
         void DrawDropCatcher(Graphics g)
         {
+            // 收起态不许画接住区：轮盘已经收成一个小把手，但这一片"看不见的 alpha=1 区域"
+            // 仍然会让窗口吃住鼠标和拖放 —— 用户原话是"收起来了却好像还在这，挡着我点别的东西"。
+            if (_collapsed) return;
             PointF c = Center();
             float R = EffR();
             float outer = R + _thumb * 1.15f;
@@ -467,7 +468,7 @@ namespace SnapWheel
                         RectangleF area = new RectangleF(rr2.X - pad, rr2.Y - pad, rr2.Width + pad * 2, rr2.Height + pad * 2);
                         string key = "shd|" + (StyleFlatOnly() ? "f" : "n") + "|" + (int)rr2.Width + "|" + (int)rr2.Height +
                                      "|" + (int)rad + "|" + shA + "|" + (int)shOff;
-                        Bitmap plate = PlateIf(usePlate, key, Quantize(area), delegate(Graphics pg)
+                        Bitmap plate = PlateIf(usePlate, key, area, delegate(Graphics pg)
                         {
                             if (StyleFlatOnly())
                             {
@@ -494,7 +495,7 @@ namespace SnapWheel
                             Color fill = Gfx.A(GlassBase(), baseA);
                             string pkey = "pan|" + _settings.UiStyle + "|" + _settings.GlassPercent + "|" +
                                           (int)rr2.Width + "|" + (int)rr2.Height + "|" + (int)rad + "|" + baseA;
-                            Bitmap plate = PlateIf(usePlate, pkey, Quantize(rr2), delegate(Graphics pg)
+                            Bitmap plate = PlateIf(usePlate, pkey, rr2, delegate(Graphics pg)
                             {
                                 using (GraphicsPath p2 = Gfx.Round(rr2, rad))
                                     Gfx.GlassPanel(pg, p2, rr2, fill,
@@ -547,7 +548,7 @@ namespace SnapWheel
                             RectangleF bArea = new RectangleF(rr2.X - bpad, rr2.Y - bpad, rr2.Width + bpad * 2, rr2.Height + bpad * 2);
                             string bkey = "brd|" + (int)rr2.Width + "|" + (int)rr2.Height + "|" + (int)rad + "|" +
                                           bc.ToArgb() + "|" + (int)(bw * 10) + "|" + ba;
-                            Bitmap bplate = PlateIf(usePlate, bkey, Quantize(bArea), delegate(Graphics pg)
+                            Bitmap bplate = PlateIf(usePlate, bkey, bArea, delegate(Graphics pg)
                             {
                                 using (GraphicsPath p3 = Gfx.Round(rr2, rad))
                                 using (Pen bp = new Pen(Color.FromArgb(ba, bc.R, bc.G, bc.B), bw))
@@ -806,7 +807,7 @@ namespace SnapWheel
                 // 长按时：底色由玻璃色渐变到红色（用 _closeHoldP 过渡，不是突然变），
                 // 外边再画一圈红色进度环 —— 按下去就知道还差多久松手
                 float hp = _closeHoldP;
-                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f)));
+                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? UiFeel.SurfaceHover : (_closeDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab0 / 255f)));
                 Color redSurf = Gfx.A(Color.FromArgb(236, 74, 62), (int)(238 * ab0 / 255f));
                 Color closeSurf = hp > 0.001f
                     ? Color.FromArgb(
@@ -845,7 +846,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
-                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 206 : 172) * ab1 / 255f))),
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
@@ -1008,7 +1009,7 @@ namespace SnapWheel
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
                 using (GraphicsPath sbp2 = new GraphicsPath()) { sbp2.AddEllipse(sbr); BackdropClip(g, sbp2, ab2); sbp2.Dispose(); }
-                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * ab2 / 255f), 0, 122, 204)))
+                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? UiFeel.SolidHover : UiFeel.SolidIdle) * ab2 / 255f), 0, 122, 204)))
                     g.FillEllipse(sbbs, sbr);
                 using (Pen sp = new Pen(Color.FromArgb((int)(245 * ab2 / 255f), 255, 255, 255), 1.8f))
                 {

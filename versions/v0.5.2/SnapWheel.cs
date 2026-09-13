@@ -1301,8 +1301,17 @@ namespace SnapWheel
         public bool ShowWheelOnStart = true;
         public bool AlwaysOnTop = true;
         public string Hotkey = "Ctrl+Shift+S";
+#if NO_KEY
+        // 无万能键版：内圈不用留摇杆盘的地方，默认整体小一号（用户要求"按钮集中的同时缩小默认轮盘"）
+        public int ThumbSize = 80;      // nominal thumbnail long side
+#else
         public int ThumbSize = 96;      // nominal thumbnail long side
+#endif
+#if NO_KEY
+        public int Radius = 250;        // ring radius from the screen corner（无万能键版：小一号）
+#else
         public int Radius = 300;        // ring radius from the screen corner
+#endif
         public int Slots = 5;           // how many cards visible on the arc
         public int LabelSize = 16;      // index label font size (px)
         public string Corner = "BL";    // BL / BR / TL / TR - which screen corner the ring docks to
@@ -5293,31 +5302,29 @@ namespace SnapWheel
             // 目标尺寸跟位图**正好 1:1** 时绕开重采样：
             // 画布上开着 HighQualityBicubic，即便一张图是 1:1 贴上去，GDI+ 也会老老实实走双三次插值
             // —— 实测每张约 0.5ms（一张卡片三块贴片 + 一张缩略图 ≈ 2ms，8 张卡片一帧就是 13ms）。
-            // 1:1 时把变换临时复位、用 NearestNeighbor 直接贴（设备像素级对齐，画面完全一致）。
+            // 关键：**不能取整坐标、也不能复位变换**。取整会让贴片/缩略图相对卡片边框跳 1 个像素
+            // （卡片边框是按精确小数坐标画的），用户看到的就是"缩略图边框抽搐"。
+            // 所以保留变换，只在 1:1 时把插值换成最近邻：既省掉重采样，位置也跟原来一模一样。
             if (Math.Abs(dest.Width * UiK - bmp.Width) < 0.6f && Math.Abs(dest.Height * UiK - bmp.Height) < 0.6f)
             {
-                System.Drawing.Drawing2D.Matrix m = g.Transform;
                 InterpolationMode oldIm = g.InterpolationMode;
                 PixelOffsetMode oldPo = g.PixelOffsetMode;
                 try
                 {
-                    g.ResetTransform();
                     g.InterpolationMode = InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = PixelOffsetMode.Half;
-                    int dx = (int)Math.Round(dest.X * UiK), dy = (int)Math.Round(dest.Y * UiK);
-                    if (alpha >= 250) g.DrawImageUnscaled(bmp, dx, dy);
+                    if (alpha >= 250) g.DrawImage(bmp, dest);
                     else
                     {
                         ColorMatrix cm = new ColorMatrix();
                         cm.Matrix33 = Math.Max(0f, Math.Min(1f, alpha / 255f));
                         _ia.SetColorMatrix(cm);
-                        g.DrawImage(bmp, new Rectangle(dx, dy, bmp.Width, bmp.Height),
+                        g.DrawImage(bmp, new Rectangle((int)dest.X, (int)dest.Y, (int)dest.Width, (int)dest.Height),
                             0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, _ia);
                     }
                 }
                 finally
                 {
-                    try { g.Transform = m; } catch { }
                     g.InterpolationMode = oldIm;
                     g.PixelOffsetMode = oldPo;
                 }
@@ -5536,6 +5543,9 @@ namespace SnapWheel
         // 范围 = 环带（含一点余量）+ 摇杆键，也就是“看上去是轮盘”的那一片。
         void DrawDropCatcher(Graphics g)
         {
+            // 收起态不许画接住区：轮盘已经收成一个小把手，但这一片"看不见的 alpha=1 区域"
+            // 仍然会让窗口吃住鼠标和拖放 —— 用户原话是"收起来了却好像还在这，挡着我点别的东西"。
+            if (_collapsed) return;
             PointF c = Center();
             float R = EffR();
             float outer = R + _thumb * 1.15f;
@@ -5741,7 +5751,7 @@ namespace SnapWheel
                         RectangleF area = new RectangleF(rr2.X - pad, rr2.Y - pad, rr2.Width + pad * 2, rr2.Height + pad * 2);
                         string key = "shd|" + (StyleFlatOnly() ? "f" : "n") + "|" + (int)rr2.Width + "|" + (int)rr2.Height +
                                      "|" + (int)rad + "|" + shA + "|" + (int)shOff;
-                        Bitmap plate = PlateIf(usePlate, key, Quantize(area), delegate(Graphics pg)
+                        Bitmap plate = PlateIf(usePlate, key, area, delegate(Graphics pg)
                         {
                             if (StyleFlatOnly())
                             {
@@ -5768,7 +5778,7 @@ namespace SnapWheel
                             Color fill = Gfx.A(GlassBase(), baseA);
                             string pkey = "pan|" + _settings.UiStyle + "|" + _settings.GlassPercent + "|" +
                                           (int)rr2.Width + "|" + (int)rr2.Height + "|" + (int)rad + "|" + baseA;
-                            Bitmap plate = PlateIf(usePlate, pkey, Quantize(rr2), delegate(Graphics pg)
+                            Bitmap plate = PlateIf(usePlate, pkey, rr2, delegate(Graphics pg)
                             {
                                 using (GraphicsPath p2 = Gfx.Round(rr2, rad))
                                     Gfx.GlassPanel(pg, p2, rr2, fill,
@@ -5821,7 +5831,7 @@ namespace SnapWheel
                             RectangleF bArea = new RectangleF(rr2.X - bpad, rr2.Y - bpad, rr2.Width + bpad * 2, rr2.Height + bpad * 2);
                             string bkey = "brd|" + (int)rr2.Width + "|" + (int)rr2.Height + "|" + (int)rad + "|" +
                                           bc.ToArgb() + "|" + (int)(bw * 10) + "|" + ba;
-                            Bitmap bplate = PlateIf(usePlate, bkey, Quantize(bArea), delegate(Graphics pg)
+                            Bitmap bplate = PlateIf(usePlate, bkey, bArea, delegate(Graphics pg)
                             {
                                 using (GraphicsPath p3 = Gfx.Round(rr2, rad))
                                 using (Pen bp = new Pen(Color.FromArgb(ba, bc.R, bc.G, bc.B), bw))
@@ -6080,7 +6090,7 @@ namespace SnapWheel
                 // 长按时：底色由玻璃色渐变到红色（用 _closeHoldP 过渡，不是突然变），
                 // 外边再画一圈红色进度环 —— 按下去就知道还差多久松手
                 float hp = _closeHoldP;
-                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f)));
+                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? UiFeel.SurfaceHover : (_closeDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab0 / 255f)));
                 Color redSurf = Gfx.A(Color.FromArgb(236, 74, 62), (int)(238 * ab0 / 255f));
                 Color closeSurf = hp > 0.001f
                     ? Color.FromArgb(
@@ -6119,7 +6129,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
-                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 206 : 172) * ab1 / 255f))),
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
@@ -6282,7 +6292,7 @@ namespace SnapWheel
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
                 using (GraphicsPath sbp2 = new GraphicsPath()) { sbp2.AddEllipse(sbr); BackdropClip(g, sbp2, ab2); sbp2.Dispose(); }
-                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * ab2 / 255f), 0, 122, 204)))
+                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? UiFeel.SolidHover : UiFeel.SolidIdle) * ab2 / 255f), 0, 122, 204)))
                     g.FillEllipse(sbbs, sbr);
                 using (Pen sp = new Pen(Color.FromArgb((int)(245 * ab2 / 255f), 255, 255, 255), 1.8f))
                 {
@@ -6443,7 +6453,10 @@ namespace SnapWheel
 
         public void ExpandWheel(bool fast)
         {
-            if (IsExpanded && Visible) { _lastActive = DateTime.Now; return; }
+            // _collapsing 时 _collapsed 还是 false（收完才置位），所以这里必须把"正在收起"排除掉：
+            // 否则收起动画走到一半时点展开会被当成"已经展开了"直接 return ——
+            // 用户看到的就是"收起后半夜没法立马展开"（点了没反应，动画继续缩回去）。
+            if (IsExpanded && Visible && !_collapsing) { _lastActive = DateTime.Now; return; }
             if (_settings.IntroAnim)
             {
                 StartIntro();
@@ -7722,7 +7735,7 @@ namespace SnapWheel
         protected override void OnMouseDown(MouseEventArgs e)
         {
             _lastActive = DateTime.Now;
-            e = LogicalArgs(e);          // 鼠标物理坐标 -> 逻辑坐标（缩放后命中测试才对得上）
+            e = LogicalArgs(e);
 
             // 删除确认态：摇杆已分成左右两半，点哪边执行哪边
             if (_delConfirm)
@@ -7770,11 +7783,20 @@ namespace SnapWheel
                 {
                     if (CanExpandByNub()) ExpandWheel();
                 }
+                else if (_collapsing)
+                {
+                    // 收起动画正走在半路上：这时候点把手应当是"我改主意了，拉回来"。
+                    // 以前这里会再收一次（等于没反应），用户看到的就是"收起到后半程没法立马展开"。
+                    ExpandWheel();
+                }
                 else if (NubSingleMode()) CollapseWheel();   // 单把手模式：同一个把手负责收起
                 return;
             }
             if (!NubSingleMode() && e.Button == MouseButtons.Left && !_collapsed && NubInRect().Contains(e.Location))
-            { CollapseWheel(); return; }
+            {
+                if (_collapsing) ExpandWheel(); else CollapseWheel();
+                return;
+            }
 
             if (e.Button == MouseButtons.Left && CloseButtonRect().Contains(e.Location))
             {
@@ -8045,6 +8067,13 @@ namespace SnapWheel
             h = Mix(h, _settings.Corner); h = Mix(h, _settings.Radius);
             h = Mix(h, _settings.ThumbSize); h = Mix(h, _settings.CardRadius);
             h = Mix(h, Left); h = Mix(h, Top);
+            // 悬停/按下的**进度值**也必须进签名：按钮的反馈是"渐变"出来的（_keyHov/_closeDown…），
+            // 只看那几个 bool 的话，过渡期间会一直贴旧层 —— 表现就是"鼠标放上去没反应"。
+            h = Mix(h, (double)_keyHov); h = Mix(h, (double)_keyT);
+            h = Mix(h, (double)_closeDown); h = Mix(h, (double)_gearDown); h = Mix(h, (double)_shootDown);
+            h = Mix(h, (double)_closeHoldP); h = Mix(h, (double)_nubHov);
+            h = Mix(h, (double)_nubAppearT); h = Mix(h, (double)_nubHintT);
+            h = Mix(h, (double)_nubOutDist); h = Mix(h, (double)_nubInDist);
             if (which == 0)
             {
                 h = Mix(h, (double)EffR());
@@ -8106,7 +8135,9 @@ namespace SnapWheel
                     if (which == 0) DrawRing(lg, a); else DrawControls(lg, a);
                 }
                 if (which == 0) _layerBackSig = LayerSig(0); else _layerFrontSig = LayerSig(1);
-                BlitLayer(g, bmp);          // 本帧也要看到（否则会慢一帧）
+                // 注意：**不要再贴一次**。调用方在 store 之前已经直接画过一遍了，
+                // 再贴一层等于半透明元素叠两遍 —— 用户看到的就是"一放万能键所有 UI 一起闪"。
+                // 缓存从下一帧开始生效，那一帧省下的时间才是我们要的。
             }
             catch { /* 缓存失败就当没缓存：外面已经照常画过了 */ }
         }
@@ -8188,6 +8219,30 @@ namespace SnapWheel
     }
 }
 
+namespace SnapWheel
+{
+    // 手感常量（v0.5.2）：悬停/按下的数值以前散落在各个绘制分支里（166/172/206/240/252…），
+    // 调一次要翻好几个地方，而且各处强弱不一致 —— 用户的原话是"点下去的反馈较弱"。
+    // 统一放这里：① 悬停明显亮起来 ② 按下沉下去 + 更亮 ③ 松开自动回弹（进度值由 AnimTick 推）。
+    static class UiFeel
+    {
+        // 表面亮度（玻璃/主色底的不透明度百分比，最后会乘玻璃设置）
+        public const int SurfaceIdle = 166;     // 常态
+        public const int SurfaceHover = 252;    // 悬停：明显亮一档
+        public const int SurfacePress = 255;    // 按下：最亮
+
+        // 图标/文字
+        public const int IconIdle = 236;
+        public const int IconHover = 255;
+
+        // 按下时往下沉多少逻辑像素（松开回弹由动画进度负责）
+        public const float SinkPx = 2f;
+
+        // 毛玻璃面板上的主色底（截图按钮那类实心按钮）
+        public const int SolidIdle = 190;
+        public const int SolidHover = 240;
+    }
+}
 namespace SnapWheel
 {
     class WheelsForm : Form
@@ -8433,9 +8488,47 @@ namespace SnapWheel
 
 namespace SnapWheel
 {
-    class SettingsForm : Form
+    class SettingsForm : Form, IMessageFilter
     {
+        // ============================ 布局总则（务必先读） ============================
+        // 1. 这个窗口的布局一律"坐标明确"：每张 TableLayoutPanel 都写死 RowCount/ColumnCount，
+        //    每个控件都用 Add(控件, 列, 行) 指明格子 —— **绝不靠添加顺序排行**。
+        //    v0.5.2 提速时就是因为挪了添加顺序，标题跑到最底下、按钮跑到最上面（"头和屁股长反了"）。
+        // 2. 四页内容 = 四张页面格，同一时间只显示一张；每页都是"两列 + 行"的明确坐标。
+        // 3. 每页的控件**第一次翻到那页才建**（懒建）：构造量降到 1/4，这是打开设置变快的主因。
+        //    没建过的页 = 没被看过 = 没被改过，所以"确定"时跳过它（值保持原样，不会被写回默认值）。
+        // ==========================================================================
         TableLayoutPanel _root;
+        Panel _body;
+        PageDial _dial;
+        readonly TableLayoutPanel[] _pages = new TableLayoutPanel[4];
+        readonly Action[] _builders = new Action[4];
+        readonly bool[] _built = new bool[4];
+        int _cur = -1;
+        Settings _s;
+        bool _filterAdded;
+
+        // ---- 第 1 页「行为与快捷键」 ----
+        CheckBox _chkDisk, _chkAutoStart, _chkAuto, _chkTop, _chkClip, _chkBalloon, _chkUpdate, _chkDragFile;
+        TextBox _txtDir;
+        NumericUpDown _numSec;
+        ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch;
+        // ---- 第 2 页「轮盘与外观」 ----
+        NumericUpDown _numMax, _numThumb, _numRad, _numSlots, _numLabel, _numPeek;
+        ComboBox _cmbScale, _cmbRing, _cmbRing2;
+        CheckBox _chkCollapse, _chkSingle, _chkIntroAnim;
+        // ---- 第 3 页「风格」 ----
+        ComboBox _cmbStyle, _cmbAccent, _cmbAnim;
+        CheckBox _chkName, _chkCount, _chkGlassRefresh;
+        // ---- 第 4 页「万能键与高级」 ----
+        readonly ComboBox[] _keyBox = new ComboBox[4];
+        NumericUpDown _numGlass, _numRadius, _numShadow;
+        TableLayoutPanel _advR;
+
+        static readonly int[] scVals = { 0, 80, 90, 100, 110, 125, 150, 175, 200, 250 };
+        static readonly int[] ringVals = { 220, 150, 100, 80, 60, 45 };
+        static readonly string[] ringNames = { "极快", "快", "标准", "慢", "很慢", "最慢" };
+
         // 应用真·毛玻璃：窗口背景半透明 + 系统 acrylic 模糊；系统不支持就退回不透明浅底
         void ApplyGlass()
         {
@@ -8443,12 +8536,39 @@ namespace SnapWheel
             // 容易出现"四角没画到、重绘才恢复"的脏块，实测得不偿失。
             // 真正需要毛玻璃的地方是轮盘本体，那边是自己绘制的，好控制。
             BackColor = Color.FromArgb(248, 249, 252);
+            if (_dial != null) _dial.BackColor = BackColor;   // 分页器是自绘控件，底色要跟窗口一模一样
         }
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
             ApplyGlass();
+            // 滚轮翻页：装在应用级过滤器上，鼠标在窗口任何位置滚都算（数值框/下拉框也不会截胡）
+            if (!_filterAdded) { try { Application.AddMessageFilter(this); _filterAdded = true; } catch { } }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _filterAdded)
+            {
+                try { Application.RemoveMessageFilter(this); } catch { }
+                _filterAdded = false;
+            }
+            base.Dispose(disposing);
+        }
+
+        // 滚轮 = 翻页（设置窗口每页都不滚动，滚轮专门干这个）
+        public bool PreFilterMessage(ref Message m)
+        {
+            const int WM_MOUSEWHEEL = 0x020A;
+            if (m.Msg == WM_MOUSEWHEEL && Visible && ContainsFocus)
+            {
+                long w = m.WParam.ToInt64();
+                int delta = (int)((w >> 16) & 0xFFFF);
+                if (delta > 0x7FFF) delta -= 0x10000;
+                if (delta != 0) { ShowPage(_cur + (delta > 0 ? -1 : 1)); return true; }
+            }
+            return false;
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)
@@ -8471,6 +8591,7 @@ namespace SnapWheel
 
         public SettingsForm(Settings s)
         {
+            _s = s;
             Text = AppInfo.Name + " 设置  ·  BETA";
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
@@ -8480,369 +8601,60 @@ namespace SnapWheel
             MaximizeBox = false; MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterScreen;
-            AutoSize = true;
-            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            AutoSize = false;                     // 固定大小：翻页代替滚动，窗口不再随内容长高长胖
+            ClientSize = new Size(760, 560);
             Padding = new Padding(20, 14, 20, 12);
 
             TableLayoutPanel root = new TableLayoutPanel();
-            root.ColumnCount = 2;
-            root.AutoSize = true;
-            root.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            root.ColumnCount = 1;
+            root.RowCount = 5;
+            root.AutoSize = false;
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));    // 0 标题
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));    // 1 轮盘式分页器
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // 2 当前页
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));    // 3 按钮行（右下）
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));    // 4 版本行
             _root = root;
-            Controls.Add(root);
-
-            // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
-            TableLayoutPanel colL = new TableLayoutPanel();
-            colL.ColumnCount = 1;
-            colL.AutoSize = true;
-            colL.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            colL.Margin = new Padding(0, 0, 34, 0);
-            TableLayoutPanel colR = new TableLayoutPanel();
-            colR.ColumnCount = 1;
-            colR.AutoSize = true;
-            colR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            colR.Margin = new Padding(0);
 
             Label head = new Label();
             head.AutoSize = true;
             head.Text = AppInfo.Name + " 设置";
             head.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(32, 34, 38);
-            head.Margin = new Padding(0, 0, 0, 10);
-            root.Controls.Add(head);
-            root.SetColumnSpan(head, 2);
-            root.Controls.Add(colL, 0, 1);
-            root.Controls.Add(colR, 1, 1);
+            head.Margin = new Padding(0, 0, 0, 6);
+            root.Controls.Add(head, 0, 0);
 
-            CheckBox chkDisk = new CheckBox();
-            chkDisk.AutoSize = true;
-            chkDisk.Text = "保存到硬盘（否则只存内存，退出即清）";
-            chkDisk.Checked = s.SaveToDisk;
-            chkDisk.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(Section("行为"));
-            colL.Controls.Add(chkDisk);
+            // 分页器：顶部小圆弧，四个扇区 = 四页（点扇区 / 滚轮翻页），新拟态凸起 + 当前页高亮
+            _dial = new PageDial();
+            _dial.Names = new string[] { "行为与快捷键", "轮盘与外观", "风格", "万能键与高级" };
+            _dial.BackColor = Color.FromArgb(250, 250, 252);
+            _dial.Dock = DockStyle.Fill;
+            _dial.Margin = new Padding(0);
+            _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { ShowPage(_dial.Current); });
+            root.Controls.Add(_dial, 0, 1);
 
-            CheckBox chkAutoStart = new CheckBox();
-            chkAutoStart.AutoSize = true;
-            chkAutoStart.Text = "开机自动启动（登录后自动在后台运行）";
-            chkAutoStart.Checked = AutoRun.IsEnabled();
-            chkAutoStart.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(chkAutoStart);
-
-            TextBox txtDir = new TextBox();
-            txtDir.Text = s.Dir;
-            txtDir.Width = 300;
-            txtDir.Margin = new Padding(0, 5, 8, 0);
-            Button browse = new Button();
-            browse.Text = "浏览";
-            browse.AutoSize = true;
-            browse.MinimumSize = new Size(60, 26);
-            browse.Margin = new Padding(0, 4, 0, 0);
-            browse.Click += new EventHandler(delegate(object o, EventArgs e2) {
-                FolderBrowserDialog d = new FolderBrowserDialog();
-                if (d.ShowDialog() == DialogResult.OK) txtDir.Text = d.SelectedPath;
-            });
-            colL.Controls.Add(Row(MkLabel("保存目录"), txtDir, browse));
-
-            colL.Controls.Add(Section("外观"));
-            NumericUpDown numMax = Num(1, 999, s.MaxCount);
-            NumericUpDown numThumb = Num(40, 260, s.ThumbSize);
-            colL.Controls.Add(Row(MkLabel("最多保留张数"), numMax, Gap(24), MkLabel("缩略图大小"), numThumb));
-
-            NumericUpDown numRad = Num(120, 700, s.Radius);
-            NumericUpDown numSlots = Num(2, 12, s.Slots);
-            NumericUpDown numLabel = Num(9, 40, s.LabelSize);
-            colL.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel));
-
-            // 分辨率 / DPI 适配
-            ComboBox cmbScale = new ComboBox();
-            cmbScale.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbScale.FlatStyle = FlatStyle.Flat;
-            cmbScale.Width = 170;
-            cmbScale.Margin = new Padding(0, 6, 0, 0);
-            int[] scVals = { 0, 80, 90, 100, 110, 125, 150, 175, 200, 250 };
-            cmbScale.Items.Add("自动（按显示器 DPI）");
-            for (int i = 1; i < scVals.Length; i++) cmbScale.Items.Add(scVals[i] + "%");
-            cmbScale.SelectedIndex = 0;
-            for (int i = 0; i < scVals.Length; i++) if (scVals[i] == s.UiScale) cmbScale.SelectedIndex = i;
-            Label hint = new Label();
-            hint.AutoSize = true;
-            hint.Text = "（整块轮盘等比放大，含文字和图标）";
-            hint.ForeColor = Color.FromArgb(150, 152, 160);
-            hint.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("界面缩放"), cmbScale, Gap(12), hint));
-
-            NumericUpDown numPeek = Num(120, 500, s.PeekPercent);
-
-            // 收起态：像贴边小球一样，缩到屏幕边上留个小把手
-            CheckBox chkCollapse = new CheckBox();
-            chkCollapse.AutoSize = true;
-            chkCollapse.Text = "收起状态：缩到屏幕边上留个小把手";
-            chkCollapse.Checked = s.CollapseMode;
-            colL.Controls.Add(Row(chkCollapse));
-
-            // 收起 / 展开的动画速度（独立于上面的"动画速度"）
-            ComboBox cmbRing = new ComboBox();
-            cmbRing.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbRing.FlatStyle = FlatStyle.Flat;
-            cmbRing.Width = 130;
-            cmbRing.Margin = new Padding(0, 6, 0, 0);
-            int[] ringVals = { 220, 150, 100, 80, 60, 45 };
-            string[] ringNames = { "极快", "快", "标准", "慢", "很慢", "最慢" };
-            for (int i = 0; i < ringNames.Length; i++) cmbRing.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
-            cmbRing.SelectedIndex = 2;
-            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.ExpandSpeed) cmbRing.SelectedIndex = i;
-            Label hintRing = new Label();
-            hintRing.AutoSize = true;
-            hintRing.Text = "（只管收起 / 展开；百分比越大越快）";
-            hintRing.ForeColor = Color.FromArgb(150, 152, 160);
-            hintRing.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("展开速度"), cmbRing, Gap(10), hintRing));
-
-            ComboBox cmbRing2 = new ComboBox();
-            cmbRing2.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbRing2.FlatStyle = FlatStyle.Flat;
-            cmbRing2.Width = 130;
-            cmbRing2.Margin = new Padding(0, 6, 0, 0);
-            for (int i = 0; i < ringNames.Length; i++) cmbRing2.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
-            cmbRing2.SelectedIndex = 2;
-            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.CollapseSpeed) cmbRing2.SelectedIndex = i;
-            Label hintRing2 = new Label();
-            hintRing2.AutoSize = true;
-            hintRing2.Text = "（默认比展开快一档，收起要干脆）";
-            hintRing2.ForeColor = Color.FromArgb(150, 152, 160);
-            hintRing2.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("收起速度"), cmbRing2, Gap(10), hintRing2));
-
-            CheckBox chkSingle = new CheckBox();
-            chkSingle.AutoSize = true;
-            chkSingle.Text = "只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）";
-            chkSingle.Checked = s.NubSingle;
-            colL.Controls.Add(Row(chkSingle));
-
-            CheckBox chkBalloon = new CheckBox();
-            chkBalloon.AutoSize = true;
-            chkBalloon.Text = "显示托盘气泡提示（关掉就不再弹右下角通知）";
-            chkBalloon.Checked = s.ShowBalloon;
-            colL.Controls.Add(Row(chkBalloon));
-
-            // 剪贴板自动收纳 + 玻璃底定时刷新
-            CheckBox chkClip = new CheckBox();
-            chkClip.AutoSize = true;
-            chkClip.Text = "复制图片后自动收进轮盘";
-            chkClip.Checked = s.ClipboardImport;
-            CheckBox chkGlassRefresh = new CheckBox();
-            chkGlassRefresh.AutoSize = true;
-            chkGlassRefresh.Text = "毛玻璃定时刷新（轮盘挂久了背景也是新的）";
-            chkGlassRefresh.Checked = s.GlassRefresh;
-            colL.Controls.Add(Row(chkClip));
-            colL.Controls.Add(Row(chkGlassRefresh));
-
-            CheckBox chkDragFile = new CheckBox();
-            chkDragFile.AutoSize = true;
-            chkDragFile.Text = "拖出时同时带上\"文件\"（拖到桌面/文件夹会落地成文件）";
-            chkDragFile.Checked = s.DragOutAsFile;
-            colL.Controls.Add(Row(chkDragFile));
-
-            CheckBox chkUpdate = new CheckBox();
-            chkUpdate.AutoSize = true;
-            chkUpdate.Text = "启动时检查有没有新版本（只提示，不自动安装）";
-            chkUpdate.Checked = s.CheckUpdate;
-            colL.Controls.Add(Row(chkUpdate));
-            CheckBox chkIntroAnim = new CheckBox();
-            chkIntroAnim.AutoSize = true;
-            chkIntroAnim.Text = "启动时播放开启动画";
-            chkIntroAnim.Checked = s.IntroAnim;
-            chkIntroAnim.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim));
-
-            // ---------------- 风格（新拟态 + 扁平化 + 毛玻璃）----------------
-            int advFrom = colR.Controls.Count;      // 从这里开始是"高级（外观微调）"，稍后整体折叠
-            colR.Controls.Add(Section("风格"));
-
-            ComboBox cmbStyle = new ComboBox();
-            cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbStyle.FlatStyle = FlatStyle.Flat;
-            cmbStyle.Width = 170;
-            cmbStyle.Margin = new Padding(0, 6, 0, 0);
-            cmbStyle.Items.AddRange(new object[] { "新拟态 + 毛玻璃", "纯扁平", "高对比（不透明）" });
-            cmbStyle.SelectedIndex = (s.UiStyle == "flat") ? 1 : (s.UiStyle == "solid" ? 2 : 0);
-
-            ComboBox cmbAccent = new ComboBox();
-            cmbAccent.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbAccent.FlatStyle = FlatStyle.Flat;
-            cmbAccent.Width = 170;
-            cmbAccent.Margin = new Padding(0, 6, 0, 0);
-            cmbAccent.Items.Add("跟随 Wheel 颜色");
-            for (int i = 0; i < Palette.Names.Length; i++) cmbAccent.Items.Add("统一：" + Palette.Names[i]);
-            cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
-            colR.Controls.Add(Row(MkLabel("界面风格"), cmbStyle, Gap(24), MkLabel("主题色"), cmbAccent));
-
-            NumericUpDown numGlass = Num(20, 100, s.GlassPercent);
-            NumericUpDown numRadius = Num(0, 30, s.CardRadius);
-            NumericUpDown numShadow = Num(0, 100, s.ShadowPercent);
-            colR.Controls.Add(Row(MkLabel("玻璃不透明度"), numGlass, Gap(16), MkLabel("圆角(%)"), numRadius,
-                                  Gap(16), MkLabel("阴影强度"), numShadow));
-
-            ComboBox cmbAnim = new ComboBox();
-            cmbAnim.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbAnim.FlatStyle = FlatStyle.Flat;
-            cmbAnim.Width = 170;
-            cmbAnim.Margin = new Padding(0, 6, 0, 0);
-            cmbAnim.Items.AddRange(new object[] { "慢", "标准", "快" });
-            cmbAnim.SelectedIndex = (s.AnimSpeed <= 85) ? 0 : (s.AnimSpeed >= 120 ? 2 : 1);
-
-            CheckBox chkName = new CheckBox();
-            chkName.AutoSize = true;
-            chkName.Text = "显示名称标签";
-            chkName.Checked = s.ShowNameLabel;
-            chkName.Margin = new Padding(0, 10, 0, 0);
-            CheckBox chkCount = new CheckBox();
-            chkCount.AutoSize = true;
-            chkCount.Text = "显示计数标签";
-            chkCount.Checked = s.ShowCountLabel;
-            chkCount.Margin = new Padding(20, 10, 0, 0);
-            colR.Controls.Add(Row(MkLabel("动画速度"), cmbAnim, Gap(24), chkName, chkCount));
-
-            // ---------- 把「风格」这几行收进一个默认折叠的高级区 ----------
-            // 外观微调项对大多数人是噪音，默认藏起来（第一次用不懂该选什么），需要时勾一下即可。
-            {
-                int advTo = colR.Controls.Count;
-                TableLayoutPanel advR = new TableLayoutPanel();
-                advR.ColumnCount = 1;
-                advR.AutoSize = true;
-                advR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-                advR.Margin = new Padding(0);
-                advR.Visible = false;
-                System.Collections.Generic.List<Control> move = new System.Collections.Generic.List<Control>();
-                for (int i = advFrom; i < advTo; i++) move.Add(colR.Controls[i]);
-                for (int i = 0; i < move.Count; i++) { colR.Controls.Remove(move[i]); advR.Controls.Add(move[i]); }
-                colR.Controls.Add(advR);
-                CheckBox chkAdv = new CheckBox();
-                chkAdv.AutoSize = true;
-                chkAdv.Text = "显示高级选项（外观微调 / 动画细节）";
-                chkAdv.Margin = new Padding(0, 12, 0, 0);
-                chkAdv.CheckedChanged += new EventHandler(delegate(object o, EventArgs e2) {
-                    advR.Visible = chkAdv.Checked;
-                    advR.PerformLayout();
-                    PerformLayout();
-                });
-                colR.Controls.Add(chkAdv);
-            }
-
-            CheckBox chkAuto = new CheckBox();
-            chkAuto.AutoSize = true;
-            chkAuto.Text = "空闲后自动收起轮盘";
-            chkAuto.Checked = s.AutoHide;
-            chkAuto.Margin = new Padding(0, 4, 0, 4);
-            NumericUpDown numSec = Num(2, 600, s.AutoHideSeconds);
-            colL.Controls.Add(Row(chkAuto, Gap(16), MkLabel("空闲秒数"), numSec));
-
-            CheckBox chkTop = new CheckBox();
-            chkTop.AutoSize = true;
-            chkTop.Text = "总在最前（始终置顶显示）";
-            chkTop.Checked = s.AlwaysOnTop;
-            chkTop.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(chkTop);
-
-            ComboBox cmb = new ComboBox();
-            cmb.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmb.Width = 170;
-            cmb.Margin = new Padding(0, 6, 0, 0);
-            cmb.Items.AddRange(HotkeyUtil.Names);
-            cmb.SelectedItem = s.Hotkey;
-            if (cmb.SelectedIndex < 0) cmb.SelectedIndex = 0;
-            colR.Controls.Add(Row(MkLabel("截图热键"), cmb));
-
-            ComboBox cmbCorner = new ComboBox();
-            cmbCorner.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbCorner.Width = 170;
-            cmbCorner.Margin = new Padding(0, 6, 0, 0);
-            cmbCorner.Items.AddRange(new object[] { "左下角", "右下角", "左上角", "右上角" });
-            cmbCorner.SelectedIndex = CornerIndex(s.Corner);
-            colR.Controls.Add(Row(MkLabel("圆环位置"), cmbCorner));
-
-            ComboBox cmbDel = new ComboBox();
-            cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbDel.Width = 170;
-            cmbDel.Margin = new Padding(0, 6, 0, 0);
-            cmbDel.Items.AddRange(new object[] { "双击右键删除", "单击右键删除" });
-            cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
-            colR.Controls.Add(Row(MkLabel("删除方式"), cmbDel));
-
-            ComboBox cmbSwitch = new ComboBox();
-            cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSwitch.Width = 170;
-            cmbSwitch.Margin = new Padding(0, 6, 0, 0);
-            cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
-            cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
-            colR.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch));
-
-            // ---------- 万能键：四个分区各绑一个动作（以前是写死的） ----------
-            colR.Controls.Add(Section("万能键"));
-            ComboBox[] keyBox = new ComboBox[4];
-            string[] keyDir = { "上", "右", "下", "左" };
+            // 四张页面格：先建好挂上（空白），内容懒建；非当前页 Visible=false
+            Panel body = new Panel();
+            body.Dock = DockStyle.Fill;
+            body.Margin = new Padding(0);
+            _body = body;
             for (int i = 0; i < 4; i++)
             {
-                ComboBox kb = new ComboBox();
-                kb.DropDownStyle = ComboBoxStyle.DropDownList;
-                kb.Width = 150;
-                kb.Margin = new Padding(0, 6, 14, 0);
-                for (int j = 0; j < Settings.KeyActionIds.Length; j++)
-                    kb.Items.Add(Settings.KeyActionName(Settings.KeyActionIds[j]));
-                string cur = s.KeyActionAt(i);
-                int idx = 0;
-                for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur) idx = j;
-                kb.SelectedIndex = idx;
-                keyBox[i] = kb;
-                // 选中就立刻写进设置：不依赖"确定"按钮里那段保存循环（之前那里没生效）
-                {
-                    int myI = i; ComboBox self = kb;
-                    kb.SelectedIndexChanged += new EventHandler(delegate(object o, EventArgs e2) {
-                        if (self.SelectedIndex >= 0) s.SetKeyAction(myI, Settings.KeyActionIds[self.SelectedIndex]);
-                    });
-                }
-                if (i % 2 == 0)
-                {
-                    ComboBox kb2 = null; string dir2 = null;
-                    if (i + 1 < 4) { dir2 = keyDir[i + 1]; }
-                    Label l1 = MkLabel(keyDir[i]);
-                    if (dir2 != null)
-                    {
-                        // 一行放两个方向，省竖直空间
-                        ComboBox kb1 = kb;
-                        ComboBox kb3 = new ComboBox();
-                        kb3.DropDownStyle = ComboBoxStyle.DropDownList;
-                        kb3.Width = 150;
-                        kb3.Margin = new Padding(0, 6, 0, 0);
-                        for (int j = 0; j < Settings.KeyActionIds.Length; j++)
-                            kb3.Items.Add(Settings.KeyActionName(Settings.KeyActionIds[j]));
-                        string cur3 = s.KeyActionAt(i + 1);
-                        int idx3 = 0;
-                        for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur3) idx3 = j;
-                        kb3.SelectedIndex = idx3;
-                        keyBox[i + 1] = kb3;
-                        {
-                            int myI2 = i + 1; ComboBox self2 = kb3;
-                            kb3.SelectedIndexChanged += new EventHandler(delegate(object o, EventArgs e4) {
-                                if (self2.SelectedIndex >= 0) s.SetKeyAction(myI2, Settings.KeyActionIds[self2.SelectedIndex]);
-                            });
-                        }
-                        kb2 = kb3;
-                        colR.Controls.Add(Row(l1, kb1, Gap(16), MkLabel(dir2), kb2));
-                    }
-                    else
-                    {
-                        colR.Controls.Add(Row(l1, kb));
-                    }
-                }
+                TableLayoutPanel pg = NewGrid(2);
+                pg.Visible = false;
+                _pages[i] = pg;
+                body.Controls.Add(pg);
             }
-            Label keyHint = MkLabel("按住万能键弹出圆盘，往哪个方向松手就执行哪个动作");
-            keyHint.ForeColor = Color.FromArgb(140, 146, 158);
-            colR.Controls.Add(keyHint);
+            root.Controls.Add(body, 0, 2);
+            _builders[0] = BuildPage1;
+            _builders[1] = BuildPage2;
+            _builders[2] = BuildPage3;
+            _builders[3] = BuildPage4;
 
+            // ---------------- 底部按钮（新手引导 / 还原默认 / 确定 取消）行为一字未改 ----------------
             RoundButton ok = new RoundButton();
             ok.Text = "确定";
             ok.Size = new Size(104, 36);
@@ -8850,60 +8662,9 @@ namespace SnapWheel
             ok.FillHover = Color.FromArgb(0, 140, 232);
             ok.TextColor = Color.White;
             ok.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            ok.Margin = new Padding(10, 0, 0, 0);
+            ok.Margin = new Padding(10, 2, 0, 0);
             ok.Click += new EventHandler(delegate(object o, EventArgs e2) {
-                s.SaveToDisk = chkDisk.Checked;
-                s.Dir = txtDir.Text.Trim();
-                s.MaxCount = (int)numMax.Value;
-                s.AutoHide = chkAuto.Checked;
-                s.AutoHideSeconds = (int)numSec.Value;
-                s.AlwaysOnTop = chkTop.Checked;
-                s.ThumbSize = (int)numThumb.Value;
-                s.Radius = (int)numRad.Value;
-                s.Slots = (int)numSlots.Value;
-                s.LabelSize = (int)numLabel.Value;
-                s.Corner = IndexCorner(cmbCorner.SelectedIndex);
-                s.AutoStart = chkAutoStart.Checked;
-                s.DeleteMode = (cmbDel.SelectedIndex == 1) ? "single" : "double";
-                s.SwitchMode = (cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
-                s.PeekPercent = (int)numPeek.Value;
-                s.UiScale = scVals[cmbScale.SelectedIndex < 0 ? 0 : cmbScale.SelectedIndex];
-                s.CollapseMode = chkCollapse.Checked;
-                s.ClipboardImport = chkClip.Checked;
-                s.GlassRefresh = chkGlassRefresh.Checked;
-                s.ExpandSpeed = ringVals[cmbRing.SelectedIndex < 0 ? 2 : cmbRing.SelectedIndex];
-                s.CollapseSpeed = ringVals[cmbRing2.SelectedIndex < 0 ? 2 : cmbRing2.SelectedIndex];
-                s.NubSingle = chkSingle.Checked;
-                s.ShowBalloon = chkBalloon.Checked;
-                s.DragOutAsFile = chkDragFile.Checked;
-                s.CheckUpdate = chkUpdate.Checked;
-                // 保存万能键四分区。这里必须立刻 s.Save() 落盘：
-                // 否则下次打开设置窗口会从文件里读到旧值，一点确定就把刚改的打回原形
-                // （"圆盘上的动作名改完不变"的根因）。这条行为现在由 tests\behavior-test.cs 守着。
-                try
-                {
-                    for (int ki = 0; ki < 4; ki++)
-                    {
-                        if (keyBox[ki] == null) continue;
-                        int ksel = keyBox[ki].SelectedIndex;
-                        if (ksel < 0) ksel = 0;
-                        s.SetKeyAction(ki, Settings.KeyActionIds[ksel]);
-                    }
-                    s.Save();
-                }
-                catch (Exception kex) { Err.Log("SettingsSaveKey", kex); }
-                s.IntroAnim = chkIntroAnim.Checked;
-                s.UiStyle = (cmbStyle.SelectedIndex == 1) ? "flat" : (cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
-                s.AccentIndex = cmbAccent.SelectedIndex - 1;
-                s.GlassPercent = (int)numGlass.Value;
-                s.CardRadius = (int)numRadius.Value;
-                s.ShadowPercent = (int)numShadow.Value;
-                s.AnimSpeed = (cmbAnim.SelectedIndex == 0) ? 70 : (cmbAnim.SelectedIndex == 2 ? 140 : 100);
-                s.ShowNameLabel = chkName.Checked;
-                s.ShowCountLabel = chkCount.Checked;
-                if (cmb.SelectedItem != null) s.Hotkey = cmb.SelectedItem.ToString();
-                AutoRun.Apply(s.AutoStart);
-                s.Save();
+                SaveFromUi();
                 DialogResult = DialogResult.OK;
                 Close();
             });
@@ -8914,7 +8675,7 @@ namespace SnapWheel
             cancel.FillHover = Color.FromArgb(222, 224, 230);
             cancel.TextColor = Color.FromArgb(58, 60, 66);
             cancel.Font = new Font("Microsoft YaHei UI", 10f);
-            cancel.Margin = new Padding(10, 0, 0, 0);
+            cancel.Margin = new Padding(10, 2, 0, 0);
             cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
 
             RoundButton guide = new RoundButton();
@@ -8924,7 +8685,7 @@ namespace SnapWheel
             guide.FillHover = Color.FromArgb(226, 233, 243);
             guide.TextColor = Color.FromArgb(40, 90, 150);
             guide.Font = new Font("Microsoft YaHei UI", 10f);
-            guide.Margin = new Padding(0, 0, 0, 0);
+            guide.Margin = new Padding(0, 2, 0, 0);
             guide.Click += new EventHandler(delegate(object o, EventArgs e2)
             { GuideForm gf = new GuideForm(); gf.ShowDialog(this); });
 
@@ -8936,7 +8697,7 @@ namespace SnapWheel
             reset.FillHover = Color.FromArgb(248, 224, 220);
             reset.TextColor = Color.FromArgb(178, 66, 52);
             reset.Font = new Font("Microsoft YaHei UI", 10f);
-            reset.Margin = new Padding(10, 0, 0, 0);
+            reset.Margin = new Padding(10, 2, 0, 0);
             reset.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
                 DialogResult r2 = MessageBox.Show(this,
@@ -8951,45 +8712,481 @@ namespace SnapWheel
                 Close();
             });
 
-            // 按钮行：用四列表格把确定/取消靠右对齐。
-            // 原来是一个 250px 的假占位控件硬顶 + FlowLayoutPanel，窗口 AutoSize 一算就错位/被裁
+            // 按钮行：用五列表格把确定/取消靠右对齐（引导/还原在左）。
             TableLayoutPanel btnRow = new TableLayoutPanel();
             btnRow.ColumnCount = 5;
             btnRow.RowCount = 1;
-            btnRow.AutoSize = true;
-            btnRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnRow.AutoSize = false;
             btnRow.Dock = DockStyle.Fill;
-            btnRow.Margin = new Padding(0, 14, 0, 0);
+            btnRow.Margin = new Padding(0);
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            btnRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             btnRow.Controls.Add(guide, 0, 0);
             btnRow.Controls.Add(reset, 1, 0);
             btnRow.Controls.Add(new Panel(), 2, 0);
             btnRow.Controls.Add(ok, 3, 0);
             btnRow.Controls.Add(cancel, 4, 0);
-            btnRow.AutoSize = false;
-            btnRow.Height = 42;
-            btnRow.Dock = DockStyle.Fill;
-            root.Controls.Add(btnRow);
-            root.SetColumnSpan(btnRow, 2);
+            root.Controls.Add(btnRow, 0, 3);
 
             Label about = new Label();
             about.AutoSize = true;
             about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
             about.ForeColor = Color.FromArgb(150, 150, 160);
-            about.Margin = new Padding(0, 16, 0, 0);
-            root.Controls.Add(about);
+            about.Margin = new Padding(0, 4, 0, 0);
+            root.Controls.Add(about, 0, 4);
 
-            // 屏幕矮的时候别把窗口顶出屏幕（两栏布局后一般用不到，保险起见留个上限）
-            try
+            ShowPage(0);             // 只建第 1 页
+            Controls.Add(root);      // 全部建完才挂上去：整棵树只排一次
+            PerformLayout();
+        }
+
+        // ============================ 四页的内容 ============================
+        // 每页一张"两列 + 行"的格子，行号写死；一格里放一个控件（成组的行用 Row(...) 包一层）。
+        // 行号从 0 开始，写 RowCount 时要 ≥ 最大行号 + 1，否则那行不显示。
+
+        // ---- 第 1 页：行为与快捷键 ----
+        void BuildPage1()
+        {
+            TableLayoutPanel g = _pages[0];
+            SetupRows(g, 8);
+            Settings s = _s;
+
+            g.Controls.Add(Section("行为"), 0, 0);
+            g.Controls.Add(Section("快捷键与操作"), 1, 0);
+
+            _chkDisk = new CheckBox();
+            _chkDisk.AutoSize = true;
+            _chkDisk.Text = "保存到硬盘（否则只存内存，退出即清）";
+            _chkDisk.Checked = s.SaveToDisk;
+            _chkDisk.Margin = new Padding(0, 4, 0, 4);
+            g.Controls.Add(_chkDisk, 0, 1);
+
+            _cmbHotkey = new ComboBox();
+            _cmbHotkey.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbHotkey.Width = 170;
+            _cmbHotkey.Margin = new Padding(0, 6, 0, 0);
+            _cmbHotkey.Items.AddRange(HotkeyUtil.Names);
+            _cmbHotkey.SelectedItem = s.Hotkey;
+            if (_cmbHotkey.SelectedIndex < 0) _cmbHotkey.SelectedIndex = 0;
+            g.Controls.Add(Row(MkLabel("截图热键"), _cmbHotkey), 1, 1);
+
+            _chkAutoStart = new CheckBox();
+            _chkAutoStart.AutoSize = true;
+            _chkAutoStart.Text = "开机自动启动（登录后自动在后台运行）";
+            _chkAutoStart.Checked = AutoRun.IsEnabled();
+            _chkAutoStart.Margin = new Padding(0, 4, 0, 4);
+            g.Controls.Add(_chkAutoStart, 0, 2);
+
+            _cmbCorner = new ComboBox();
+            _cmbCorner.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbCorner.Width = 170;
+            _cmbCorner.Margin = new Padding(0, 6, 0, 0);
+            _cmbCorner.Items.AddRange(new object[] { "左下角", "右下角", "左上角", "右上角" });
+            _cmbCorner.SelectedIndex = CornerIndex(s.Corner);
+            g.Controls.Add(Row(MkLabel("圆环位置"), _cmbCorner), 1, 2);
+
+            _chkAuto = new CheckBox();
+            _chkAuto.AutoSize = true;
+            _chkAuto.Text = "空闲后自动收起轮盘";
+            _chkAuto.Checked = s.AutoHide;
+            _chkAuto.Margin = new Padding(0, 4, 0, 4);
+            _numSec = Num(2, 600, s.AutoHideSeconds);
+            g.Controls.Add(Row(_chkAuto, Gap(16), MkLabel("空闲秒数"), _numSec), 0, 3);
+
+            _cmbDel = new ComboBox();
+            _cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbDel.Width = 170;
+            _cmbDel.Margin = new Padding(0, 6, 0, 0);
+            _cmbDel.Items.AddRange(new object[] { "双击右键删除", "单击右键删除" });
+            _cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
+            g.Controls.Add(Row(MkLabel("删除方式"), _cmbDel), 1, 3);
+
+            _chkTop = new CheckBox();
+            _chkTop.AutoSize = true;
+            _chkTop.Text = "总在最前（始终置顶显示）";
+            _chkTop.Checked = s.AlwaysOnTop;
+            _chkTop.Margin = new Padding(0, 4, 0, 4);
+            g.Controls.Add(_chkTop, 0, 4);
+
+            _cmbSwitch = new ComboBox();
+            _cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbSwitch.Width = 170;
+            _cmbSwitch.Margin = new Padding(0, 6, 0, 0);
+            _cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
+            _cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
+            g.Controls.Add(Row(MkLabel("Wheel 切换"), _cmbSwitch), 1, 4);
+
+            // 保存目录这一行本来就宽，横跨两列（否则两列加起来会顶破窗口宽度）
+            _txtDir = new TextBox();
+            _txtDir.Text = s.Dir;
+            _txtDir.Width = 300;
+            _txtDir.Margin = new Padding(0, 5, 8, 0);
+            Button browse = new Button();
+            browse.Text = "浏览";
+            browse.AutoSize = true;
+            browse.MinimumSize = new Size(60, 26);
+            browse.Margin = new Padding(0, 4, 0, 0);
+            browse.Click += new EventHandler(delegate(object o, EventArgs e2) {
+                FolderBrowserDialog d = new FolderBrowserDialog();
+                if (d.ShowDialog() == DialogResult.OK) _txtDir.Text = d.SelectedPath;
+            });
+            Control dirRow = Row(MkLabel("保存目录"), _txtDir, browse);
+            g.Controls.Add(dirRow, 0, 5);
+            g.SetColumnSpan(dirRow, 2);
+
+            _chkClip = new CheckBox();
+            _chkClip.AutoSize = true;
+            _chkClip.Text = "复制图片后自动收进轮盘";
+            _chkClip.Checked = s.ClipboardImport;
+            g.Controls.Add(Row(_chkClip), 0, 6);
+
+            _chkBalloon = new CheckBox();
+            _chkBalloon.AutoSize = true;
+            _chkBalloon.Text = "显示托盘气泡提示（关掉就不再弹右下角通知）";
+            _chkBalloon.Checked = s.ShowBalloon;
+            g.Controls.Add(Row(_chkBalloon), 1, 6);
+
+            _chkUpdate = new CheckBox();
+            _chkUpdate.AutoSize = true;
+            _chkUpdate.Text = "启动时检查有没有新版本（只提示，不自动安装）";
+            _chkUpdate.Checked = s.CheckUpdate;
+            g.Controls.Add(Row(_chkUpdate), 0, 7);
+
+            _chkDragFile = new CheckBox();
+            _chkDragFile.AutoSize = true;
+            _chkDragFile.Text = "拖出时同时带上\"文件\"（拖到桌面/文件夹会落地成文件）";
+            _chkDragFile.Checked = s.DragOutAsFile;
+            g.Controls.Add(Row(_chkDragFile), 1, 7);
+        }
+
+        // ---- 第 2 页：轮盘与外观 ----
+        void BuildPage2()
+        {
+            TableLayoutPanel g = _pages[1];
+            SetupRows(g, 8);
+            Settings s = _s;
+
+            g.Controls.Add(Section("外观"), 0, 0);
+
+            _numMax = Num(1, 999, s.MaxCount);
+            _numThumb = Num(40, 260, s.ThumbSize);
+            g.Controls.Add(Row(MkLabel("最多保留张数"), _numMax, Gap(24), MkLabel("缩略图大小"), _numThumb), 0, 1);
+
+            _chkCollapse = new CheckBox();
+            _chkCollapse.AutoSize = true;
+            _chkCollapse.Text = "收起状态：缩到屏幕边上留个小把手";
+            _chkCollapse.Checked = s.CollapseMode;
+            g.Controls.Add(Row(_chkCollapse), 1, 1);
+
+            _numPeek = Num(120, 500, s.PeekPercent);
+            Control peekRow = Row(MkLabel("长按放大(%)"), _numPeek);
+            g.Controls.Add(peekRow, 0, 2);
+            g.SetColumnSpan(peekRow, 2);
+
+            // 下面这几行本身就宽（标签 + 下拉 + 说明），横跨两列 —— 两列并排会顶破窗口宽度
+            _cmbScale = new ComboBox();
+            _cmbScale.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbScale.FlatStyle = FlatStyle.Flat;
+            _cmbScale.Width = 170;
+            _cmbScale.Margin = new Padding(0, 6, 0, 0);
+            _cmbScale.Items.Add("自动（按显示器 DPI）");
+            for (int i = 1; i < scVals.Length; i++) _cmbScale.Items.Add(scVals[i] + "%");
+            _cmbScale.SelectedIndex = 0;
+            for (int i = 0; i < scVals.Length; i++) if (scVals[i] == s.UiScale) _cmbScale.SelectedIndex = i;
+            Label hint = new Label();
+            hint.AutoSize = true;
+            hint.Text = "（整块轮盘等比放大，含文字和图标）";
+            hint.ForeColor = Color.FromArgb(150, 152, 160);
+            hint.Margin = new Padding(0, 10, 0, 0);
+            Control scaleRow = Row(MkLabel("界面缩放"), _cmbScale, Gap(12), hint);
+            g.Controls.Add(scaleRow, 0, 3);
+            g.SetColumnSpan(scaleRow, 2);
+
+            // 收起 / 展开的动画速度（独立于"动画速度"）
+            _cmbRing = new ComboBox();
+            _cmbRing.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbRing.FlatStyle = FlatStyle.Flat;
+            _cmbRing.Width = 130;
+            _cmbRing.Margin = new Padding(0, 6, 0, 0);
+            for (int i = 0; i < ringNames.Length; i++) _cmbRing.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
+            _cmbRing.SelectedIndex = 2;
+            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.ExpandSpeed) _cmbRing.SelectedIndex = i;
+            Label hintRing = new Label();
+            hintRing.AutoSize = true;
+            hintRing.Text = "（只管收起 / 展开；百分比越大越快）";
+            hintRing.ForeColor = Color.FromArgb(150, 152, 160);
+            hintRing.Margin = new Padding(0, 10, 0, 0);
+            Control ringRow = Row(MkLabel("展开速度"), _cmbRing, Gap(10), hintRing);
+            g.Controls.Add(ringRow, 0, 4);
+            g.SetColumnSpan(ringRow, 2);
+
+            _cmbRing2 = new ComboBox();
+            _cmbRing2.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbRing2.FlatStyle = FlatStyle.Flat;
+            _cmbRing2.Width = 130;
+            _cmbRing2.Margin = new Padding(0, 6, 0, 0);
+            for (int i = 0; i < ringNames.Length; i++) _cmbRing2.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
+            _cmbRing2.SelectedIndex = 2;
+            for (int i = 0; i < ringVals.Length; i++) if (ringVals[i] == s.CollapseSpeed) _cmbRing2.SelectedIndex = i;
+            Label hintRing2 = new Label();
+            hintRing2.AutoSize = true;
+            hintRing2.Text = "（默认比展开快一档，收起要干脆）";
+            hintRing2.ForeColor = Color.FromArgb(150, 152, 160);
+            hintRing2.Margin = new Padding(0, 10, 0, 0);
+            Control ring2Row = Row(MkLabel("收起速度"), _cmbRing2, Gap(10), hintRing2);
+            g.Controls.Add(ring2Row, 0, 5);
+            g.SetColumnSpan(ring2Row, 2);
+
+            _numRad = Num(120, 700, s.Radius);
+            _numSlots = Num(2, 12, s.Slots);
+            _numLabel = Num(9, 40, s.LabelSize);
+            Control radRow = Row(MkLabel("环半径"), _numRad, Gap(24), MkLabel("弧上张数"), _numSlots,
+                                 Gap(24), MkLabel("序号字号"), _numLabel);
+            g.Controls.Add(radRow, 0, 6);
+            g.SetColumnSpan(radRow, 2);
+
+            _chkSingle = new CheckBox();
+            _chkSingle.AutoSize = true;
+            _chkSingle.Text = "只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）";
+            _chkSingle.Checked = s.NubSingle;
+            Control singleRow = Row(_chkSingle);
+            g.Controls.Add(singleRow, 0, 7);
+            g.SetColumnSpan(singleRow, 2);
+        }
+
+        // ---- 第 3 页：风格 ----
+        void BuildPage3()
+        {
+            TableLayoutPanel g = _pages[2];
+            SetupRows(g, 4);
+            Settings s = _s;
+
+            g.Controls.Add(Section("风格"), 0, 0);
+
+            _cmbStyle = new ComboBox();
+            _cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbStyle.FlatStyle = FlatStyle.Flat;
+            _cmbStyle.Width = 170;
+            _cmbStyle.Margin = new Padding(0, 6, 0, 0);
+            _cmbStyle.Items.AddRange(new object[] { "新拟态 + 毛玻璃", "纯扁平", "高对比（不透明）" });
+            _cmbStyle.SelectedIndex = (s.UiStyle == "flat") ? 1 : (s.UiStyle == "solid" ? 2 : 0);
+
+            _cmbAccent = new ComboBox();
+            _cmbAccent.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbAccent.FlatStyle = FlatStyle.Flat;
+            _cmbAccent.Width = 170;
+            _cmbAccent.Margin = new Padding(0, 6, 0, 0);
+            _cmbAccent.Items.Add("跟随 Wheel 颜色");
+            for (int i = 0; i < Palette.Names.Length; i++) _cmbAccent.Items.Add("统一：" + Palette.Names[i]);
+            _cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
+            Control styleRow = Row(MkLabel("界面风格"), _cmbStyle, Gap(24), MkLabel("主题色"), _cmbAccent);
+            g.Controls.Add(styleRow, 0, 1);
+            g.SetColumnSpan(styleRow, 2);
+
+            _cmbAnim = new ComboBox();
+            _cmbAnim.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbAnim.FlatStyle = FlatStyle.Flat;
+            _cmbAnim.Width = 170;
+            _cmbAnim.Margin = new Padding(0, 6, 0, 0);
+            _cmbAnim.Items.AddRange(new object[] { "慢", "标准", "快" });
+            _cmbAnim.SelectedIndex = (s.AnimSpeed <= 85) ? 0 : (s.AnimSpeed >= 120 ? 2 : 1);
+
+            _chkName = new CheckBox();
+            _chkName.AutoSize = true;
+            _chkName.Text = "显示名称标签";
+            _chkName.Checked = s.ShowNameLabel;
+            _chkName.Margin = new Padding(0, 10, 0, 0);
+            _chkCount = new CheckBox();
+            _chkCount.AutoSize = true;
+            _chkCount.Text = "显示计数标签";
+            _chkCount.Checked = s.ShowCountLabel;
+            _chkCount.Margin = new Padding(20, 10, 0, 0);
+            Control animRow = Row(MkLabel("动画速度"), _cmbAnim, Gap(24), _chkName, _chkCount);
+            g.Controls.Add(animRow, 0, 2);
+            g.SetColumnSpan(animRow, 2);
+
+            _chkGlassRefresh = new CheckBox();
+            _chkGlassRefresh.AutoSize = true;
+            _chkGlassRefresh.Text = "毛玻璃定时刷新（轮盘挂久了背景也是新的）";
+            _chkGlassRefresh.Checked = s.GlassRefresh;
+            g.Controls.Add(Row(_chkGlassRefresh), 0, 3);
+
+            _chkIntroAnim = new CheckBox();
+            _chkIntroAnim.AutoSize = true;
+            _chkIntroAnim.Text = "启动时播放开启动画";
+            _chkIntroAnim.Checked = s.IntroAnim;
+            g.Controls.Add(Row(_chkIntroAnim), 1, 3);
+        }
+
+        // ---- 第 4 页：万能键与高级 ----
+        void BuildPage4()
+        {
+            TableLayoutPanel g = _pages[3];
+            SetupRows(g, 7);
+            Settings s = _s;
+
+            g.Controls.Add(Section("万能键"), 0, 0);
+
+            // 四个分区各绑一个动作（以前是写死的）。选中就立刻写进设置：
+            // 不依赖"确定"里那段保存循环（之前那里没生效）。
+            string[] keyDir = { "上", "右", "下", "左" };
+            for (int i = 0; i < 4; i++)
             {
-                Rectangle wa = Screen.FromPoint(Cursor.Position).WorkingArea;
-                MaximumSize = new Size((int)(wa.Width * 0.95), (int)(wa.Height * 0.94));
+                ComboBox kb = new ComboBox();
+                kb.DropDownStyle = ComboBoxStyle.DropDownList;
+                kb.Width = 150;
+                kb.Margin = new Padding(0, 6, 14, 0);
+                for (int j = 0; j < Settings.KeyActionIds.Length; j++)
+                    kb.Items.Add(Settings.KeyActionName(Settings.KeyActionIds[j]));
+                string cur = s.KeyActionAt(i);
+                int idx = 0;
+                for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur) idx = j;
+                kb.SelectedIndex = idx;
+                _keyBox[i] = kb;
+                {
+                    int myI = i; ComboBox self = kb;
+                    kb.SelectedIndexChanged += new EventHandler(delegate(object o, EventArgs e2) {
+                        if (self.SelectedIndex >= 0) s.SetKeyAction(myI, Settings.KeyActionIds[self.SelectedIndex]);
+                    });
+                }
             }
-            catch { }
+            // 一行放两个方向，省竖直空间
+            g.Controls.Add(Row(MkLabel(keyDir[0]), _keyBox[0], Gap(16), MkLabel(keyDir[1]), _keyBox[1]), 0, 1);
+            g.Controls.Add(Row(MkLabel(keyDir[2]), _keyBox[2], Gap(16), MkLabel(keyDir[3]), _keyBox[3]), 0, 2);
+
+            Label keyHint = MkLabel("按住万能键弹出圆盘，往哪个方向松手就执行哪个动作");
+            keyHint.ForeColor = Color.FromArgb(140, 146, 158);
+            Control keyHintRow = Row(keyHint);
+            g.Controls.Add(keyHintRow, 0, 3);
+            g.SetColumnSpan(keyHintRow, 2);
+
+            // ---------- 高级（外观微调）：默认折叠，需要时勾一下 ----------
+            // 这几项对大多数人是噪音（第一次用不懂该选什么），所以默认藏起来。
+            g.Controls.Add(Section("高级"), 0, 4);
+
+            _advR = new TableLayoutPanel();
+            _advR.ColumnCount = 1;
+            _advR.RowCount = 1;
+            _advR.AutoSize = true;
+            _advR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _advR.Margin = new Padding(0);
+            _advR.Visible = false;
+            _advR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _advR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            _numGlass = Num(20, 100, s.GlassPercent);
+            _numRadius = Num(0, 30, s.CardRadius);
+            _numShadow = Num(0, 100, s.ShadowPercent);
+            _advR.Controls.Add(Row(MkLabel("玻璃不透明度"), _numGlass, Gap(16), MkLabel("圆角(%)"), _numRadius,
+                                   Gap(16), MkLabel("阴影强度"), _numShadow), 0, 0);
+
+            CheckBox chkAdv = new CheckBox();
+            chkAdv.AutoSize = true;
+            chkAdv.Text = "显示高级选项（外观微调：玻璃 / 圆角 / 阴影）";
+            chkAdv.Margin = new Padding(0, 10, 0, 0);
+            chkAdv.CheckedChanged += new EventHandler(delegate(object o, EventArgs e2) {
+                _advR.Visible = chkAdv.Checked;
+                _advR.PerformLayout();
+                PerformLayout();
+            });
+            g.Controls.Add(chkAdv, 0, 5);
+            g.Controls.Add(_advR, 0, 6);
+        }
+
+        // ============================ 翻页 ============================
+        // 第一次翻到某页才建那页的控件；没建过的页 = 没看过 = 没改过。
+        void ShowPage(int i)
+        {
+            if (i < 0) i = 0;
+            if (i > _pages.Length - 1) i = _pages.Length - 1;
+            if (!_built[i])
+            {
+                _built[i] = true;
+                _pages[i].SuspendLayout();
+                _builders[i]();
+                _pages[i].ResumeLayout(true);
+            }
+            _cur = i;
+            for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = (k == i);
+            if (_dial != null) { _dial.Current = i; _dial.Invalidate(); }
+            if (_body != null) _body.PerformLayout();
+        }
+
+        // ============================ 保存 ============================
+        // 把界面上改过的值写回设置。**只写"建过"的页**：没建过的页用户没看过，
+        // 保持原值即可（绝不会把它覆盖回默认值 —— 老版本这里踩过一次"确定后改动打回原形"）。
+        void SaveFromUi()
+        {
+            Settings s = _s;
+
+            if (_built[0])
+            {
+                s.SaveToDisk = _chkDisk.Checked;
+                s.Dir = _txtDir.Text.Trim();
+                s.AutoHide = _chkAuto.Checked;
+                s.AutoHideSeconds = (int)_numSec.Value;
+                s.AlwaysOnTop = _chkTop.Checked;
+                s.Corner = IndexCorner(_cmbCorner.SelectedIndex);
+                s.AutoStart = _chkAutoStart.Checked;
+                s.DeleteMode = (_cmbDel.SelectedIndex == 1) ? "single" : "double";
+                s.SwitchMode = (_cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
+                s.ClipboardImport = _chkClip.Checked;
+                s.ShowBalloon = _chkBalloon.Checked;
+                s.CheckUpdate = _chkUpdate.Checked;
+                s.DragOutAsFile = _chkDragFile.Checked;
+            }
+            if (_built[1])
+            {
+                s.MaxCount = (int)_numMax.Value;
+                s.ThumbSize = (int)_numThumb.Value;
+                s.Radius = (int)_numRad.Value;
+                s.Slots = (int)_numSlots.Value;
+                s.LabelSize = (int)_numLabel.Value;
+                s.PeekPercent = (int)_numPeek.Value;
+                s.UiScale = scVals[_cmbScale.SelectedIndex < 0 ? 0 : _cmbScale.SelectedIndex];
+                s.CollapseMode = _chkCollapse.Checked;
+                s.ExpandSpeed = ringVals[_cmbRing.SelectedIndex < 0 ? 2 : _cmbRing.SelectedIndex];
+                s.CollapseSpeed = ringVals[_cmbRing2.SelectedIndex < 0 ? 2 : _cmbRing2.SelectedIndex];
+                s.NubSingle = _chkSingle.Checked;
+            }
+            if (_built[2])
+            {
+                s.UiStyle = (_cmbStyle.SelectedIndex == 1) ? "flat" : (_cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
+                s.AccentIndex = _cmbAccent.SelectedIndex - 1;
+                s.AnimSpeed = (_cmbAnim.SelectedIndex == 0) ? 70 : (_cmbAnim.SelectedIndex == 2 ? 140 : 100);
+                s.ShowNameLabel = _chkName.Checked;
+                s.ShowCountLabel = _chkCount.Checked;
+                s.GlassRefresh = _chkGlassRefresh.Checked;
+                s.IntroAnim = _chkIntroAnim.Checked;     // 注意：这个控件在第 3 页（"动画细节"），别放进上一块
+            }
+            if (_built[3])
+            {
+                s.GlassPercent = (int)_numGlass.Value;
+                s.CardRadius = (int)_numRadius.Value;
+                s.ShadowPercent = (int)_numShadow.Value;
+                // 保存万能键四分区。这里必须立刻 s.Save() 落盘：
+                // 否则下次打开设置窗口会从文件里读到旧值，一点确定就把刚改的打回原形
+                // （"圆盘上的动作名改完不变"的根因）。这条行为现在由 tests\behavior-test.cs 守着。
+                try
+                {
+                    for (int ki = 0; ki < 4; ki++)
+                    {
+                        if (_keyBox[ki] == null) continue;
+                        int ksel = _keyBox[ki].SelectedIndex;
+                        if (ksel < 0) ksel = 0;
+                        s.SetKeyAction(ki, Settings.KeyActionIds[ksel]);
+                    }
+                    s.Save();
+                }
+                catch (Exception kex) { Err.Log("SettingsSaveKey", kex); }
+            }
+            if (_built[0] && _cmbHotkey != null && _cmbHotkey.SelectedItem != null) s.Hotkey = _cmbHotkey.SelectedItem.ToString();
+            AutoRun.Apply(s.AutoStart);
+            s.Save();
         }
 
         static int CornerIndex(string c)
@@ -9006,6 +9203,28 @@ namespace SnapWheel
             if (i == 2) return "TL";
             if (i == 3) return "TR";
             return "BL";
+        }
+
+        // 新建一张格子：列样式先给全，行样式由各页 SetupRows 按自己的行数补
+        static TableLayoutPanel NewGrid(int cols)
+        {
+            TableLayoutPanel g = new TableLayoutPanel();
+            g.ColumnCount = cols;
+            g.RowCount = 1;
+            g.AutoSize = false;
+            g.Dock = DockStyle.Fill;
+            g.Margin = new Padding(0);
+            for (int i = 0; i < cols; i++) g.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            g.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            return g;
+        }
+
+        // 指定行数并补满 RowStyles（行数必须 ≥ 用到的最大行号 + 1，否则那一行不显示）
+        static void SetupRows(TableLayoutPanel g, int rows)
+        {
+            g.RowCount = rows;
+            g.RowStyles.Clear();
+            for (int i = 0; i < rows; i++) g.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
         static Label MkLabel(string t)
@@ -9056,6 +9275,140 @@ namespace SnapWheel
             f.Margin = new Padding(0, 5, 0, 5);   // 行距：设置项变多了，压紧一点免得窗口太高
             for (int i = 0; i < cs.Length; i++) f.Controls.Add(cs[i]);
             return f;
+        }
+    }
+
+    // ============================ 轮盘式分页器 ============================
+    // 顶部一个小圆弧，四个扇区 = 四页：与主界面同一套视觉语言（新拟态的"上亮下暗"凸起感），
+    // 当前页高亮成主题色、数字变白。点扇区翻页，滚轮由 SettingsForm 的消息过滤器接管。
+    class PageDial : Control
+    {
+        public string[] Names = new string[0];
+        public int Current;
+        public event EventHandler PagePicked;
+        int _hover = -1;
+
+        static readonly Color Accent = Color.FromArgb(0, 122, 204);
+        static readonly Color Surface = Color.FromArgb(238, 240, 245);
+        static readonly Color SurfaceHot = Color.FromArgb(246, 249, 253);
+        static readonly Font NumFont = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold);
+        static readonly Font TitleFont = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+
+        const float SweepTotal = 150f;      // 整个圆弧张开的度数（其余留白，看起来才像"顶部一小段弧"）
+        const float BandW = 24f;            // 弧的厚度
+
+        public PageDial()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        int Count { get { return Names == null ? 0 : Names.Length; } }
+        float Cx { get { return Width / 2f; } }
+        float Cy { get { return Height - 4f; } }                    // 圆心落在控件底边上：只露出上半圆
+        float Ro { get { return Math.Min(92f, Height - 8f); } }
+        float Ri { get { return Ro - BandW; } }
+
+        // 扇区环带路径（外弧顺着画、内弧倒着画，中间留一点缝，瓣与瓣之间才看得出分界）
+        static GraphicsPath Band(float cx, float cy, float ri, float ro, float start, float sweep)
+        {
+            GraphicsPath p = new GraphicsPath();
+            if (sweep <= 0.1f) return p;
+            p.AddArc(new RectangleF(cx - ro, cy - ro, ro * 2f, ro * 2f), start, sweep);
+            p.AddArc(new RectangleF(cx - ri, cy - ri, ri * 2f, ri * 2f), start + sweep, -sweep);
+            p.CloseFigure();
+            return p;
+        }
+
+        void Sector(int i, out float start, out float sweep, out PointF mid)
+        {
+            int n = Math.Max(1, Count);
+            sweep = SweepTotal / n;
+            start = 270f - SweepTotal / 2f + sweep * i;
+            double a = (start + sweep / 2f) * Math.PI / 180.0;
+            float mr = (Ri + Ro) / 2f;
+            mid = new PointF(Cx + (float)(Math.Cos(a) * mr), Cy + (float)(Math.Sin(a) * mr));
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
+            int n = Count;
+            if (n <= 0) return;
+
+            for (int i = 0; i < n; i++)
+            {
+                float start, sweep; PointF mid;
+                Sector(i, out start, out sweep, out mid);
+                bool cur = (i == Current);
+                bool hot = (i == _hover);
+                using (GraphicsPath p = Band(Cx, Cy, Ri, Ro, start + 1.2f, sweep - 2.4f))
+                {
+                    RectangleF box = p.GetBounds();
+                    // 凸起感：顶上一条高光、底下一条暗边（GlassPanel 一上一下，跟轮盘控件同一套路）
+                    Gfx.GlassPanel(g, p, box, cur ? Accent : (hot ? SurfaceHot : Surface),
+                                   cur ? 120 : 190, cur ? 80 : 46, true);
+                    if (cur)
+                        using (Pen pen = new Pen(Color.FromArgb(120, 255, 255, 255), 1.2f))
+                        { pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; g.DrawPath(pen, p); }
+                }
+                // 扇区里的序号
+                Rectangle numRc = new Rectangle((int)mid.X - 12, (int)mid.Y - 9, 24, 18);
+                TextRenderer.DrawText(g, (i + 1).ToString(), NumFont, numRc,
+                    cur ? Color.White : Color.FromArgb(112, 120, 134),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
+
+            // 圆环内圈里写当前页的名字（翻页时立刻跟着变）
+            string t = (Current >= 0 && Current < n) ? Names[Current] : "";
+            int tw = TextRenderer.MeasureText(t, TitleFont).Width + 12;
+            Rectangle rc = new Rectangle((int)(Cx - tw / 2f), (int)(Cy - Ri + 34f), tw, 26);
+            TextRenderer.DrawText(g, t, TitleFont, rc, Color.FromArgb(64, 70, 82),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+
+        // 命中的扇区；没命中返回 -1（环带内外各放宽 6px，好点一点）
+        int HitTest(Point p)
+        {
+            int n = Count;
+            if (n <= 0) return -1;
+            float dx = p.X - Cx, dy = p.Y - Cy;
+            float d = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (d > Ro + 6f || d < Ri - 6f) return -1;
+            double ang = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+            if (ang < 0) ang += 360.0;
+            double rel = ang - (270.0 - SweepTotal / 2.0);
+            if (rel < 0) rel += 360.0;
+            if (rel > SweepTotal) return -1;
+            int idx = (int)(rel / (SweepTotal / n));
+            return idx < n ? idx : n - 1;
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            int i = HitTest(e.Location);
+            if (i >= 0 && i != Current)
+            {
+                Current = i;
+                Invalidate();
+                if (PagePicked != null) PagePicked(this, EventArgs.Empty);
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int i = HitTest(e.Location);
+            if (i != _hover) { _hover = i; Invalidate(); }
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            if (_hover != -1) { _hover = -1; Invalidate(); }
         }
     }
 }
