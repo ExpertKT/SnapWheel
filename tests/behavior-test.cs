@@ -824,6 +824,55 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 24. 拖出去必须同时给"图片"和"文件"两种格式 =================
+            Run("拖出去的载荷：图片格式 + 文件格式都要有（少一个就有一半地方放不进去）", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.DragOutAsFile = true;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                st.SaveToDisk = false;
+                StoreItem it = st.Add(Solid(80, 50, Color.Orange));
+                WheelForm f = new WheelForm(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+
+                DataObject d = f.BuildDragData(it);
+                bool hasBmp = d.GetDataPresent(DataFormats.Bitmap);
+                bool hasFile = d.GetDataPresent(DataFormats.FileDrop);
+                if (!hasBmp) { f.Dispose(); return "连图片格式都没有"; }
+                if (!hasFile) { f.Dispose(); return "没有文件格式 —— 拖到资源管理器/桌面就会放不进去（v0.4.8 的回归）"; }
+
+                // 设置里关掉之后才允许不给文件格式
+                s.DragOutAsFile = false;
+                DataObject d2 = f.BuildDragData(it);
+                bool file2 = d2.GetDataPresent(DataFormats.FileDrop);
+                bool bmp2 = d2.GetDataPresent(DataFormats.Bitmap);
+                f.Dispose();
+                if (file2) return "设置关掉了却还是给了文件格式";
+                if (!bmp2) return "关掉文件格式后连图片格式也没了";
+                return null;
+            });
+
+            // ================= 25. 老配置要迁移（用户就是这么中招的）=================
+            Run("老配置迁移：Rev=2 且 DragOutAsFile=0 的配置，读出来要恢复成带文件格式", delegate
+            {
+                string p = Path.Combine(tmp, "settings_old.ini");
+                File.WriteAllText(p,
+                    "SaveToDisk=1" + Environment.NewLine +
+                    "Dir=C:\\Users\\Maverick\\Pictures\\SnapWheel" + Environment.NewLine +
+                    "DragOutAsFile=0" + Environment.NewLine +
+                    "Rev=2" + Environment.NewLine, new System.Text.UTF8Encoding(false));
+                string save = Settings.OverridePath;
+                Settings.OverridePath = p;
+                Settings loaded = Settings.Load();
+                Settings.OverridePath = save;
+                if (!loaded.DragOutAsFile) return "老配置没有被迁移回「带文件格式」，拖出去还是放不进去";
+                if (loaded.Rev < 3) return "Rev 没升到 3（下次还会再迁移一遍）";
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 

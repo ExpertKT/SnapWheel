@@ -620,19 +620,30 @@ namespace SnapWheel
         }
 
 
+        // 组装"拖出去"的载荷。抽成单独方法是为了能测到底给了哪些格式 ——
+        // v0.4.8 把"文件格式"默认关掉了，结果拖到资源管理器 / 只吃文件的程序直接放不进去，
+        // 用户报的"缩略图拖出去放不了"就是它。少给一个格式 = 少一半能被接收的地方。
+        internal DataObject BuildDragData(StoreItem it)
+        {
+            DataObject data = new DataObject();
+            string file = null;
+            try { file = _store.EnsureFile(it); } catch { }
+            // 图片格式：拖到微信 / Word / PS 这类接受图片的地方，直接就是一张图
+            try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { }
+            // 文件格式：拖到桌面 / 资源管理器 / 只认文件的程序全靠它
+            if (_settings.DragOutAsFile && file != null)
+            {
+                try { data.SetData(DataFormats.FileDrop, new string[] { file }); } catch { }
+            }
+            try { data.SetData(DragFmt, 1); } catch { }        // 标记成"轮盘自己的拖拽"，别当成外部导入
+            return data;
+        }
+
         void StartDragOut(int index)
         {
             if (index < 0 || index >= _store.Items.Count) return;
             StoreItem it = _store.Items[index];
-            string file = _store.EnsureFile(it);
-            DataObject data = new DataObject();
-            // 先给"图片"格式：拖到微信/Word/PS 这类接受图片的地方直接就是图，不会多出文件。
-            try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { }
-            // "文件"格式只在你需要时给（设置里可开）。给了它，拖到桌面/资源管理器就会落地成一个文件——
-            // 很多人误以为"拖到不支持的地方啥也没发生"，结果桌面上多出一张，所以默认关掉。
-            if (_settings.DragOutAsFile && file != null) data.SetData(DataFormats.FileDrop, new string[] { file });
-            else if (file == null) { try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { } }
-            try { data.SetData(DragFmt, 1); } catch { }        // 标记成“轮盘自己的拖拽”，别当成外部导入
+            DataObject data = BuildDragData(it);
 
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             _dragOutItem = it; _dragOutProg = 0f;
@@ -653,6 +664,14 @@ namespace SnapWheel
 
             bool taken = (eff != DragDropEffects.None) && !_returnedToWheel;
             bool returned = _returnedToWheel;
+            // 记下来给 [Frame] 日志用：下次"拖不出去"时，日志里能直接看出是没被接收还是被拦了
+            try
+            {
+                string[] fmts = data.GetFormats(false);
+                _lastDragInfo = "给了 " + fmts.Length + " 种格式(" + string.Join("/", fmts) + ") 结果=" + eff +
+                                (returned ? " 拖回了轮盘" : "") + (_settings.DragOutAsFile ? "" : " 未带文件格式");
+            }
+            catch { _lastDragInfo = "结果=" + eff; }
             if (!taken && !returned) NotifyAdminDragBlocked();
             _returnedToWheel = false;
             _dragOutItem = null;
