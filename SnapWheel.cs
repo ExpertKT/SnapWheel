@@ -21,7 +21,7 @@ namespace SnapWheel
         static DateTime _last = DateTime.MinValue;
 
         // 测试用：把日志指到临时文件（null = 正常的 %APPDATA%\SnapWheel\error.log）。
-        // 否则跑一次 -Test，[Frame]/[KeyLabels] 这些诊断行会混进用户真实日志里，
+        // 否则跑一次 -Test，[Frame] 这些诊断行会混进用户真实日志里，
         // 以后分析"慢半拍"时分不清哪些是测试造出来的。
         public static string OverridePath = null;
 
@@ -3162,7 +3162,6 @@ namespace SnapWheel
         DateTime _keyDownAt = DateTime.MinValue;
         // 万能键长按多久弹圆盘：从 260ms 收到 140ms（更跟手），仍能区分"点一下"和"长按"
         const int KeyMenuDelayMs = 140;
-        bool _labelLogged = false;      // 诊断用：每次展开圆盘只记一次
         float _menuT = 0f;             // 0..1 radial menu expansion
         bool _menuOpen = false;
         int _sector = -1;              // 0=上 1=右 2=下 3=左（动作可由用户自定义）
@@ -3897,13 +3896,6 @@ namespace SnapWheel
                     float lr = rr * 0.60f;
                     using (Font kf = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold))
                     {
-                        // 诊断：圆盘展开时把"画标签时读到的动作"写进日志（用来定位字不变的问题）
-                        if (_menuT > 0.85f && !_labelLogged)
-                        {
-                            _labelLogged = true;
-                            try { Err.Log("KeyLabels", new Exception("KeyActions=" + _settings.KeyActions + " | 四个方向=" + _settings.KeyActionAt(0) + "," + _settings.KeyActionAt(1) + "," + _settings.KeyActionAt(2) + "," + _settings.KeyActionAt(3))); } catch { }
-                        }
-                        if (_menuT < 0.05f) _labelLogged = false;
                         for (int q = 0; q < 4; q++)
                         {
                             string txt = KeyActionShort(_settings.KeyActionAt(q));
@@ -5634,7 +5626,6 @@ namespace SnapWheel
                 int idx = 0;
                 for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur) idx = j;
                 kb.SelectedIndex = idx;
-                try { Err.Log("KeyInit", new Exception("方向" + i + " 初始化用 " + cur + "（来自 KeyActions=" + s.KeyActions + "）")); } catch { }
                 keyBox[i] = kb;
                 // 选中就立刻写进设置：不依赖"确定"按钮里那段保存循环（之前那里没生效）
                 {
@@ -5716,22 +5707,21 @@ namespace SnapWheel
                 s.ShowBalloon = chkBalloon.Checked;
                 s.DragOutAsFile = chkDragFile.Checked;
                 s.CheckUpdate = chkUpdate.Checked;
-                // 保存万能键四分区：带日志和异常捕获，一次定位"改了不生效"
+                // 保存万能键四分区。这里必须立刻 s.Save() 落盘：
+                // 否则下次打开设置窗口会从文件里读到旧值，一点确定就把刚改的打回原形
+                // （"圆盘上的动作名改完不变"的根因）。这条行为现在由 tests\behavior-test.cs 守着。
                 try
                 {
-                    string dbg = "";
                     for (int ki = 0; ki < 4; ki++)
                     {
-                        if (keyBox[ki] == null) { dbg += ki + ":null "; continue; }
+                        if (keyBox[ki] == null) continue;
                         int ksel = keyBox[ki].SelectedIndex;
                         if (ksel < 0) ksel = 0;
                         s.SetKeyAction(ki, Settings.KeyActionIds[ksel]);
-                        dbg += ki + ":" + Settings.KeyActionIds[ksel] + " ";
                     }
-                    s.Save();      // 立刻落盘：否则下次打开设置会从文件读到旧值，一点确定就把改动打回原形
-                    Err.Log("KeySave", new Exception("下拉读到 " + dbg + " | 写入后 KeyActions=" + s.KeyActions + " | 已落盘"));
+                    s.Save();
                 }
-                catch (Exception kex) { Err.Log("KeySave", kex); }
+                catch (Exception kex) { Err.Log("SettingsSaveKey", kex); }
                 s.IntroAnim = chkIntroAnim.Checked;
                 s.UiStyle = (cmbStyle.SelectedIndex == 1) ? "flat" : (cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
                 s.AccentIndex = cmbAccent.SelectedIndex - 1;

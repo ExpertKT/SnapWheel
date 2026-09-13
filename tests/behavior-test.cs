@@ -267,6 +267,39 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 7. 圆盘上的字跟着设置变 =================
+            // 取代原来那三处运行期诊断日志（KeyInit / KeySave / KeyLabels）。
+            // 一条链全查：改一次 -> 落盘 -> 再打开设置读回来还是新的 -> 画标签读到的就是新动作
+            Run("圆盘上的字跟着设置变（改一次 → 再打开设置还在 → 标签用新动作）", delegate
+            {
+                string[] want = { "clear", "prev", "folder", "collapse" };   // 四个方向都改，且互不相同
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                for (int i = 0; i < 4; i++) s.SetKeyAction(i, want[i]);
+                s.Save();                                  // 设置窗口点确定时做的事（含强制落盘）
+
+                Settings again = Settings.Load();          // 再打开设置窗口，下拉里读到的
+                for (int i = 0; i < 4; i++)
+                    if (again.KeyActionAt(i) != want[i])
+                        return "方向 " + i + " 读回来是 " + again.KeyActionAt(i) + "（应该是 " + want[i] + "）";
+
+                // 画圆盘标签那一刻，txt = KeyActionShort(KeyActionAt(q))
+                MethodInfo ks = typeof(WheelForm).GetMethod("KeyActionShort", BindingFlags.NonPublic | BindingFlags.Static);
+                if (ks == null) return "找不到 KeyActionShort";
+                Settings def = new Settings();             // 出厂默认，用来确认"确实变了、不是还画着旧的"
+                for (int i = 0; i < 4; i++)
+                {
+                    string got = (string)ks.Invoke(null, new object[] { again.KeyActionAt(i) });
+                    string old = (string)ks.Invoke(null, new object[] { def.KeyActionAt(i) });
+                    if (string.IsNullOrEmpty(got)) return "方向 " + i + " 画出来是空的";
+                    if (got == old) return "方向 " + i + " 画出来的还是旧字「" + old + "」";
+                }
+                string a0 = (string)ks.Invoke(null, new object[] { again.KeyActionAt(0) });
+                string a2 = (string)ks.Invoke(null, new object[] { again.KeyActionAt(2) });
+                if (a0 == a2) return "方向 0 和 2 画成了同一个字：" + a0;
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 
