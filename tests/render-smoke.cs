@@ -1,7 +1,7 @@
 // 绘制冒烟测试：把 WheelForm 的各种状态组合都画一遍（包括拖拽高亮、删除两半确认、圆盘菜单、提示条），
 // 任何一处绘制抛异常都算失败 —— 上线前挡住「画错一帧就把程序打死」这类问题。
 // 编译：
-//   csc /nologo /target:winexe /main:SnapWheel.RenderSmoke /out:rendertest.exe SnapWheel.cs tests\render-smoke.cs
+//   csc /nologo /target:winexe /main:SnapWheel.RenderSmoke /out:rendertest.exe src\*.cs tests\render-smoke.cs
 using System;
 using System.Collections.Generic;
 using System.Drawing;

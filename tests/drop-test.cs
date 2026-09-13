@@ -3,7 +3,7 @@
 //   目标 A = 另一个普通 Form（对照组，验证模拟拖拽本身有效）
 //   目标 B = WheelForm（真正要测的）
 // 编译：
-//   csc /nologo /target:exe /main:SnapWheel.DropTest /out:droptest.exe SnapWheel.cs tests\drop-test.cs
+//   csc /nologo /target:exe /main:SnapWheel.DropTest /out:droptest.exe src\*.cs tests\drop-test.cs
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

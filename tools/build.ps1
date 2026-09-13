@@ -7,7 +7,7 @@
         .\tools\build.ps1 -Package      再打包成分发 zip（含使用说明）
         .\tools\build.ps1 -Clean        先清空 build\ 再编
 
-    两条产品线来自同一份 SnapWheel.cs：
+    两条产品线来自同一份源码（src\ 下 19 个 .cs，WheelForm 是 5 个 partial）：
         完整版     普通编译            -> SnapWheel.exe          含万能键
         无万能键版 csc /define:NO_KEY  -> SnapWheel-nokey.exe    不含万能键
 #>
@@ -24,8 +24,10 @@ $ErrorActionPreference = 'Stop'
 # 脚本在 tools\ 下，项目根目录是它的上一级（也兼容直接放在根目录的情况）
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = $scriptDir
-if (-not (Test-Path (Join-Path $root 'SnapWheel.cs'))) { $root = Split-Path -Parent $scriptDir }
-$src  = Join-Path $root 'SnapWheel.cs'
+if (-not (Test-Path (Join-Path $root 'src'))) { $root = Split-Path -Parent $scriptDir }
+# 0.4.9 起源码拆到 src\ 下的多个文件（WheelForm 是 5 个 partial），不再有单文件 SnapWheel.cs
+$codeDir = Join-Path $root 'src'
+$sources = @(Get-ChildItem $codeDir -Filter *.cs -File | Sort-Object Name | ForEach-Object { $_.FullName })
 $ico  = Join-Path $root 'snapwheel.ico'
 $out  = Join-Path $root $OutDir
 
@@ -33,7 +35,7 @@ function Info($s) { Write-Host $s -ForegroundColor Cyan }
 function Ok($s)   { Write-Host "  [OK] $s" -ForegroundColor Green }
 function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red }
 
-if (-not (Test-Path $src)) { Bad "找不到源码: $src"; exit 1 }
+if ($sources.Count -eq 0) { Bad "找不到源码: $codeDir"; exit 1 }
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
 # ---- 找 csc.exe（.NET Framework 自带的编译器，无需装 Visual Studio）----
@@ -48,7 +50,7 @@ function Get-Csc {
 $csc = Get-Csc
 
 # ---- 从源码里读两条线各自的版本号 ----
-$text = [System.IO.File]::ReadAllText($src, [System.Text.Encoding]::UTF8)
+$text = ($sources | ForEach-Object { [System.IO.File]::ReadAllText($_, [System.Text.Encoding]::UTF8) }) -join "`n"
 $mNoKey = [regex]::Match($text, '#if NO_KEY\s*\r?\n\s*public const string Version = "([0-9]+\.[0-9]+\.[0-9]+)"')
 $mFull  = [regex]::Match($text, '#else\s*\r?\n\s*public const string Version = "([0-9]+\.[0-9]+\.[0-9]+)"')
 $vFull  = if ($mFull.Success)  { $mFull.Groups[1].Value }  else { "?" }
@@ -59,7 +61,7 @@ New-Item -ItemType Directory -Path $out -Force | Out-Null
 
 Info ""
 Info "SnapWheel 构建"
-Info "  源码      $src"
+Info "  源码      $codeDir （$($sources.Count) 个文件）"
 Info "  编译器    $csc"
 Info "  完整版    v$vFull"
 Info "  无万能键版 v$vNoKey"
@@ -69,8 +71,8 @@ Info ""
 # ---- 编译两条线 ----
 function Invoke-Build($define, $exeName, $label) {
     $target = Join-Path $out $exeName
-    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target", $src)
-    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target", $src) }
+    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target") + $sources
+    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target") + $sources }
     $log = & $csc @args 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $target)) {
         Bad "$label 编译失败"
@@ -124,7 +126,7 @@ if ($Test) {
         if ($define) { $a += "/define:$define" }
         if ($main)   { $a += "/main:$main" }
         $a += @("/out:$exe")
-        if ($main -or $define) { $a += $src }
+        if ($main -or $define) { $a += $sources }
         $a += (Join-Path $root "tests\$file")
         & $csc @a 2>&1 | Where-Object { $_ -match ': error' } | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
         if (-not (Test-Path $exe)) { Bad "$name 编译失败"; return }

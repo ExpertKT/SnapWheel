@@ -25,9 +25,12 @@ $ErrorActionPreference = 'Stop'
 # 脚本在 tools\ 下，项目根目录是它的上一级（也兼容直接放在根目录）
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = $scriptDir
-if (-not (Test-Path (Join-Path $root 'SnapWheel.cs'))) { $root = Split-Path -Parent $scriptDir }
+if (-not (Test-Path (Join-Path $root 'src'))) { $root = Split-Path -Parent $scriptDir }
 
-$src  = Join-Path $root 'SnapWheel.cs'
+# 0.4.9 起源码在 src\ 下（WheelForm 是 5 个 partial）；版本号写在 src\00-AppInfo.cs
+$codeDir  = Join-Path $root 'src'
+$appInfo  = Join-Path $codeDir '00-AppInfo.cs'
+$sources  = @(Get-ChildItem $codeDir -Filter *.cs -File | Sort-Object Name | ForEach-Object { $_.FullName })
 $ico  = Join-Path $root 'snapwheel.ico'
 $exe  = Join-Path $root 'SnapWheel.exe'
 $vers = Join-Path $root 'versions'
@@ -36,7 +39,7 @@ function Info($s) { Write-Host $s -ForegroundColor Cyan }
 function Ok($s)   { Write-Host "  [OK] $s" -ForegroundColor Green }
 function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red }
 
-if (-not (Test-Path $src)) { Bad "找不到源码: $src"; exit 1 }
+if ($sources.Count -eq 0) { Bad "找不到源码: $codeDir"; exit 1 }
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
 $csc = @(
@@ -46,7 +49,7 @@ $csc = @(
 if (-not $csc) { Bad "找不到 csc.exe（需要 .NET Framework 4.x）"; exit 1 }
 
 # ---- 读源码里两条线当前的版本号 ----
-$text = [System.IO.File]::ReadAllText($src, [System.Text.Encoding]::UTF8)
+$text = [System.IO.File]::ReadAllText($appInfo, [System.Text.Encoding]::UTF8)
 $rxNoKey = [regex]::Match($text, '(#if NO_KEY\s*\r?\n\s*public const string Version = ")([0-9]+\.[0-9]+\.[0-9]+)(")')
 $rxFull  = [regex]::Match($text, '(#else\s*\r?\n\s*public const string Version = ")([0-9]+\.[0-9]+\.[0-9]+)(")')
 if (-not $rxNoKey.Success -or -not $rxFull.Success) { Bad "源码版本号格式变了，找不到 #if NO_KEY / #else 两行"; exit 1 }
@@ -74,13 +77,13 @@ Info ""
 # ---- 1) 改源码里的两行版本号 ----
 $text = $text.Replace($rxFull.Value,  $rxFull.Groups[1].Value  + $Version      + $rxFull.Groups[3].Value)
 $text = $text.Replace($rxNoKey.Value, $rxNoKey.Groups[1].Value + $NoKeyVersion + $rxNoKey.Groups[3].Value)
-[System.IO.File]::WriteAllText($src, $text, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText($appInfo, $text, (New-Object System.Text.UTF8Encoding($false)))
 Ok "源码版本号已更新"
 
 # ---- 2) 编译两条线 ----
 function Build($outExe, $define, $label) {
-    $a = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$outExe", $src)
-    if ($define) { $a = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$outExe", $src) }
+    $a = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $sources
+    if ($define) { $a = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $sources }
     $log = & $csc @a 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $outExe)) {
         Bad "$label 编译失败"
@@ -99,7 +102,23 @@ function Snapshot($ver, $exePath, $label) {
     $out = Join-Path $vers ("v" + $ver)
     if (Test-Path $out) { Ok "$label：覆盖 versions\v$ver" }
     else { New-Item -ItemType Directory -Path $out | Out-Null; Ok "$label：新建 versions\v$ver" }
-    Copy-Item $src $out -Force
+    # 归档：src\ 原样一份（真正的结构） + 合并成一个单文件 SnapWheel.cs（方便直接编译/看全貌）。
+    # 合并时必须把各文件的 using 抽到最前面去重 —— using 不允许出现在 namespace 块之后。
+    Copy-Item $codeDir $out -Recurse -Force
+    $usings = New-Object System.Collections.Generic.List[string]
+    $bodies = New-Object System.Collections.Generic.List[string]
+    foreach ($s in $sources) {
+        $ln = [System.IO.File]::ReadAllText($s, [System.Text.Encoding]::UTF8) -split "`n"
+        $i = 0
+        while ($i -lt $ln.Count -and ($ln[$i] -match '^using ' -or $ln[$i].Trim() -eq '')) {
+            $u = $ln[$i].TrimEnd()
+            if ($ln[$i] -match '^using ' -and -not $usings.Contains($u)) { $usings.Add($u) }
+            $i++
+        }
+        if ($i -lt $ln.Count) { $bodies.Add((($ln[$i..($ln.Count - 1)]) -join "`n")) }
+    }
+    $merged = ($usings -join "`n") + "`n`n" + ($bodies -join "`n")
+    [System.IO.File]::WriteAllText((Join-Path $out 'SnapWheel.cs'), $merged, (New-Object System.Text.UTF8Encoding($false)))
     Copy-Item $exePath (Join-Path $out 'SnapWheel.exe') -Force
     Copy-Item $ico $out -Force
     $today = Get-Date -Format 'yyyy-MM-dd'
@@ -114,12 +133,13 @@ $Note
 
 ## 文件
 - ``SnapWheel.exe`` —— 可执行文件（绿色免安装）
-- ``SnapWheel.cs`` —— 完整源码
+- ``src\`` —— 完整源码（0.4.9 起按类型拆分；WheelForm 是 5 个 partial）
+- ``SnapWheel.cs`` —— 同一份源码合并成的单文件（方便直接编译/搜索）
 - ``snapwheel.ico`` —— 图标
 
 ## 编译
 ``````
-csc /nologo /optimize+ $define`/target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
+csc /nologo /optimize+ $define`/target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe src\*.cs
 ``````
 "@
     $n = $n.Replace('$define`/target', "$define/target")

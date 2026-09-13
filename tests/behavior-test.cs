@@ -5,7 +5,7 @@
 // 但行为是错的"。这个文件专门盯这几条行为，防止改回去。
 //
 // 编译（build.ps1 -Test 会自动跑）：
-//   csc /nologo /target:exe /main:SnapWheel.BehaviorTest /out:btest.exe SnapWheel.cs tests\behavior-test.cs
+//   csc /nologo /target:exe /main:SnapWheel.BehaviorTest /out:btest.exe src\*.cs tests\behavior-test.cs
 //
 // 安全：全程把设置文件和轮盘清单指到临时目录（Settings.OverridePath /
 // WheelManager.OverrideMetaPath），绝不碰用户真实的 %APPDATA%\SnapWheel。

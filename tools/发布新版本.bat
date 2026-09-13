@@ -12,7 +12,7 @@ echo    会做的事：改版本号 -^> 编译两条线 -^> 归档到 versions\
 echo    （只动本地，不会推到 GitHub）
 echo.
 echo    源码里当前的版本号：
-findstr /C:"public const string Version" "SnapWheel.cs"
+findstr /C:"public const string Version" "src\00-AppInfo.cs"
 echo.
 
 set VER=

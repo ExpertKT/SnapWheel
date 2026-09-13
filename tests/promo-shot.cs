@@ -1,5 +1,5 @@
 // 宣传素材生成器：把界面渲染图和文案合成成可以直接发朋友圈的方图
-// 编译：csc /nologo /target:exe /main:SnapWheel.PromoShot /out:promo.exe SnapWheel.cs tests\promo-shot.cs
+// 编译：csc /nologo /target:exe /main:SnapWheel.PromoShot /out:promo.exe src\*.cs tests\promo-shot.cs
 // 用法：promo.exe <输出目录>
 using System;
 using System.Collections.Generic;

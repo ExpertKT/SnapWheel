@@ -1,7 +1,7 @@
-// 图片加载回归测试：把 SnapWheel.cs 一起编进来（/main:SnapWheel.IoTest.Main），
+// 图片加载回归测试：把 src\*.cs 一起编进来（src\*.cs，/main:SnapWheel.IoTest.Main），
 // 逐个格式生成样本文件 -> 走 ImageIO.Load 读回 -> 校验尺寸/alpha。
 // 编译：
-//   csc /nologo /target:exe /main:SnapWheel.IoTest.Main /out:iotest.exe SnapWheel.cs tests\io-test.cs
+//   csc /nologo /target:exe /main:SnapWheel.IoTest.Main /out:iotest.exe src\*.cs tests\io-test.cs
 using System;
 using System.Collections.Generic;
 using System.Drawing;

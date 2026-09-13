@@ -98,11 +98,11 @@ build\SnapWheel-v0.2.18-nokey.zip   无万能键版分发包
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 # 完整版（含万能键）
-& $csc /nologo /optimize+ /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe SnapWheel.cs
+& $csc /nologo /optimize+ /target:winexe /win32icon:snapwheel.ico /out:SnapWheel.exe src\*.cs
 
 # 无万能键版（就是多一个 /define:NO_KEY）
 & $csc /nologo /optimize+ /define:NO_KEY /target:winexe /win32icon:snapwheel.ico `
-  /out:SnapWheel-nokey.exe SnapWheel.cs
+  /out:SnapWheel-nokey.exe src\*.cs
 ```
 </details>
 
@@ -175,10 +175,25 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 ## 项目结构
 
-根目录只放一个核心源码文件，其余都收在子目录里：
+根目录只放图标和文档，源码都在 `src\` 里（0.4.9 起从单文件拆开）：
 
 ```
-SnapWheel.cs            单文件源码（约 5100 行，全部逻辑都在这）
+src/                    源码（按类型分文件，编号 = 阅读顺序）
+  00-AppInfo.cs           版本号 + 是否管理员（Elev）
+  05-Err.cs               错误日志 + 帧耗时统计
+  10-Native.cs 15-Gfx.cs  Win32 声明 / 绘制与毛玻璃工具
+  20-ImageIO.cs           图片格式解析、存盘
+  25-Store.cs 30-Wheel.cs 图片容器 / 轮盘与多 Wheel 管理
+  35-Settings.cs          设置读写 + 热键 + 开机自启
+  40-RoundButton.cs       自绘按钮
+  50-OverlayForm.cs       截图框选浮层 + 拖拽预览
+  60-WheelForm.cs         轮盘主窗口：字段/构造/布局/几何/对外接口
+  61-WheelForm.Draw.cs       └ 绘制（同一个类的 partial）
+  62-WheelForm.Anim.cs       └ 动画与展开收起
+  63-WheelForm.Glass.cs      └ 抓屏毛玻璃背景
+  64-WheelForm.Input.cs      └ 鼠标键盘、拖放、万能键动作
+  70-WheelsForm.cs 75-SettingsForm.cs 80-Dialogs.cs   管理/设置/引导等对话框
+  90-App.cs               托盘与程序入口
 snapwheel.ico           图标
 tools/                  构建与发布工具（不想碰命令行，双击里面的 .bat 即可）
   一键编译.bat            编译两条线 + 跑全部测试 + 打好分发 zip
@@ -212,16 +227,16 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 & $csc /nologo /out:$env:TEMP\t1.exe tests\resize-geometry-test.cs ; & $env:TEMP\t1.exe
 
 # 图片格式 / 导入
-& $csc /nologo /target:exe /main:SnapWheel.IoTest /out:$env:TEMP\t2.exe SnapWheel.cs tests\io-test.cs ; & $env:TEMP\t2.exe
+& $csc /nologo /target:exe /main:SnapWheel.IoTest /out:$env:TEMP\t2.exe src\*.cs tests\io-test.cs ; & $env:TEMP\t2.exe
 
 # 绘制 / 风格 / 毛玻璃 / 改名 / 缩放 / 淡出
-& $csc /nologo /target:exe /main:SnapWheel.RenderSmoke /out:$env:TEMP\t3.exe SnapWheel.cs tests\render-smoke.cs ; & $env:TEMP\t3.exe
+& $csc /nologo /target:exe /main:SnapWheel.RenderSmoke /out:$env:TEMP\t3.exe src\*.cs tests\render-smoke.cs ; & $env:TEMP\t3.exe
 
 # 拖放（会模拟鼠标真的拖拽，注意别碰电脑）
-& $csc /nologo /target:exe /main:SnapWheel.DropTest /out:$env:TEMP\t4.exe SnapWheel.cs tests\drop-test.cs ; & $env:TEMP\t4.exe
+& $csc /nologo /target:exe /main:SnapWheel.DropTest /out:$env:TEMP\t4.exe src\*.cs tests\drop-test.cs ; & $env:TEMP\t4.exe
 
 # 看设计效果（不弹窗、不动鼠标，输出到 %TEMP%\snapwheel_ui）
-& $csc /nologo /target:exe /main:SnapWheel.UiShot /out:$env:TEMP\uishot.exe SnapWheel.cs tests\ui-shot.cs ; & $env:TEMP\uishot.exe
+& $csc /nologo /target:exe /main:SnapWheel.UiShot /out:$env:TEMP\uishot.exe src\*.cs tests\ui-shot.cs ; & $env:TEMP\uishot.exe
 ```
 
 ## 版本历史

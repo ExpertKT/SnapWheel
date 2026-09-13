@@ -1,5 +1,5 @@
 // 探针：看看在轮盘那些点上，系统认为“最顶上的窗口”到底是谁
-// 编译：csc /nologo /target:exe /main:SnapWheel.ProbeTest /out:probe.exe SnapWheel.cs tests\probe-test.cs
+// 编译：csc /nologo /target:exe /main:SnapWheel.ProbeTest /out:probe.exe src\*.cs tests\probe-test.cs
 using System;
 using System.Drawing;
 using System.Reflection;

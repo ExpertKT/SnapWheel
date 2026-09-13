@@ -13,8 +13,52 @@ using Microsoft.Win32;
 
 namespace SnapWheel
 {
-    // 出错就记到 %APPDATA%\SnapWheel\error.log，不弹框、不退出。
-    // 绘制里任何一处算错（比如颜色分量越界）最多让那一帧不好看，不该让整个程序挂掉。
+    static class AppInfo
+    {
+#if NO_KEY
+        public const string Version = "0.2.19";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+#else
+        public const string Version = "0.4.9";   // 完整版：源码拆分 + 管理员拖放引导 + CI
+#endif
+        public const string Author = "exper7";
+        public const string Name = "SnapWheel";
+        public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
+        public const string Repo = "ExpertKT/SnapWheel";  // 自动更新检查用
+    }
+
+    static class Elev
+    {
+        static readonly bool _on = Detect();
+
+        // 测试用：强制指定是不是管理员（null = 按真实权限判断）。
+        // 不然"管理员模式下会怎样"这段逻辑永远只能在管理员进程里手测。
+        public static bool? ForceForTest = null;
+
+        public static bool Is { get { return ForceForTest.HasValue ? ForceForTest.Value : _on; } }
+
+        static bool Detect()
+        {
+            try
+            {
+                using (System.Security.Principal.WindowsIdentity id = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    return new System.Security.Principal.WindowsPrincipal(id)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
+        }
+
+        // 用 explorer 拉起自己 → 拿到普通权限（explorer 是 Medium 完整性级别）。
+        // 只管启动，退出当前实例由调用方决定（否则弹框还挂在一个正在退出的进程上）。
+        public static bool RelaunchNormal()
+        {
+            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Application.ExecutablePath + "\""); return true; }
+            catch { return false; }
+        }
+    }
+}
+
+namespace SnapWheel
+{
     static class Err
     {
         static readonly object _lock = new object();
@@ -66,9 +110,6 @@ namespace SnapWheel
         }
     }
 
-    // 帧耗时统计：给"快速点按偶尔慢半拍"用数据定位。
-    // 只记 >25ms 的帧，而且每 10 秒才汇总一行（带最慢那一帧的界面状态），
-    // 不会刷屏、不参与任何逻辑；看 %APPDATA%\SnapWheel\error.log 里的 [Frame] 行。
     static class FrameStats
     {
         public const double SlowMs = 25.0;
@@ -117,139 +158,10 @@ namespace SnapWheel
             _frames = 0; _slow = 0; _sum = 0; _max = 0; _maxState = ""; _windowStart = DateTime.Now;
         }
     }
+}
 
-    // 真·毛玻璃（只用在普通窗口上：设置/引导这些对话框）。
-    // 轮盘那种 UpdateLayeredWindow 的窗口不能上 acrylic —— 它会给整个窗口矩形蒙一层灰，
-    // 把屏幕角落糊成一块方块，所以轮盘用"画出来的"玻璃质感代替。
-    static class Blur
-    {
-        [StructLayout(LayoutKind.Sequential)]
-        struct WINCOMPATTRDATA { public int Attribute; public IntPtr Data; public int SizeOfData; }
-        [StructLayout(LayoutKind.Sequential)]
-        struct ACCENTPOLICY { public int AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
-
-        [DllImport("user32.dll")]
-        static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINCOMPATTRDATA data);
-
-        const int ACCENT_DISABLED = 0;
-        const int ACCENT_ENABLE_BLURBEHIND = 3;
-        const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
-        const int WCA_ACCENT_POLICY = 19;
-
-        public static bool Supported
-        {
-            get
-            {
-                try { return Environment.OSVersion.Version.Major >= 10 && TransparencyOn; }
-                catch { return false; }
-            }
-        }
-
-        // 系统里把"透明效果"关掉时 acrylic 不生效 —— 那种情况下再画半透明底会变成
-        // "玻璃没了、却透着一层桌面"，字看不清，所以直接退回不透明底
-        public static bool TransparencyOn
-        {
-            get
-            {
-                try
-                {
-                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(
-                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
-                    {
-                        if (k == null) return true;
-                        object v = k.GetValue("EnableTransparency");
-                        if (v == null) return true;
-                        return Convert.ToInt32(v) != 0;
-                    }
-                }
-                catch { return true; }
-            }
-        }
-
-        // tint = ABGR 颜色（GradientColor 是 0xAABBGGRR）
-        public static bool Apply(IntPtr hwnd, int a, int r, int g, int b, bool acrylic)
-        {
-            try
-            {
-                ACCENTPOLICY ap = new ACCENTPOLICY();
-                ap.AccentState = acrylic ? ACCENT_ENABLE_ACRYLICBLURBEHIND : ACCENT_ENABLE_BLURBEHIND;
-                ap.AccentFlags = 2;                     // 四边都画
-                ap.GradientColor = (a << 24) | (b << 16) | (g << 8) | r;
-                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
-                d.Attribute = WCA_ACCENT_POLICY;
-                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
-                Marshal.StructureToPtr(ap, d.Data, false);
-                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
-                int hr = SetWindowCompositionAttribute(hwnd, ref d);
-                Marshal.FreeHGlobal(d.Data);
-                return hr != 0;
-            }
-            catch { return false; }
-        }
-
-        public static void Clear(IntPtr hwnd)
-        {
-            try
-            {
-                ACCENTPOLICY ap = new ACCENTPOLICY();
-                ap.AccentState = ACCENT_DISABLED;
-                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
-                d.Attribute = WCA_ACCENT_POLICY;
-                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
-                Marshal.StructureToPtr(ap, d.Data, false);
-                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
-                SetWindowCompositionAttribute(hwnd, ref d);
-                Marshal.FreeHGlobal(d.Data);
-            }
-            catch { }
-        }
-    }
-
-    static class AppInfo
-    {
-#if NO_KEY
-        public const string Version = "0.2.19";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
-#else
-        public const string Version = "0.4.9";   // 完整版：源码拆分 + 管理员拖放引导 + CI
-#endif
-        public const string Author = "exper7";
-        public const string Name = "SnapWheel";
-        public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
-        public const string Repo = "ExpertKT/SnapWheel";  // 自动更新检查用
-    }
-
-    // 是不是以管理员身份在跑。管理员进程收不到（也发不出）普通权限程序的拖拽 —— Windows 的 UIPI 拦的。
-    // 托盘菜单、启动提示、轮盘"拖不动"时的引导都走这一个判断，别再各写一份。
-    static class Elev
-    {
-        static readonly bool _on = Detect();
-
-        // 测试用：强制指定是不是管理员（null = 按真实权限判断）。
-        // 不然"管理员模式下会怎样"这段逻辑永远只能在管理员进程里手测。
-        public static bool? ForceForTest = null;
-
-        public static bool Is { get { return ForceForTest.HasValue ? ForceForTest.Value : _on; } }
-
-        static bool Detect()
-        {
-            try
-            {
-                using (System.Security.Principal.WindowsIdentity id = System.Security.Principal.WindowsIdentity.GetCurrent())
-                    return new System.Security.Principal.WindowsPrincipal(id)
-                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
-            }
-            catch { return false; }
-        }
-
-        // 用 explorer 拉起自己 → 拿到普通权限（explorer 是 Medium 完整性级别）。
-        // 只管启动，退出当前实例由调用方决定（否则弹框还挂在一个正在退出的进程上）。
-        public static bool RelaunchNormal()
-        {
-            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Application.ExecutablePath + "\""); return true; }
-            catch { return false; }
-        }
-    }
-
+namespace SnapWheel
+{
     static class Native
     {
         [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
@@ -340,7 +252,10 @@ namespace SnapWheel
             ReleaseDC(IntPtr.Zero, screenDc);
         }
     }
+}
 
+namespace SnapWheel
+{
     static class Gfx
     {
         // 弹框显示后强制整窗重绘一次：自定义绘制的按钮第一帧容易取到还没定下来的父底色，
@@ -499,6 +414,90 @@ namespace SnapWheel
         }
     }
 
+    static class Blur
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        struct WINCOMPATTRDATA { public int Attribute; public IntPtr Data; public int SizeOfData; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ACCENTPOLICY { public int AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
+
+        [DllImport("user32.dll")]
+        static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINCOMPATTRDATA data);
+
+        const int ACCENT_DISABLED = 0;
+        const int ACCENT_ENABLE_BLURBEHIND = 3;
+        const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+        const int WCA_ACCENT_POLICY = 19;
+
+        public static bool Supported
+        {
+            get
+            {
+                try { return Environment.OSVersion.Version.Major >= 10 && TransparencyOn; }
+                catch { return false; }
+            }
+        }
+
+        // 系统里把"透明效果"关掉时 acrylic 不生效 —— 那种情况下再画半透明底会变成
+        // "玻璃没了、却透着一层桌面"，字看不清，所以直接退回不透明底
+        public static bool TransparencyOn
+        {
+            get
+            {
+                try
+                {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(
+                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    {
+                        if (k == null) return true;
+                        object v = k.GetValue("EnableTransparency");
+                        if (v == null) return true;
+                        return Convert.ToInt32(v) != 0;
+                    }
+                }
+                catch { return true; }
+            }
+        }
+
+        // tint = ABGR 颜色（GradientColor 是 0xAABBGGRR）
+        public static bool Apply(IntPtr hwnd, int a, int r, int g, int b, bool acrylic)
+        {
+            try
+            {
+                ACCENTPOLICY ap = new ACCENTPOLICY();
+                ap.AccentState = acrylic ? ACCENT_ENABLE_ACRYLICBLURBEHIND : ACCENT_ENABLE_BLURBEHIND;
+                ap.AccentFlags = 2;                     // 四边都画
+                ap.GradientColor = (a << 24) | (b << 16) | (g << 8) | r;
+                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
+                d.Attribute = WCA_ACCENT_POLICY;
+                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
+                Marshal.StructureToPtr(ap, d.Data, false);
+                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
+                int hr = SetWindowCompositionAttribute(hwnd, ref d);
+                Marshal.FreeHGlobal(d.Data);
+                return hr != 0;
+            }
+            catch { return false; }
+        }
+
+        public static void Clear(IntPtr hwnd)
+        {
+            try
+            {
+                ACCENTPOLICY ap = new ACCENTPOLICY();
+                ap.AccentState = ACCENT_DISABLED;
+                WINCOMPATTRDATA d = new WINCOMPATTRDATA();
+                d.Attribute = WCA_ACCENT_POLICY;
+                d.Data = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ACCENTPOLICY)));
+                Marshal.StructureToPtr(ap, d.Data, false);
+                d.SizeOfData = Marshal.SizeOf(typeof(ACCENTPOLICY));
+                SetWindowCompositionAttribute(hwnd, ref d);
+                Marshal.FreeHGlobal(d.Data);
+            }
+            catch { }
+        }
+    }
+
     static class Brand
     {
         static System.Drawing.Icon _icon;
@@ -531,13 +530,10 @@ namespace SnapWheel
             return _icon;
         }
     }
+}
 
-    // 读图“尽量全能”：
-    //   1) .ico / .cur  -> Icon 类（连 256 的 PNG 压缩图标都认，保留透明）
-    //   2) 其余先交给 GDI+（png/jpg/bmp/gif/tif/exif/wmf/emf…）
-    //   3) 还不行就交给系统 WIC（WPF 的 BitmapDecoder）—— WebP / HEIC / AVIF / JXR / 相机 RAW
-    //      只要机器上装了对应解码器（Win10/11 多数自带的 WebP/HEIC 扩展）就能读
-    // 任何一步失败都安静返回 null，绝不抛异常
+namespace SnapWheel
+{
     static class ImageIO
     {
         public const int MaxDim = 4096;      // 存进轮盘的图最大边；再大的等比缩下来，防止内存/磁盘爆
@@ -801,7 +797,10 @@ namespace SnapWheel
             }
         }
     }
+}
 
+namespace SnapWheel
+{
     class StoreItem
     {
         public Bitmap Image;
@@ -863,7 +862,10 @@ namespace SnapWheel
             catch { return null; }
         }
     }
+}
 
+namespace SnapWheel
+{
     static class Palette
     {
         public static readonly string[] Names = { "蓝", "红", "琥珀", "绿", "紫", "青", "橙", "灰" };
@@ -895,7 +897,6 @@ namespace SnapWheel
         public Color Accent { get { return Palette.Get(ColorIndex); } }
     }
 
-    // holds all wheels + which one is active; persists names/colours/active index
     class WheelManager
     {
         public readonly List<Wheel> Wheels = new List<Wheel>();
@@ -1057,32 +1058,10 @@ namespace SnapWheel
             }
         }
     }
+}
 
-    static class HotkeyUtil
-    {
-        public static readonly string[] Names = { "Ctrl+Shift+S", "Ctrl+Shift+A", "Ctrl+Alt+A", "Alt+Shift+A", "Ctrl+Shift+X" };
-
-        public static bool TryParse(string name, out uint mods, out uint vk)
-        {
-            mods = 0; vk = 0;
-            if (string.IsNullOrEmpty(name)) return false;
-            string[] parts = name.Split('+');
-            for (int i = 0; i < parts.Length; i++)
-            {
-                string p = parts[i].Trim();
-                if (p.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_CONTROL;
-                else if (p.Equals("Shift", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_SHIFT;
-                else if (p.Equals("Alt", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_ALT;
-                else if (p.Length == 1)
-                {
-                    char c = char.ToUpperInvariant(p[0]);
-                    if (c >= 'A' && c <= 'Z') vk = (uint)c;
-                }
-            }
-            return mods != 0 && vk != 0;
-        }
-    }
-
+namespace SnapWheel
+{
     class Settings
     {
         public bool SaveToDisk = false;
@@ -1317,7 +1296,68 @@ namespace SnapWheel
         }
     }
 
-    // 扁平/新拟态风格的按钮：浅底 + 上亮下暗的柔和立体，主按钮用主题色填充
+    static class HotkeyUtil
+    {
+        public static readonly string[] Names = { "Ctrl+Shift+S", "Ctrl+Shift+A", "Ctrl+Alt+A", "Alt+Shift+A", "Ctrl+Shift+X" };
+
+        public static bool TryParse(string name, out uint mods, out uint vk)
+        {
+            mods = 0; vk = 0;
+            if (string.IsNullOrEmpty(name)) return false;
+            string[] parts = name.Split('+');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i].Trim();
+                if (p.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_CONTROL;
+                else if (p.Equals("Shift", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_SHIFT;
+                else if (p.Equals("Alt", StringComparison.OrdinalIgnoreCase)) mods |= Native.MOD_ALT;
+                else if (p.Length == 1)
+                {
+                    char c = char.ToUpperInvariant(p[0]);
+                    if (c >= 'A' && c <= 'Z') vk = (uint)c;
+                }
+            }
+            return mods != 0 && vk != 0;
+        }
+    }
+
+    static class AutoRun
+    {
+        const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        const string NAME = "SnapWheel";
+
+        public static bool IsEnabled()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, false))
+                    return k != null && k.GetValue(NAME) != null;
+            }
+            catch { return false; }
+        }
+
+        public static void Apply(bool enable)
+        {
+            try
+            {
+                if (enable)
+                {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
+                        k.SetValue(NAME, "\"" + Application.ExecutablePath + "\"");
+                }
+                else
+                {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
+                        k.DeleteValue(NAME, false);
+                }
+            }
+            catch { }
+        }
+    }
+}
+
+namespace SnapWheel
+{
     class RoundButton : Button
     {
         public Color Fill = Color.FromArgb(0, 122, 204);
@@ -1376,41 +1416,10 @@ namespace SnapWheel
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
+}
 
-    static class AutoRun
-    {
-        const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string NAME = "SnapWheel";
-
-        public static bool IsEnabled()
-        {
-            try
-            {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, false))
-                    return k != null && k.GetValue(NAME) != null;
-            }
-            catch { return false; }
-        }
-
-        public static void Apply(bool enable)
-        {
-            try
-            {
-                if (enable)
-                {
-                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
-                        k.SetValue(NAME, "\"" + Application.ExecutablePath + "\"");
-                }
-                else
-                {
-                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
-                        k.DeleteValue(NAME, false);
-                }
-            }
-            catch { }
-        }
-    }
-
+namespace SnapWheel
+{
     class OverlayForm : Form
     {
         Bitmap _shot;
@@ -2105,7 +2114,6 @@ namespace SnapWheel
         }
     }
 
-    // small preview that follows the cursor while dragging an item out
     class DragProxyForm : Form
     {
         Bitmap _bmp;
@@ -2172,9 +2180,13 @@ namespace SnapWheel
             base.Dispose(disposing);
         }
     }
+}
 
-    // ---- minimal corner dock: a quarter arc hugging the bottom-left corner ----
-    class WheelForm : Form
+namespace SnapWheel
+{
+    // 轮盘主窗口：字段 / 构造 / 生命周期 / 布局 / 几何 / 对外接口。
+    // 绘制、动画、毛玻璃背景、鼠标键盘与拖放分别在 61/62/63/64 几个 partial 里。
+    partial class WheelForm : Form
     {
         Store _store { get { return _mgr.ActiveStore; } }     // always the ACTIVE wheel's store
         WheelManager _mgr;
@@ -2224,12 +2236,6 @@ namespace SnapWheel
             return Color.FromArgb(20, 23, 30);
         }
 
-        int GlassA(int baseA)
-        {
-            float g = StyleSolid() ? 1f : (_settings.GlassPercent / 100f);
-            int a = (int)(baseA * g);
-            return a < 0 ? 0 : (a > 255 ? 255 : a);
-        }
 
         int ShadowA(int baseA) { return (int)(baseA * _settings.ShadowPercent / 100f); }
 
@@ -2239,6 +2245,7 @@ namespace SnapWheel
             return rad < 3f ? 3f : rad;
         }
 
+
         Color AccentColor()
         {
             int i = _settings.AccentIndex;
@@ -2246,40 +2253,72 @@ namespace SnapWheel
             return _mgr.Accent;
         }
 
+
         float _keyT = 0f;              // 万能键按下进度 0..1
+
         float _keyHov = 0f;            // 万能键悬停进度 0..1（指针压上去要有反应）
+
         bool _keyHover = false;
+
         bool _nameHover = false;       // 指针停在 Wheel 名药丸上（提示"点一下改名"）
+
         // 圆钮按下反馈：按下先变暗缩一下，过 ~110ms 再真正执行，这样"按下去"是看得见的
         float _closeDown = 0f, _gearDown = 0f, _shootDown = 0f;
+
         bool _closePend = false, _gearPend = false, _shootPend = false;   // 已按下、等延迟
+
         bool _closeHold = false, _gearHold = false, _shootHold = false;   // 鼠标仍按着
+
         DateTime _closeDownAt = DateTime.MinValue;                        // 关闭键按下的时刻（判长按）
+
         bool _closeLong = false;                                          // 关闭键已长按到位（变红，松手退出）
+
         float _closeHoldP = 0f;                                           // 长按进度 0..1（画红色进度环）
+
         string _pendingBtn = "";
+
         DateTime _pendingAt = DateTime.MinValue;
+
         bool _intro = false;           // 正在播环的动画（拉出 / 收起都算）
+
         float _introT = 0f;            // 0..1：环"露出来"的程度
+
         float _introDur = 1.8f;        // 秒（完成一整趟 0->1 的时间基准）
+
         DateTime _introAt = DateTime.MinValue;
+
         float _ringFrom = 1f;          // 本次动画的起点值
+
         float _ringTo = 1f;            // 本次动画的目标值（可反向，随时改目标）
+
 
         // ---------- 收起态（像贴边小球那样，只在屏幕边上留一个可点的小把手）----------
         bool _collapsed = false;       // 已完全收起：只画把手，不画环
+
         bool _collapsing = false;      // 当前这次动画是"收起"方向
+
         bool _nubOutHover = false;     // 指针停在"拉出"把手上
+
         bool _nubInHover = false;      // 指针停在"收起"把手上
+
         float _nubHov = 0f;            // 把手悬停进度 0..1
+
         float _nubAppearT = 1f;        // 把手"出现"进度 0..1（启动时不要突然冒出来）
+
         DateTime _nubAppearAt = DateTime.MinValue;
+
         float _nubHintT = 0f;                            // 把手"点我展开/收起"提示的淡入进度
+
         bool _adminTipShown = false;                     // 管理员"拖不动"的说明每次运行只弹一次
+
         DateTime _firstRunHintUntil = DateTime.MinValue; // 首次运行自动亮提示的截止时刻
+
         DateTime _collapsedAt = DateTime.MinValue;       // 收起完成的时刻（之后一小段内不允许再展开）
+
         DateTime _selfClipboardAt = DateTime.MinValue;   // 我们自己写剪贴板的时间（避免自己抄自己）
+
         string _lastClipFp = "";                          // 上一张从剪贴板收进来的图（去重用）
+
 
         public bool IsCollapsed { get { return _collapsed; } }
         public bool IsExpanded { get { return !_collapsed && !_intro; } }
@@ -2311,31 +2350,6 @@ namespace SnapWheel
             catch { return true; }   // 取不到就当作还在按钮上，别误取消
         }
 
-        // 作废这次长按（红色渐变退回，完全不会触发退出）
-        public void CancelCloseHold()
-        {
-            if (!_closeHold && !_closeLong) return;
-            _closeHold = false;
-            _closeLong = false;
-            try { Capture = false; } catch { }
-        }
-
-        // 按下时把矩形按比例缩小（以中心为基准）
-        static Rectangle Shrink(Rectangle r, float k)
-        {
-            if (k <= 0.001f) return r;
-            float s = 1f - 0.10f * k;
-            int w = (int)Math.Round(r.Width * s), h = (int)Math.Round(r.Height * s);
-            return new Rectangle(r.X + (r.Width - w) / 2, r.Y + (r.Height - h) / 2, w, h);
-        }
-
-        RectangleF NubOutRect()
-        {
-            SizeF ls = LogicalSize();
-            float cy = (Sy() > 0) ? NubDistOut() : ls.Height - NubDistOut();
-            float x = (Sx() > 0) ? 0f : ls.Width - NubThick;
-            return new RectangleF(x, cy - NubLong / 2f, NubThick, NubLong);
-        }
 
         // 单把手模式：右下边那个把手不画、也不能点（任务栏自动隐藏时鼠标扫底边不会撞到它）
         public bool NubSingleMode() { return _settings.NubSingle; }
@@ -2345,108 +2359,28 @@ namespace SnapWheel
             return true;      // 不做冷却：收起后也可以立刻再展开（两个方向都随时可点）
         }
 
-        RectangleF NubInRect()
-        {
-            SizeF ls = LogicalSize();
-            float cx = (Sx() > 0) ? NubDistIn() : ls.Width - NubDistIn();
-            float y = (Sy() > 0) ? 0f : ls.Height - NubThick;
-            return new RectangleF(cx - NubLong / 2f, y, NubLong, NubThick);
-        }
-
-        // 一整趟 0 -> 1 的时间基准（不含速度设置）
-        float RingUnitDurBase()
-        {
-            // 固定时长。早先是 0.82 + 0.05*图片数 —— 图一多收起就明显更慢，
-            // 但展开/收起本来是一段固定几何过渡，跟盘里存了几张图没关系。
-            return 1.0f;
-        }
-
-        // 一趟 0->1 的时长：展开和收起各用各的速度百分比（越大越快）
-        float RingUnitDur() { return RingUnitDur(false); }
-
-        float RingUnitDur(bool collapsing)
-        {
-            int sp = collapsing ? _settings.CollapseSpeed : _settings.ExpandSpeed;
-            if (sp < 40) sp = 40;
-            if (sp > 250) sp = 250;
-            return RingUnitDurBase() * AnimK() * (100f / sp);
-        }
-
-        // 展开（彩虹拉出）；fast=true 用于截图流程，快一点
-        public void ExpandWheel() { ExpandWheel(false); }
-
-        public void ExpandWheel(bool fast)
-        {
-            if (IsExpanded && Visible) { _lastActive = DateTime.Now; return; }
-            if (_settings.IntroAnim)
-            {
-                StartIntro();
-                if (fast) { _introAt = DateTime.Now; _introDur = RingUnitDur(false) * 0.55f; }
-            }
-            else { _collapsed = false; _collapsing = false; _intro = false; _introT = 1f; ShowWheel(); }
-            _lastActive = DateTime.Now;
-        }
-
-        // 开机直接进入收起态：窗口显示出来，但只有贴边那个小把手
-        public void StartCollapsed()
-        {
-            _collapsed = true;
-            _collapsing = false;
-            _intro = false;
-            _introT = 0f;
-            _nubAppearT = 0f;                      // 把手从屏幕边滑出来，不要"啪"地出现
-            _nubAppearAt = DateTime.Now;
-            // 首次运行：把手旁边自动亮一次"点我展开"，让新用户知道它是干嘛的
-            if (!_settings.NubHintDone)
-            {
-                _firstRunHintUntil = DateTime.Now.AddSeconds(14);
-                _settings.NubHintDone = true;
-            }
-            CaptureBackdrop();
-            _show = 1f; _targetShow = 1f; _showAnimating = false;
-            _rendered = false;
-            Show();
-            Render();
-            _lastActive = DateTime.Now;
-        }
-
-        // 收起（彩虹缩回）—— 收起态没开的话就退回原来的"直接隐藏"
-        public void CollapseWheel() { CollapseWheel(false); }
-
-        public void CollapseWheel(bool fast)
-        {
-            if (!_settings.CollapseMode) { HideWheel(); return; }
-            if (_collapsed) return;
-            if (!Visible) { _collapsed = true; _collapsing = false; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; _collapsedAt = DateTime.Now; CaptureBackdrop(); Show(); Render(); return; }
-            _collapsing = true;
-            _intro = true;
-            _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
-            _ringTo = 0f;
-            _introAt = DateTime.Now;
-            _introDur = RingUnitDur(true) * (fast ? 0.14f : 1f);   // 收起用「收起速度」
-            _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
-            _lastActive = DateTime.Now;
-            Render();                       // 立刻出一帧，点了就能看到动
-        }
-
-        // 界面上"关掉轮盘"的动作：收起态开着就收起，否则完全隐藏
-        public void DismissWheel()
-        {
-            if (_settings.CollapseMode) CollapseWheel();
-            else HideWheel();
-        }
 
         const float CardPad = 0f;       // card == image rect, so the picture fills the rounded frame
+
         DateTime _lastActive = DateTime.Now;
+
         Point _mouseDownPt;
+
         bool _maybeDrag;
+
         int _dragIndex = -1;
+
         bool _rendered = false;
+
         DragProxyForm _proxy = new DragProxyForm();
 
+
         const int WS_EX_LAYERED = 0x80000;
+
         const int WS_EX_TOOLWINDOW = 0x80;
+
         const int WS_EX_NOACTIVATE = 0x08000000;
+
 
         public WheelForm(WheelManager mgr, Settings settings)
         {
@@ -2476,17 +2410,20 @@ namespace SnapWheel
             }
         }
 
+
         // ---------- 分辨率 / DPI 适配 ----------
         // UiK = 界面缩放系数。所有绘制都在"逻辑坐标"里做，DrawWheel 开头统一 ScaleTransform(UiK)，
         // 于是字体、图标、线宽、间距全都跟着放大，不用到处改常数。
         // 命中测试也全在逻辑坐标里算：鼠标进来先 ToLogical() 转一次。
         float UiK = 1f;
 
+
         float AutoUiK()
         {
             try { return Native.DpiScaleOf(IsHandleCreated ? Handle : IntPtr.Zero); }
             catch { return 1f; }
         }
+
 
         PointF ToLogical(Point p) { return new PointF(p.X / UiK, p.Y / UiK); }
         Point ToLogicalPt(Point p) { return new Point((int)Math.Round(p.X / UiK), (int)Math.Round(p.Y / UiK)); }
@@ -2498,6 +2435,7 @@ namespace SnapWheel
             if (Math.Abs(UiK - 1f) < 0.001f) return e;
             return new MouseEventArgs(e.Button, e.Clicks, (int)Math.Round(e.X / UiK), (int)Math.Round(e.Y / UiK), e.Delta);
         }
+
 
         public void ApplyLayout()
         {
@@ -2532,6 +2470,7 @@ namespace SnapWheel
             if (Visible) { CaptureBackdrop(); Render(); }
         }
 
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
@@ -2547,6 +2486,7 @@ namespace SnapWheel
             }
         }
 
+
         protected override CreateParams CreateParams
         {
             get
@@ -2557,11 +2497,13 @@ namespace SnapWheel
             }
         }
 
+
         public void ApplyTopMost()
         {
             TopMost = _settings.AlwaysOnTop;
             if (Visible) { _rendered = false; Render(); }   // no Hide/Show flash
         }
+
 
         public void PlaceBottomLeft()
         {
@@ -2572,401 +2514,6 @@ namespace SnapWheel
             Location = new Point(left, top);
         }
 
-        public void ShowWheel()
-        {
-            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
-            SetShow(1f);
-            _lastActive = DateTime.Now;
-            Render();
-        }
-
-        // 软件刚启动时用它：带开启动画地显示出来
-        public void ShowWheelWithIntro()
-        {
-            if (_settings.IntroAnim) { StartIntro(); }
-            else ShowWheel();
-        }
-
-        // 开启动画：整条环像彩虹一样扫出来，图片一张张沿弧线滑落，万能键/按钮/文字从屏幕外滑入并渐显
-        public void StartIntro()
-        {
-            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
-            _show = 1f; _targetShow = 1f; _showAnimating = false;
-            _collapsed = false; _collapsing = false;
-            _intro = true;
-            _ringFrom = _introT;
-            _ringTo = 1f;
-            _introAt = DateTime.Now;
-            _introDur = RingUnitDur();
-            _scales.Clear(); _enterT0.Clear();
-            for (int i = 0; i < _store.Items.Count; i++)
-                _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(0.45 + i * 0.13);
-            Render();
-        }
-
-        // 开启动画里每个元素的进度（1 = 完全就位）；delay 越大越晚出场。
-        // 收起时 _introT 是往回走的，同一个公式自然就变成倒放。
-        //
-        // delay 是 0..1 的"相对出场顺序"，不是秒！原来写的是秒（最大 0.72s + 0.55s 过渡），
-        // 总时长从 2.15s 压到 1.07s 后，后面的元素根本走不到位 ——
-        // 动画一结束就从半路"啪"地闪到最终位置（按钮、计数胶囊就是这么闪的）。
-        float IntroP(float delay)
-        {
-            if (_collapsed) return 0f;
-            if (!_intro) return 1f;
-            const float span = 0.46f;                  // 单个元素自己的过渡长度（占总时长比例）
-            float start = delay * (1f - span);
-            float x = (_introT - start) / span;
-            if (x <= 0f) return 0f;
-            if (x >= 1f) return 1f;
-            // 每个元素自己用 easeOut：一进窗口就动起来，落点又是缓的
-            float u2 = 1f - x;
-            return 1f - u2 * u2 * u2;
-        }
-
-        // 从屏幕外滑进来的位移（朝角落方向，也就是朝屏幕外）
-        PointF IntroShift(float p)
-        {
-            if (!_intro && !_collapsed) return new PointF(0f, 0f);
-            float off = (1f - p) * 110f;
-            return new PointF((Sx() > 0 ? -off : off), (Sy() > 0 ? -off : off));
-        }
-
-        // 收起过程中图片的淡出因子（1 -> 0，在环完全缩回之前就淡完）
-        float CollapseCardP()
-        {
-            if (_collapsed) return 0f;
-            if (!_intro || !_collapsing) return 1f;
-            float v = _introT / 0.55f;
-            return v < 0f ? 0f : (v > 1f ? 1f : v);
-        }
-
-
-        public void HideWheel() { SetShow(0f); }
-        public void ToggleWheel()
-        {
-            if (_collapsed) ShowWheelWithIntro();          // 收起态 -> 拉出来（带彩虹动画）
-            else if (_targetShow > 0.5f) DismissWheel();   // 展开中 -> 收起（或隐藏）
-            else ShowWheelWithIntro();
-        }
-
-        void SetShow(float target)
-        {
-            if (Math.Abs(_targetShow - target) < 0.001f && _showAnimating == false) { _targetShow = target; return; }
-            _showFrom = _show;
-            _showT0 = DateTime.Now;
-            _targetShow = target;
-            _showAnimating = true;
-        }
-
-        // 这一帧算错了不该让整个程序挂掉（Timer 里抛异常会直接弹崩溃框）
-        void AnimTick(object sender, EventArgs e)
-        {
-            try { AnimTickCore(); }
-            catch (Exception ex) { try { Err.Log("wheel.AnimTick", ex); } catch { } }
-        }
-
-        void AnimTickCore()
-        {
-            bool need = false;
-            bool hide = _targetShow < _show;
-            if (_showAnimating)
-            {
-                float dur = (hide ? 0.50f : 0.30f) * AnimK();      // 速度设置会一起缩放
-                float t = (float)((DateTime.Now - _showT0).TotalSeconds / dur);
-                if (t >= 1f) { t = 1f; _showAnimating = false; }
-                float ease = t * t * (3f - 2f * t);       // smoothstep
-                _show = _showFrom + (_targetShow - _showFrom) * ease;
-                need = true;
-            }
-            else if (_show != _targetShow) { _show = _targetShow; need = true; }
-
-            float dop = _targetOffset - _offset;
-            bool scrolling = Math.Abs(dop) > 0.02f;
-            if (scrolling) { _offset += dop * 0.20f; need = true; }
-            else if (_offset != _targetOffset) { _offset = _targetOffset; need = true; }
-
-            // while the arc is sliding, freeze hover so cards don't grow/shrink alternately (no tremble)
-            if (scrolling)
-            {
-                if (_hover != -1) { _hover = -1; need = true; }
-            }
-            else if (_show > 0.6f && Visible)
-            {
-                Point cp = ToLogicalPt(PointToClient(Cursor.Position));
-                int hh = HitTest(cp);
-                bool gh = GearButtonRect().Contains(cp);
-                bool ch = CloseButtonRect().Contains(cp);
-                bool sH = ShootButtonRect().Contains(cp);
-                bool kh = KeyRect().Width > 8 && KeyRect().Contains(cp);
-                bool nh = NamePillRect().Contains(cp);
-                if (hh != _hover) { _hover = hh; need = true; }
-                if (gh != _gearHover) { _gearHover = gh; need = true; }
-                if (ch != _closeHover) { _closeHover = ch; need = true; }
-                if (sH != _shootHover) { _shootHover = sH; need = true; }
-                if (kh != _keyHover) { _keyHover = kh; need = true; }
-                if (nh != _nameHover) { _nameHover = nh; need = true; }
-            }
-
-
-            if (_gearHold) { Point cp4 = ToLogicalPt(PointToClient(Cursor.Position)); if (!GearButtonRect().Contains(cp4)) _gearHold = false; }
-            if (_shootHold) { Point cp5 = ToLogicalPt(PointToClient(Cursor.Position)); if (!ShootButtonRect().Contains(cp5)) _shootHold = false; }
-
-            if (_holdIndex >= 0 && _maybeDrag && _enlarged < 0)
-                if ((DateTime.Now - _holdStart).TotalMilliseconds > 300) { _enlarged = _holdIndex; need = true; }
-
-            // per-item scale: hover 1.36x, hold-to-peek 2.4x - ONE animation, so it can never desync
-            for (int i = 0; i < _store.Items.Count; i++)
-            {
-                float tgt;
-                if (_store.Items[i] == _dragOutItem) tgt = 0f;
-                else if (i == _enlarged) tgt = PeekScale;                else if (i == _hover) tgt = HoverScale;
-                else tgt = 1f;
-                float cur;
-                if (!_scales.TryGetValue(i, out cur)) cur = 1f;
-                float rate = (tgt > 1.5f || cur > 1.5f) ? 0.16f : 0.19f;   // peek moves a little slower
-                rate = Math.Max(0.05f, Math.Min(0.5f, rate / AnimK()));
-                if (Math.Abs(cur - tgt) > 0.003f) { _scales[i] = cur + (tgt - cur) * rate; need = true; }
-                else if (cur != tgt) { _scales[i] = tgt; need = true; }
-            }
-            // hold-to-peek fade state kept in sync with the scale animation (single source of truth)
-            if (_enlarged >= 0) _peekIndex = _enlarged;
-            if (_enlarged < 0 && _peekIndex >= 0)
-            {
-                float cur; if (!_scales.TryGetValue(_peekIndex, out cur)) cur = 1f;
-                if (cur <= 1.02f) _peekIndex = -1;
-            }
-            if (_enlarged >= 0 || _peekIndex >= 0) need = true;
-
-            // 删除动画：必须独立判断（原来写成 else if，挂在"放大预览"后面 ——
-            // 放大预览一开着动画就不推进，于是"有动画但没删掉"）
-            if (_deletingItem != null)
-            {
-                _deleteProg += 0.055f;                     // ~0.28s collapse
-                need = true;
-                if (_deleteProg >= 1f)
-                {
-                    StoreItem victim = _deletingItem;
-                    _deletingItem = null;
-                    _deleteProg = 0f;
-                    RemoveItem(victim, true);
-                }
-            }
-
-            // keep animating while a freshly captured image is still sliding in / a delete is running
-            foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
-                if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
-            if (_deletingItem != null) need = true;
-
-            // 提示条（"已加入 N 张图片"）淡入淡出
-            if (_toast.Length > 0)
-            {
-                if ((DateTime.Now - _toastAt).TotalSeconds > 2.6f) _toast = "";
-                else need = true;
-            }
-
-            // 开启动画进度（收起时 _introT 往回走，同一个公式就是倒放）
-            if (_intro)
-            {
-                // 时间按"这次要走多远"算：走得近就快，走完就停 —— 展开/收起共用，随时可反向
-                float span = Math.Abs(_ringTo - _ringFrom);
-                float dur = Math.Max(0.10f, _introDur * span);
-                float t = (float)((DateTime.Now - _introAt).TotalSeconds / dur);
-                if (t >= 1f) { t = 1f; _intro = false; }
-                // 主进度走"线性"：这样展开和收起在时间上是对称的
-                // （之前用 easeOutCubic 作用在主进度上，展开时动作集中在开头、
-                //   收起时集中在结尾，于是"展开比收起快太多"）
-                _introT = _ringFrom + (_ringTo - _ringFrom) * t;
-                if (!_intro)
-                {
-                    _introT = _ringTo;
-                    if (_collapsing) { _collapsed = true; _collapsing = false; _collapsedAt = DateTime.Now; }   // 收完了：进入收起态
-                }
-                need = true;
-            }
-
-            // 把手出现动画（启动时）
-            if (_nubAppearT < 1f)
-            {
-                _nubAppearT += (float)((DateTime.Now - _nubAppearAt).TotalSeconds / 0.55f);
-                if (_nubAppearT >= 1f) _nubAppearT = 1f;
-                _nubAppearAt = DateTime.Now;
-                need = true;
-            }
-
-            // 关闭键长按：画一条红色进度环，按住 0.65s 变满 -> 变红，松手退出。
-            // 同时兜住"鼠标已经松开但 MouseUp 没收到"的情况（按住时轻微移动不该取消）。
-            if (_closeHold)
-            {
-                // 后悔机制：长按期间把鼠标挪开就作废（稍微留点余量，手抖不算离开）
-                if (!CursorOverCloseButton()) CancelCloseHold();
-            }
-            if (_closeHold)
-            {
-                float p = (float)Math.Min(1.0, (DateTime.Now - _closeDownAt).TotalMilliseconds / 650.0);
-                if (Math.Abs(p - _closeHoldP) > 0.004f) { _closeHoldP = p; need = true; }
-                if (p >= 1f && !_closeLong) { _closeLong = true; need = true; }
-                need = true;                     // 进度环一直动
-            }
-            else if (_closeHoldP > 0.004f)
-            {
-                // 作废/松手之后，红色是"渐变退回去"的，不是瞬间复位
-                _closeHoldP += (0f - _closeHoldP) * 0.20f;
-                if (_closeHoldP < 0.004f) _closeHoldP = 0f;
-                need = true;
-            }
-
-            // 圆钮按下反馈 + 延迟执行
-            {
-                float cd = (_closePend || _closeHold) ? 1f : 0f;
-                float gd = (_gearPend || _gearHold) ? 1f : 0f;
-                float sd = (_shootPend || _shootHold) ? 1f : 0f;
-                if (Math.Abs(_closeDown - cd) > 0.01f) { _closeDown += (cd - _closeDown) * 0.35f; need = true; }
-                if (Math.Abs(_gearDown - gd) > 0.01f) { _gearDown += (gd - _gearDown) * 0.35f; need = true; }
-                if (Math.Abs(_shootDown - sd) > 0.01f) { _shootDown += (sd - _shootDown) * 0.35f; need = true; }
-                if (_pendingBtn.Length > 0 && (DateTime.Now - _pendingAt).TotalMilliseconds > 110)
-                {
-                    string b = _pendingBtn; _pendingBtn = "";
-                    _closePend = _gearPend = _shootPend = false;
-                    if (b == "close") DismissWheel();
-                    else if (b == "gear") { if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); }
-                    else if (b == "shoot") { if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty); }
-                    need = true;
-                }
-                if (_closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f) need = true;
-            }
-
-            // 把手悬停反馈
-            {
-                bool wantOut = false, wantIn = false;
-                if (Visible && _show > 0.6f)
-                {
-                    Point hp = ToLogicalPt(PointToClient(Cursor.Position));
-                    if (_collapsed) wantOut = NubOutRect().Contains(hp);
-                    else if (NubSingleMode()) wantOut = NubOutRect().Contains(hp);
-                    else if (!_intro) wantIn = NubInRect().Contains(hp);
-                }
-                if (wantOut != _nubOutHover) { _nubOutHover = wantOut; need = true; }
-                if (wantIn != _nubInHover) { _nubInHover = wantIn; need = true; }
-                float wantH = (wantOut || wantIn) ? 1f : 0f;
-                if (Math.Abs(_nubHov - wantH) > 0.006f) { _nubHov += (wantH - _nubHov) * 0.24f; need = true; }
-                else if (_nubHov != wantH) { _nubHov = wantH; need = true; }
-                if (_nubHov > 0.01f) need = true;
-
-                // 把手用途提示（"点我展开/收起"）：悬停时亮；首次运行的头 14 秒也自动亮一次
-                bool wantHint = wantOut || wantIn || DateTime.Now < _firstRunHintUntil;
-                float wantHT = wantHint ? 1f : 0f;
-                if (Math.Abs(_nubHintT - wantHT) > 0.006f) { _nubHintT += (wantHT - _nubHintT) * 0.18f; need = true; }
-                else if (_nubHintT != wantHT) { _nubHintT = wantHT; need = true; }
-                if (_nubHintT > 0.01f) need = true;
-            }
-
-            // 后台抓好的玻璃底：在 UI 线程这里换上。
-            // 但动画期间不换（尤其是展开/收起那趟）—— 换底会强制整窗重绘，正好卡在动画中间，看着就"顿"。
-            // 悬停/交互期间也不换：换底会强制整窗重绘，正好把交互那一下顶慢（"慢半拍"）
-            if (!_intro && _hover < 0 && !_closeHover && !_gearHover && !_shootHover && !_keyHover)
-                ApplyPendingBackdrop();
-
-            // 背景交叉淡入（换背景时玻璃颜色渐变，不跳）
-            if (_backdropOld != null && _backdropFade < 1f)
-            {
-                _backdropFade += (float)((DateTime.Now - _backdropFadeAt).TotalSeconds / 0.38f);
-                if (_backdropFade >= 1f) { _backdropFade = 1f; try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
-                _backdropFadeAt = DateTime.Now;
-                need = true;
-            }
-
-            // 玻璃底定时重抓：轮盘一直挂着也不会"糊的是半小时前的桌面"
-            // （窗口已设置 WDA_EXCLUDEFROMCAPTURE，抓屏不会把轮盘自己拍进去，所以显示中也能抓）
-            if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro)
-            {
-                if ((DateTime.Now - _backdropAt).TotalSeconds > 3.5)
-                {
-                    _backdropAt = DateTime.Now;
-                    if (_hover < 0 && !_menuOpen && _enlarged < 0 && !_dropActive && _dragOutItem == null && _deletingItem == null)
-                    {
-                        bool hoverAny = _gearHover || _closeHover || _shootHover || _keyHover || _nameHover;
-                        // 把手悬停/按钮按下时绝不重抓：抓屏+模糊要几十毫秒，会让人觉得"点了没反应"
-                        bool busy = _nubHov > 0.01f || _nubOutHover || _nubInHover
-                                    || _closePend || _gearPend || _shootPend
-                                    || _closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f;
-                        if (!hoverAny && !_keyDown && !busy)
-                        {
-                            // 抓屏+模糊（几十毫秒）放到后台线程做，UI 线程下一帧换上去，绝不卡动画
-                            RequestBackdropAsync();
-                        }
-                    }
-                }
-            }
-
-            // 万能键按下/松开 + 悬停 的弹性反馈
-            {
-                float kt = _keyDown ? 1f : 0f;
-                float cur = _keyT;
-                if (Math.Abs(cur - kt) > 0.004f) { _keyT = cur + (kt - cur) * (kt > cur ? 0.35f : 0.22f); need = true; }
-                else if (cur != kt) { _keyT = kt; need = true; }
-
-                float kh = _keyHover ? 1f : 0f;
-                float curH = _keyHov;
-                if (Math.Abs(curH - kh) > 0.006f) { _keyHov = curH + (kh - curH) * 0.24f; need = true; }
-                else if (curH != kh) { _keyHov = kh; need = true; }
-                if (_keyHov > 0.01f) need = true;         // 悬停时保持刷新，光晕是渐变的
-            }
-
-            // 万能键：长按展开圆盘 / 滑动切换
-            if (_keyDown)
-            {
-                bool radial = (_settings.SwitchMode != "swipe");
-                if (radial && !_menuOpen && !_delConfirm && (DateTime.Now - _keyDownAt).TotalMilliseconds > KeyMenuDelayMs)
-                {
-                    _menuOpen = true; _sector = -1; need = true;
-                }
-                if (_menuOpen && _menuT < 1f) { _menuT += (1f - _menuT) * 0.28f; need = true; }
-            }
-            else if (_menuT > 0.001f)
-            {
-                _menuT += (0f - _menuT) * 0.22f;
-                if (_menuT < 0.01f) { _menuT = 0f; _menuOpen = false; _sector = -1; }
-                need = true;
-            }
-
-            // 主题色过渡 + 切换闪光
-            Color want = AccentColor();
-            if (_accentCur.ToArgb() != want.ToArgb())
-            {
-                _accentCur = Color.FromArgb(
-                    (int)Math.Round(_accentCur.R + (want.R - _accentCur.R) * 0.22f),
-                    (int)Math.Round(_accentCur.G + (want.G - _accentCur.G) * 0.22f),
-                    (int)Math.Round(_accentCur.B + (want.B - _accentCur.B) * 0.22f));
-                need = true;
-            }
-            if (_switchFlash > 0f) { _switchFlash += (0f - _switchFlash) * 0.16f; if (_switchFlash < 0.01f) _switchFlash = 0f; need = true; }
-
-            // 删除确认态：高亮鼠标所在的半 + 超时自动取消（避免一直挂着）
-            if (_delConfirm)
-            {
-                int want2 = -1;
-                if (Visible)
-                {
-                    Rectangle kr2 = KeyRect();
-                    Point cp2 = ToLogicalPt(PointToClient(Cursor.Position));
-                    if (kr2.Contains(cp2)) want2 = (cp2.X < kr2.X + kr2.Width / 2f) ? 0 : 1;
-                }
-                if (want2 != _delHalf) { _delHalf = want2; need = true; }
-                if ((DateTime.Now - _delConfirmAt).TotalSeconds > 10) { _delConfirm = false; _delHalf = -1; need = true; }
-            }
-            else if (_delHalf != -1) { _delHalf = -1; need = true; }
-
-            if (_settings.AutoHide && !_collapsed && _targetShow > 0.5f && _show > 0.99f && !_intro)
-                if ((DateTime.Now - _lastActive).TotalSeconds > _settings.AutoHideSeconds) DismissWheel();
-
-            if (_show <= 0.002f && _targetShow <= 0.002f)
-            {
-                if (Visible) { Hide(); CaptureBackdrop(); }   // 隐藏后再抓一次，下次显示时玻璃底是新的
-                return;
-            }
-            if (need || !_rendered) Render();   // render ONLY when something changed (smooth + cheap)
-        }
 
         // ---- geometry: a full ring whose centre sits on the chosen screen corner ----
         float Sx() { return _settings.Corner.EndsWith("L") ? 1f : -1f; }   // outward horizontal (into screen)
@@ -2981,11 +2528,13 @@ namespace SnapWheel
             return new PointF(cx, cy);
         }
 
+
         float ArcStart()
         {
             if (Sy() < 0) return (Sx() > 0) ? 270f : 180f;
             return (Sx() > 0) ? 0f : 90f;
         }
+
 
         float StepRad() { return (_phiMax - _phiMin) / Math.Max(1, _slots - 1); }
 
@@ -3002,29 +2551,14 @@ namespace SnapWheel
             return new PointF((float)(c.X + r * Math.Cos(phi) * Sx()), (float)(c.Y + r * Math.Sin(phi) * Sy()));
         }
 
+
         Dictionary<StoreItem, DateTime> _enterT0 = new Dictionary<StoreItem, DateTime>();
 
-        // only a NEWLY captured image slides in; everything else is already in place
-        public void MarkNew(StoreItem it)
-        {
-            if (it != null) _enterT0[it] = DateTime.Now;
-        }
-
-        float EnterProgress(int i)
-        {
-            if (i < 0 || i >= _store.Items.Count) return 1f;
-            DateTime t0;
-            if (!_enterT0.TryGetValue(_store.Items[i], out t0)) return 1f;
-            float d = (float)(DateTime.Now - t0).TotalSeconds;
-            if (d <= 0f) return 0f;
-            float t = d / (0.42f * AnimK());
-            if (t >= 1f) return 1f;
-            return t * t * (3f - 2f * t);      // smoothstep -> eased, silky
-        }
 
         // 只有“真的拉得很长”的图才进特殊方框：宽高比超过 ExtremeRatio:1（或反过来）才算。
         // 想改判定松紧，只动这一个数就行：越小越容易进方框，越大越严格。
         public const float ExtremeRatio = 4.5f;
+
 
         // very extreme aspect ratios get a fixed square box with a distinctive border colour
         static bool IsExtreme(StoreItem it)
@@ -3033,6 +2567,7 @@ namespace SnapWheel
             float a = ImgW(it) / Math.Max(1f, ImgH(it));
             return a > ExtremeRatio || a < (1f / ExtremeRatio);
         }
+
 
         // card size == the image's exact aspect; extreme ones become a square box
         // 已释放的 Image 不是 null，直接读宽高会抛 ArgumentException —— 统一走这里兜住
@@ -3048,6 +2583,7 @@ namespace SnapWheel
             return new SizeF(Math.Max(6f, (float)Math.Round(iw * s)), Math.Max(6f, (float)Math.Round(ih * s)));
         }
 
+
         // card = image rect grown by `pad` (hover lift). pad may be negative (pull-out shrink).
         RectangleF CardRect(int i, float pad)
         {
@@ -3059,6 +2595,7 @@ namespace SnapWheel
             return new RectangleF(x, y, sz.Width + 2f * pad, sz.Height + 2f * pad);
         }
 
+
         // image rect inside a card, always the crisp nominal size
         RectangleF ImageRect(int i)
         {
@@ -3068,6 +2605,7 @@ namespace SnapWheel
             return new RectangleF((float)Math.Round(c.X - sz.Width / 2f), (float)Math.Round(c.Y - sz.Height / 2f), sz.Width, sz.Height);
         }
 
+
         // fit the whole image inside a box, preserving aspect
         static SizeF FitInside(Size img, float bw, float bh)
         {
@@ -3076,94 +2614,14 @@ namespace SnapWheel
             return new SizeF(img.Width * s, img.Height * s);
         }
 
+
         // cache scaled thumbnails by rounded pixel size -> no per-frame resampling shimmer
         Dictionary<StoreItem, Dictionary<long, Bitmap>> _thumbCache = new Dictionary<StoreItem, Dictionary<long, Bitmap>>();
 
+
         // draw a bitmap honouring an alpha value (DrawImageUnscaled ignores alpha entirely)
         ImageAttributes _ia = new ImageAttributes();
-        void DrawWithAlpha(Graphics g, Bitmap bmp, RectangleF dest, int alpha)
-        {
-            if (alpha >= 250) { g.DrawImage(bmp, dest); return; }
-            ColorMatrix cm = new ColorMatrix();
-            cm.Matrix33 = Math.Max(0f, Math.Min(1f, alpha / 255f));
-            _ia.SetColorMatrix(cm);
-            g.DrawImage(bmp, new Rectangle((int)dest.X, (int)dest.Y, (int)dest.Width, (int)dest.Height),
-                0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, _ia);
-        }
 
-        void PruneCaches()
-        {
-            if (_thumbCache.Count <= _store.Items.Count) return;
-            List<StoreItem> dead = new List<StoreItem>();
-            foreach (StoreItem k in _thumbCache.Keys) if (!_store.Items.Contains(k)) dead.Add(k);
-            for (int i = 0; i < dead.Count; i++)
-            {
-                foreach (Bitmap b in _thumbCache[dead[i]].Values) { try { b.Dispose(); } catch { } }
-                _thumbCache.Remove(dead[i]);
-            }
-        }
-
-        Bitmap ScaledThumb(StoreItem it, int w, int h)
-        {
-            // w/h 是逻辑尺寸；实际按物理像素生成，缩放到高 DPI 屏上才不会发虚
-            int dw = Math.Max(1, (int)Math.Round(w * UiK));
-            int dh = Math.Max(1, (int)Math.Round(h * UiK));
-            Dictionary<long, Bitmap> d;
-            if (!_thumbCache.TryGetValue(it, out d)) { d = new Dictionary<long, Bitmap>(); _thumbCache[it] = d; }
-            long key = ((long)dw << 20) | (uint)dh;
-            Bitmap b;
-            if (d.TryGetValue(key, out b)) return b;
-            if (d.Count > 48)
-            {
-                foreach (Bitmap v in d.Values) { try { v.Dispose(); } catch { } }
-                d.Clear();
-            }
-            b = new Bitmap(dw, dh, PixelFormat.Format32bppPArgb);
-            using (Graphics gg = Graphics.FromImage(b))
-            {
-                gg.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                gg.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                gg.DrawImage(it.Image, new Rectangle(0, 0, dw, dh));
-            }
-            d[key] = b;
-            return b;
-        }
-
-        // exactly what DrawWheel draws for item i (so grabbing matches what you see)
-        RectangleF DrawnRect(int i)
-        {
-            if (i < 0 || i >= _store.Items.Count) return RectangleF.Empty;
-            float sc; if (!_scales.TryGetValue(i, out sc)) sc = 1f;
-            if (_store.Items[i] == _dragOutItem) sc *= Math.Max(0f, 1f - _dragOutProg);
-            if (_store.Items[i] == _deletingItem) sc *= Math.Max(0f, 1f - _deleteProg);
-            SizeF b = CardSize(_store.Items[i]);
-            int iw = Math.Max(4, (int)Math.Round(b.Width * sc));
-            int ih = Math.Max(4, (int)Math.Round(b.Height * sc));
-            PointF pc = ItemCenter(i);
-            float x = (float)Math.Round(pc.X - iw / 2f), y = (float)Math.Round(pc.Y - ih / 2f);
-            return new RectangleF(x - CardPad, y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
-        }
-
-        int HitTest(Point p)
-        {
-            int best = -1; float bestD = float.MaxValue;
-            for (int i = 0; i < _store.Items.Count; i++)
-            {
-                float phi = ItemPhi(i);
-                if (phi < _phiMin - 0.45f || phi > _phiMax + 0.45f) continue;
-                if (EnterProgress(i) < 0.5f) continue;
-                if (_store.Items[i] == _dragOutItem) continue;
-                RectangleF rr = DrawnRect(i);
-                RectangleF hit = new RectangleF(rr.X - 2, rr.Y - 2, rr.Width + 4, rr.Height + 4);
-                if (hit.Contains(p))
-                {
-                    PointF c = ItemCenter(i);
-                    float d = (float)Math.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
-                    if (d < bestD) { bestD = d; best = i; }
-                }
-            }
-            return best;
-        }
 
         Rectangle CloseButtonRect() { return BtnRect(0); }
         Rectangle GearButtonRect() { return BtnRect(1); }
@@ -3185,289 +2643,46 @@ namespace SnapWheel
 #endif
         }
 
+
         PointF ItemCenterAtPhiRadius(float phi, float radius)
         {
             PointF c = Center();
             return new PointF((float)(c.X + radius * Math.Cos(phi) * Sx()), (float)(c.Y + radius * Math.Sin(phi) * Sy()));
         }
 
+
         bool _keyDown = false;
+
         DateTime _keyDownAt = DateTime.MinValue;
+
         // 万能键长按多久弹圆盘：从 260ms 收到 140ms（更跟手），仍能区分"点一下"和"长按"
         const int KeyMenuDelayMs = 140;
+
         float _menuT = 0f;             // 0..1 radial menu expansion
+
         bool _menuOpen = false;
+
         int _sector = -1;              // 0=上 1=右 2=下 3=左（动作可由用户自定义）
+
         bool _delConfirm = false;      // 删除确认态：摇杆左右两半 = 取消 / 确认
+
         DateTime _delConfirmAt = DateTime.MinValue;
+
         int _delHalf = -1;             // -1=不在键上 0=左半(取消) 1=右半(确认)
+
         Point _swipeStart;
+
         Color _accentCur = Color.FromArgb(0, 122, 204);
+
         float _switchFlash = 0f;
 
-        PointF KeyCenter()
-        {
-            Rectangle r = KeyRect();
-            return new PointF(r.X + r.Width / 2f, r.Y + r.Height / 2f);
-        }
-
-        // ---------- 轮盘上的真·毛玻璃 ----------
-        // 分层窗口不能上系统 acrylic（会给整个窗口矩形蒙灰），所以自己来：
-        // 显示之前把轮盘背后那块屏幕抓下来 → 缩到 1/6 做盒式模糊 → 放大回去，
-        // 画面板时把这块模糊底裁进形状里，再叠玻璃色 —— 透过去的确实是真桌面。
-        DateTime _backdropAt = DateTime.MinValue;
-        Bitmap _backdropBlur;
-        bool _backdropValid;
         Point _backdropOffset = new Point(0, 0);
-        Bitmap _backdropOld;                 // 上一张模糊背景（换背景时交叉淡入，避免玻璃颜色突然一跳）
-        float _backdropFade = 1f;            // 1 = 新背景完全不透明
-        DateTime _backdropFadeAt = DateTime.MinValue;
 
-        void FreeBackdrop()
-        {
-            if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } _backdropBlur = null; }
-            if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
-            _backdropFade = 1f;
-            _backdropValid = false;
-        }
-
-        // ---------- 毛玻璃后台抓取 ----------
-        // 抓屏 + 高斯模糊要几十毫秒，原来是在 UI 线程里做的，动画期间会卡一下。
-        // 现在：后台线程负责抓+糊，UI 线程只在下一帧把结果换上（沿用已有的交叉淡入，视觉不变）。
-        volatile bool _glassBusy = false;
-        Bitmap _glassPending = null;
-        Point _glassPendingOffset = Point.Empty;
         readonly object _glassLock = new object();
 
-        void RequestBackdropAsync()
-        {
-            if (StyleFlatOnly()) { FreeBackdrop(); return; }
-            if (_glassBusy) return;
-            if (Width < 20 || Height < 20) return;
-            Rectangle vs = SystemInformation.VirtualScreen;
-            Rectangle want = new Rectangle(Left, Top, Width, Height);
-            Rectangle got = Rectangle.Intersect(want, vs);
-            if (got.Width < 8 || got.Height < 8) return;
-            _glassBusy = true;
-            Point off = new Point(got.Left - want.Left, got.Top - want.Top);
-            System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
-            {
-                Bitmap fresh = null;
-                try
-                {
-                    using (Bitmap full = new Bitmap(got.Width, got.Height, PixelFormat.Format32bppArgb))
-                    {
-                        using (Graphics g = Graphics.FromImage(full))
-                            g.CopyFromScreen(got.Left, got.Top, 0, 0, new Size(got.Width, got.Height), CopyPixelOperation.SourceCopy);
-                        fresh = BlurBitmap(full, 6);
-                    }
-                }
-                catch { fresh = null; }
-                lock (_glassLock)
-                {
-                    if (_glassPending != null) { try { _glassPending.Dispose(); } catch { } }
-                    _glassPending = fresh;
-                    _glassPendingOffset = off;
-                }
-                _glassBusy = false;
-            }));
-            th.IsBackground = true;
-            try { th.Priority = System.Threading.ThreadPriority.BelowNormal; } catch { }   // 别和 UI 抢 CPU
-            th.Start();
-        }
-
-        // 由 AnimTick 在 UI 线程调用：把后台糊好的底换上去
-        void ApplyPendingBackdrop()
-        {
-            Bitmap fresh = null;
-            Point off = Point.Empty;
-            lock (_glassLock)
-            {
-                if (_glassPending == null) return;
-                fresh = _glassPending; off = _glassPendingOffset; _glassPending = null;
-            }
-            if (StyleFlatOnly()) { try { fresh.Dispose(); } catch { } return; }
-            if (_backdropBlur != null && Visible)
-            {
-                if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
-                _backdropOld = _backdropBlur;
-                _backdropFade = 0f;
-                _backdropFadeAt = DateTime.Now;
-            }
-            else
-            {
-                if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } }
-                if (!Visible && _backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; _backdropFade = 1f; }
-            }
-            _backdropBlur = fresh;
-            _backdropOffset = off;
-            _backdropValid = true;
-            _backdropAt = DateTime.Now;
-            _rendered = false;
-        }
-
-        public void CaptureBackdrop()
-        {
-            if (StyleFlatOnly()) { FreeBackdrop(); return; }
-            try
-            {
-                if (Width < 20 || Height < 20) return;
-                Rectangle vs = SystemInformation.VirtualScreen;
-                Rectangle want = new Rectangle(Left, Top, Width, Height);
-                Rectangle got = Rectangle.Intersect(want, vs);
-                if (got.Width < 8 || got.Height < 8) return;
-                Bitmap fresh = null;
-                using (Bitmap full = new Bitmap(got.Width, got.Height, PixelFormat.Format32bppArgb))
-                {
-                    using (Graphics g = Graphics.FromImage(full))
-                        g.CopyFromScreen(got.Left, got.Top, 0, 0, new Size(got.Width, got.Height), CopyPixelOperation.SourceCopy);
-                    fresh = BlurBitmap(full, 6);
-                }
-                // 换背景不要"啪"地一跳：把旧图留着做交叉淡入（只有显示中才有必要看着它过渡）
-                if (_backdropBlur != null && Visible)
-                {
-                    if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
-                    _backdropOld = _backdropBlur;
-                    _backdropFade = 0f;
-                    _backdropFadeAt = DateTime.Now;
-                }
-                else
-                {
-                    if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } }
-                    if (!Visible && _backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; _backdropFade = 1f; }
-                }
-                _backdropBlur = fresh;
-                _backdropOffset = new Point(got.Left - want.Left, got.Top - want.Top);
-                _backdropValid = true;
-                _backdropAt = DateTime.Now;
-            }
-            catch { FreeBackdrop(); }
-        }
-
-        // 缩小 -> 盒式模糊 -> 放大，得到"毛玻璃"那种糊
-        static Bitmap BlurBitmap(Bitmap src, int down)
-        {
-            int w = Math.Max(2, src.Width / down), h = Math.Max(2, src.Height / down);
-            using (Bitmap small = new Bitmap(w, h, PixelFormat.Format32bppArgb))
-            {
-                using (Graphics g = Graphics.FromImage(small))
-                {
-                    g.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                    g.DrawImage(src, new Rectangle(0, 0, w, h));
-                }
-                BoxBlur(small, 3);
-                BoxBlur(small, 3);
-                BoxBlur(small, 2);
-                Bitmap big = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
-                using (Graphics g = Graphics.FromImage(big))
-                {
-                    g.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                    g.DrawImage(small, new Rectangle(0, 0, big.Width, big.Height));
-                }
-                return big;
-            }
-        }
-
-        static void BoxBlur(Bitmap bmp, int r)
-        {
-            try
-            {
-                Rectangle rc = new Rectangle(0, 0, bmp.Width, bmp.Height);
-                BitmapData d = bmp.LockBits(rc, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
-                try
-                {
-                    int W = d.Width, H = d.Height, n = W * H;
-                    int[] px = new int[n];
-                    int[] tmp = new int[n];
-                    Marshal.Copy(d.Scan0, px, 0, n);
-                    for (int y = 0; y < H; y++)
-                    {
-                        int row = y * W;
-                        for (int x = 0; x < W; x++)
-                        {
-                            int a = 0, rr = 0, gg = 0, bb = 0, c = 0;
-                            for (int k = -r; k <= r; k++)
-                            {
-                                int xx = x + k; if (xx < 0) xx = 0; if (xx >= W) xx = W - 1;
-                                int v = px[row + xx];
-                                a += (v >> 24) & 0xFF; rr += (v >> 16) & 0xFF; gg += (v >> 8) & 0xFF; bb += v & 0xFF; c++;
-                            }
-                            tmp[row + x] = ((a / c) << 24) | ((rr / c) << 16) | ((gg / c) << 8) | (bb / c);
-                        }
-                    }
-                    for (int x = 0; x < W; x++)
-                        for (int y = 0; y < H; y++)
-                        {
-                            int a = 0, rr = 0, gg = 0, bb = 0, c = 0;
-                            for (int k = -r; k <= r; k++)
-                            {
-                                int yy = y + k; if (yy < 0) yy = 0; if (yy >= H) yy = H - 1;
-                                int v = tmp[yy * W + x];
-                                a += (v >> 24) & 0xFF; rr += (v >> 16) & 0xFF; gg += (v >> 8) & 0xFF; bb += v & 0xFF; c++;
-                            }
-                            px[y * W + x] = ((a / c) << 24) | ((rr / c) << 16) | ((gg / c) << 8) | (bb / c);
-                        }
-                    Marshal.Copy(px, 0, d.Scan0, n);
-                }
-                finally { bmp.UnlockBits(d); }
-            }
-            catch { }
-        }
-
-        bool UseBackdrop() { return _backdropValid && _backdropBlur != null && !StyleFlatOnly(); }
-
-        // 把模糊背景裁进这个形状里（画玻璃面板前先调它）
-        // alpha 必须传进来：否则淡出动画时玻璃底不跟着变淡，面板会像"卡住"一样不消失
-        void BackdropClip(Graphics g, GraphicsPath path, int alpha)
-        {
-            if (!UseBackdrop() || alpha <= 2) return;
-            try
-            {
-                GraphicsState st = g.Save();
-                g.SetClip(path, CombineMode.Replace);
-                // 这块模糊底是"物理像素"尺寸，而当前处在 UiK 缩放后的逻辑坐标系里，
-                // 必须除回去，否则高 DPI 下会画得又大又偏 —— 毛玻璃直接就废了
-                float bw = _backdropBlur.Width, bh = _backdropBlur.Height;
-                RectangleF dest = new RectangleF(_backdropOffset.X / UiK, _backdropOffset.Y / UiK,
-                                                 bw / UiK, bh / UiK);
-                int al = alpha > 255 ? 255 : alpha;
-                bool crossFade = _backdropOld != null && _backdropFade < 0.999f;
-                if (crossFade)
-                {
-                    // 旧背景也要按元素 alpha 淡（漏乘的话，轮盘淡出时这层背景会一直是不透明的）
-                    float ow = _backdropOld.Width, oh = _backdropOld.Height;
-                    Rectangle dr0 = new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
-                        Math.Max(1, (int)Math.Round(ow / UiK)), Math.Max(1, (int)Math.Round(oh / UiK)));
-                    ColorMatrix cmo = new ColorMatrix(); cmo.Matrix33 = al / 255f;
-                    _iaBack.SetColorMatrix(cmo);
-                    g.DrawImage(_backdropOld, dr0, 0, 0, ow, oh, GraphicsUnit.Pixel, _iaBack);
-                }
-                float newMul = crossFade ? Math.Max(0.06f, _backdropFade) : 1f;
-                int alNew = (int)(al * newMul);
-                if (alNew >= 250 && !crossFade) g.DrawImage(_backdropBlur, dest);
-                else
-                {
-                    ColorMatrix cm = new ColorMatrix();
-                    cm.Matrix33 = alNew / 255f;
-                    _iaBack.SetColorMatrix(cm);
-                    g.DrawImage(_backdropBlur,
-                        new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
-                                      Math.Max(1, (int)Math.Round(dest.Width)), Math.Max(1, (int)Math.Round(dest.Height))),
-                        0, 0, bw, bh, GraphicsUnit.Pixel, _iaBack);
-                }
-                // 压一层黑：不管背后是亮桌面还是暗桌面，面板都能保持"深色玻璃"、字看得清
-                int dk = (int)(26 * (StyleSolid() ? 1f : _settings.GlassPercent / 100f) * al / 255f);
-                if (dk > 0)
-                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(dk, 0, 0, 0)))
-                        g.FillPath(sb, path);
-                g.Restore(st);
-            }
-            catch { try { g.ResetClip(); } catch { } }
-        }
 
         ImageAttributes _iaBack = new ImageAttributes();
+
 
         // 名字太长就把中间省略掉，免得药丸撑太宽压到别的东西
         public static string FitName(string s, int max)
@@ -3479,8 +2694,10 @@ namespace SnapWheel
             return s.Substring(0, head) + "…" + s.Substring(s.Length - tail, tail);
         }
 
+
         // Wheel 名药丸的矩形（画的时候记下来，命中测试用同一个，改了名字也不会错位）
         RectangleF _namePillRect = RectangleF.Empty;
+
         RectangleF NamePillRect()
         {
             if (!_settings.ShowNameLabel) return RectangleF.Empty;
@@ -3491,16 +2708,6 @@ namespace SnapWheel
             return new RectangleF(kr.X + kr.Width / 2f - 60f, kr.Bottom + 4f, 120f, 30f);
         }
 
-        // 上=新建 右=下一个 左=上一个 下=删除
-        int SectorAt(PointF p)
-        {
-            PointF c = KeyCenter();
-            float dx = p.X - c.X, dy = p.Y - c.Y;
-            float d = (float)Math.Sqrt(dx * dx + dy * dy);
-            if (d < 18f) return -1;
-            if (Math.Abs(dy) > Math.Abs(dx)) return dy < 0 ? 0 : 2;
-            return dx > 0 ? 1 : 3;
-        }
 
         void SwitchWheel(int dir)
         {
@@ -3509,22 +2716,6 @@ namespace SnapWheel
             AfterWheelSwitch();
         }
 
-        // 真正把一张图从轮盘拿走：内存 + 硬盘文件。
-        // 关键：图片列表是靠"扫描保存目录"恢复的，只删内存不删文件，下次启动它又回来了。
-        // 右键单击/双击删除进入点。上一张还在播删除动画就先把它真正删掉：
-        // 连点/来回点时"正在删的那张"只有一个，后来者会覆盖前者，否则两张都删不掉。
-        // （单独抽成方法是为了能直接测这条行为 —— 这正是之前测试漏掉的四个 bug 之一）
-        void BeginDelete(StoreItem it)
-        {
-            if (_deletingItem != null)
-            {
-                StoreItem prev = _deletingItem;
-                _deletingItem = null; _deleteProg = 0f;
-                RemoveItem(prev, true);
-            }
-            _deletingItem = it;        // 这张交给 AnimTick 播完动画再删
-            _deleteProg = 0f;
-        }
 
         public void RemoveItem(StoreItem it, bool deleteFile)
         {
@@ -3544,6 +2735,7 @@ namespace SnapWheel
             _rendered = false;
             Render();
         }
+
 
         // 一键清空当前轮盘里的图片，轮盘本身保留
         public void ClearCurrentWheel()
@@ -3569,32 +2761,6 @@ namespace SnapWheel
             catch (Exception ex) { Err.Log("ClearCurrentWheel", ex); }
         }
 
-        // 万能键圆盘松手时执行对应分区的动作（动作由用户在设置里自定义）
-        void DoKeyAction(int sector)
-        {            string a = _settings.KeyActionAt(sector);
-            try
-            {
-                switch (a)
-                {
-                    case "new": CreateWheel(); break;
-                    case "next": SwitchWheel(1); break;
-                    case "prev": SwitchWheel(-1); break;
-                    case "delete": _delConfirm = true; _delConfirmAt = DateTime.Now; break;  // 原地进入左右两半确认
-                    case "shot": if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty); break;
-                    case "collapse": DismissWheel(); break;
-                    case "folder":
-                        try { if (!Directory.Exists(_settings.Dir)) Directory.CreateDirectory(_settings.Dir); System.Diagnostics.Process.Start(_settings.Dir); } catch { }
-                        break;
-                    case "settings": if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); break;
-                    case "clear": ClearCurrentWheel(); break;
-                    case "paste":
-                        try { IDataObject dob = Clipboard.GetDataObject(); if (dob != null) ImportBitmap(dob); } catch { }
-                        break;
-                    default: break;   // "none"：什么都不做
-                }
-            }
-            catch (Exception ex) { Err.Log("DoKeyAction", ex); }
-        }
 
         // 设置窗口点了确定之后，界面上要做的收尾。
         // 抽成方法是为了能写行为测试 —— 以前这里曾混进一句 HideWheel()（收起态关掉时），
@@ -3608,6 +2774,7 @@ namespace SnapWheel
             RefreshWheel();            // 强制重绘：万能键上的动作名等设置改完要立刻生效
         }
 
+
         public void RefreshWheel()
         {
             _offset = 0f; _targetOffset = 0f;
@@ -3616,6 +2783,7 @@ namespace SnapWheel
             _switchFlash = 1f;
             Render();
         }
+
 
         void AfterWheelSwitch()
         {
@@ -3629,6 +2797,7 @@ namespace SnapWheel
             Render();
         }
 
+
         void CreateWheel()
         {
             _mgr.New();
@@ -3637,12 +2806,14 @@ namespace SnapWheel
             AfterWheelSwitch();
         }
 
+
         void DeleteWheel()
         {
             _mgr.Remove(_mgr.Active);
             _mgr.Save();
             AfterWheelSwitch();
         }
+
 
         // 点名字药丸改名
         void RenameWheel()
@@ -3670,60 +2841,174 @@ namespace SnapWheel
             catch { }
             Render();
         }
+
         public event EventHandler CaptureRequested;
+
         public event EventHandler ExitRequested;      // 长按关闭键 -> 完全退出
+
         // 管理员模式下"拖了半天啥也没发生"时抛出去：让 AppCtx 弹说明（要不要换普通权限）
         public event EventHandler AdminHelpRequested;
 
-        // buttons stack up from the corner (kept well above an auto-hiding taskbar)
-        Rectangle BtnRect(int order)
+
+        IntPtr _memDc = IntPtr.Zero, _dib = IntPtr.Zero, _oldBmp = IntPtr.Zero, _bits = IntPtr.Zero;
+
+        int _dibW, _dibH;
+
+
+        // 圆盘上给动作名用的短标签（太长会画不下）
+        static string KeyActionShort(string id)
         {
-            PointF c = Center();
-            int bx = (int)((Sx() > 0) ? c.X + 10 : c.X - 40);
-            float dist = 150f + order * 40f;
-            float by = c.Y + Sy() * dist;
-            if (Sy() > 0) by -= 30f;
-            return new Rectangle(bx, (int)by, 30, 30);
+            switch (id)
+            {
+                case "new": return "新建";
+                case "next": return "下一个";
+                case "prev": return "上一个";
+                case "delete": return "删除";
+                case "shot": return "截图";
+                case "collapse": return "收起";
+                case "folder": return "文件夹";
+                case "settings": return "设置";
+                case "paste": return "收一张";
+                case "clear": return "清空";
+                default: return "";
+            }
         }
 
-        PointF HintPos(SizeF sz)
+
+        bool _dropActive = false;
+
+        bool _returnedToWheel = false;
+
+        bool _dropExternal = false;      // 拖进来的是“外面的文件”（不是轮盘自己的图）
+
+        int _dropCount = 0;
+
+        object _dropCacheKey = null;
+
+        List<string> _dropCacheFiles = null;
+
+        DateTime _dropCacheAt = DateTime.MinValue;
+
+        const string DragFmt = "SnapWheelMove";     // 标记：这是轮盘自己在拖的图
+
+
+        // 左下角的小提示条
+        string _toast = "";
+
+        DateTime _toastAt = DateTime.MinValue;
+
+        public void ShowToast(string s)
         {
-            // 计数标签放到环外侧的 45° 对角线上，彻底离开万能键和角上的按钮
-            PointF c = Center();
-            float d = EffR() + 78f;
-            float dx = d * 0.7071f, dy = d * 0.7071f;
-            float bx = (Sx() > 0) ? c.X + dx : c.X - dx;
-            float by = (Sy() > 0) ? c.Y + dy : c.Y - dy;
-            return new PointF(bx - sz.Width / 2f, by - sz.Height / 2f);
+            _toast = s == null ? "" : s;
+            _toastAt = DateTime.Now;
         }
 
-        bool OverContent(Point p)
+
+        protected override void Dispose(bool disposing)
         {
-            // 贴边把手：收起态只有它可点；展开态它也算内容（不然点它会穿透到桌面）
-            if (NubSingleMode())
+            if (disposing)
             {
-                if (NubOutRect().Contains(p)) return true;
+                try { ReleaseDib(); } catch { }
+                try { if (IsHandleCreated) Native.RemoveClipboardFormatListener(Handle); } catch { }
             }
-            else if (_collapsed) return NubOutRect().Contains(p);
-            if (!NubSingleMode() && NubInRect().Contains(p)) return true;
-            if (HitTest(p) >= 0) return true;
-            if (CloseButtonRect().Contains(p)) return true;
-            if (GearButtonRect().Contains(p)) return true;
-            if (ShootButtonRect().Contains(p)) return true;
-            if (KeyRect().Contains(p)) return true;
-            // 名字药丸也要算"内容"，否则点它会直接穿透到桌面（改名点不动的根因）
-            RectangleF np = NamePillRect();
-            if (!np.IsEmpty)
-            {
-                RectangleF hit = np;
-                if (_nameHover) hit = new RectangleF(np.X, np.Y, np.Width + 96f, np.Height);   // 连右边的提示一起点
-                if (hit.Contains(p)) return true;
-            }
-            if (_menuOpen) return true;
-            PointF c = Center();
-            float d = (float)Math.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
-            return Math.Abs(d - _R) < _thumb * 0.75f;
+            base.Dispose(disposing);
         }
+
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == ShowMsg) { ShowWheelWithIntro(); return; }   // second launch asks us to show
+            if (m.Msg == 0x031D) { OnClipboardChanged(); return; }      // WM_CLIPBOARDUPDATE：剪贴板有新图
+            if (m.Msg == 0x02E0 && _settings.UiScale <= 0)              // WM_DPICHANGED：系统缩放变了，重排一次
+            { try { ApplyLayout(); } catch { } }
+            if (m.Msg == 0x0084)
+            {
+                Point cpRaw = PointToClient(Cursor.Position);
+                // 空地方点穿（不误点）；但左键按着的时候不做穿透 ——
+                // 那多半正在拖拽，穿透会让系统找不到拖放目标，图就掉不进来了
+                bool dragging = (Control.MouseButtons & MouseButtons.Left) != 0;
+                bool inWin = cpRaw.X >= 0 && cpRaw.Y >= 0 && cpRaw.X < Width && cpRaw.Y < Height;
+                if (!dragging && inWin && !OverContent(ToLogicalPt(cpRaw)))
+                { m.Result = (IntPtr)(-1); return; }
+            }
+            base.WndProc(ref m);
+        }
+
+
+        public static readonly uint ShowMsg = Native.RegisterWindowMessage("SnapWheel_SHOW");
+    }
+}
+
+namespace SnapWheel
+{
+    partial class WheelForm
+    {
+        void DrawWithAlpha(Graphics g, Bitmap bmp, RectangleF dest, int alpha)
+        {
+            if (alpha >= 250) { g.DrawImage(bmp, dest); return; }
+            ColorMatrix cm = new ColorMatrix();
+            cm.Matrix33 = Math.Max(0f, Math.Min(1f, alpha / 255f));
+            _ia.SetColorMatrix(cm);
+            g.DrawImage(bmp, new Rectangle((int)dest.X, (int)dest.Y, (int)dest.Width, (int)dest.Height),
+                0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, _ia);
+        }
+
+
+        void PruneCaches()
+        {
+            if (_thumbCache.Count <= _store.Items.Count) return;
+            List<StoreItem> dead = new List<StoreItem>();
+            foreach (StoreItem k in _thumbCache.Keys) if (!_store.Items.Contains(k)) dead.Add(k);
+            for (int i = 0; i < dead.Count; i++)
+            {
+                foreach (Bitmap b in _thumbCache[dead[i]].Values) { try { b.Dispose(); } catch { } }
+                _thumbCache.Remove(dead[i]);
+            }
+        }
+
+
+        Bitmap ScaledThumb(StoreItem it, int w, int h)
+        {
+            // w/h 是逻辑尺寸；实际按物理像素生成，缩放到高 DPI 屏上才不会发虚
+            int dw = Math.Max(1, (int)Math.Round(w * UiK));
+            int dh = Math.Max(1, (int)Math.Round(h * UiK));
+            Dictionary<long, Bitmap> d;
+            if (!_thumbCache.TryGetValue(it, out d)) { d = new Dictionary<long, Bitmap>(); _thumbCache[it] = d; }
+            long key = ((long)dw << 20) | (uint)dh;
+            Bitmap b;
+            if (d.TryGetValue(key, out b)) return b;
+            if (d.Count > 48)
+            {
+                foreach (Bitmap v in d.Values) { try { v.Dispose(); } catch { } }
+                d.Clear();
+            }
+            b = new Bitmap(dw, dh, PixelFormat.Format32bppPArgb);
+            using (Graphics gg = Graphics.FromImage(b))
+            {
+                gg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                gg.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                gg.DrawImage(it.Image, new Rectangle(0, 0, dw, dh));
+            }
+            d[key] = b;
+            return b;
+        }
+
+
+        // exactly what DrawWheel draws for item i (so grabbing matches what you see)
+        RectangleF DrawnRect(int i)
+        {
+            if (i < 0 || i >= _store.Items.Count) return RectangleF.Empty;
+            float sc; if (!_scales.TryGetValue(i, out sc)) sc = 1f;
+            if (_store.Items[i] == _dragOutItem) sc *= Math.Max(0f, 1f - _dragOutProg);
+            if (_store.Items[i] == _deletingItem) sc *= Math.Max(0f, 1f - _deleteProg);
+            SizeF b = CardSize(_store.Items[i]);
+            int iw = Math.Max(4, (int)Math.Round(b.Width * sc));
+            int ih = Math.Max(4, (int)Math.Round(b.Height * sc));
+            PointF pc = ItemCenter(i);
+            float x = (float)Math.Round(pc.X - iw / 2f), y = (float)Math.Round(pc.Y - ih / 2f);
+            return new RectangleF(x - CardPad, y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
+        }
+
 
         void Render()
         {
@@ -3737,6 +3022,7 @@ namespace SnapWheel
             }
         }
 
+
         // 慢帧要能说清"当时界面是什么状态"，否则只知道慢、不知道因为什么慢
         string FrameState()
         {
@@ -3747,6 +3033,7 @@ namespace SnapWheel
                    " 菜单=" + _menuOpen + " intro=" + _intro + " 收起中=" + _collapsing + " 已收起=" + _collapsed +
                    " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0);
         }
+
 
         void RenderCore()
         {
@@ -3796,8 +3083,6 @@ namespace SnapWheel
             _rendered = true;
         }
 
-        IntPtr _memDc = IntPtr.Zero, _dib = IntPtr.Zero, _oldBmp = IntPtr.Zero, _bits = IntPtr.Zero;
-        int _dibW, _dibH;
 
         void EnsureDib(int w, int h)
         {
@@ -3819,6 +3104,7 @@ namespace SnapWheel
             _dibW = w; _dibH = h;
         }
 
+
         void ReleaseDib()
         {
             if (_memDc == IntPtr.Zero) return;
@@ -3831,6 +3117,7 @@ namespace SnapWheel
             catch { }
             _memDc = IntPtr.Zero; _dib = IntPtr.Zero; _oldBmp = IntPtr.Zero; _bits = IntPtr.Zero;
         }
+
 
         // 铺一层“看不见的接住区”：分层窗口是按 alpha 做命中测试的 —— alpha=0 的地方
         // 系统会当作不存在，拖到那儿鼠标消息/拖放都直接穿到底下的窗口去（这就是“拖上去没反应”的根因）。
@@ -3861,6 +3148,7 @@ namespace SnapWheel
             using (SolidBrush kb = new SolidBrush(Color.FromArgb(1, 0, 0, 0)))
                 g.FillEllipse(kb, kr);
         }
+
 
         // 万能键：新拟态玻璃圆盘 —— 玻璃底 + 上亮下暗 + 主题色核心，按下时核心点亮并轻微放大
         void DrawKeyDisc(Graphics g, int a, Color acc, Rectangle kr, float kcx, float kcy, float krr)
@@ -3954,24 +3242,6 @@ namespace SnapWheel
             }
         }
 
-        // 圆盘上给动作名用的短标签（太长会画不下）
-        static string KeyActionShort(string id)
-        {
-            switch (id)
-            {
-                case "new": return "新建";
-                case "next": return "下一个";
-                case "prev": return "上一个";
-                case "delete": return "删除";
-                case "shot": return "截图";
-                case "collapse": return "收起";
-                case "folder": return "文件夹";
-                case "settings": return "设置";
-                case "paste": return "收一张";
-                case "clear": return "清空";
-                default: return "";
-            }
-        }
 
         void DrawWheel(Graphics g, int w, int h)
         {
@@ -4463,6 +3733,7 @@ namespace SnapWheel
             DrawNubs(g, a);      // 展开状态下也画一个"收起"把手（贴着另一条屏幕边）
         }
 
+
         // ---- 贴边小把手：收起态画"拉出"、展开态画"收起" ----
         // 两个把手按环的进度交叉淡入淡出（并各自从屏幕边滑出来），不会"啪"地换一个
         void DrawNubs(Graphics g, int a)
@@ -4477,6 +3748,7 @@ namespace SnapWheel
             if (k < 0.995f) DrawNubOne(g, a, true, (1f - k) * ap);
             if (k > 0.005f) DrawNubOne(g, a, false, k);
         }
+
 
         void DrawNubOne(Graphics g, int a, bool outMode, float vis)
         {
@@ -4592,6 +3864,1026 @@ namespace SnapWheel
             }
         }
 
+
+        void DrawToast(Graphics g, int a)
+        {
+            if (_toast.Length == 0) return;
+            float age = (float)(DateTime.Now - _toastAt).TotalSeconds;
+            if (age > 2.6f) return;
+            float t = 1f;
+            if (age < 0.18f) t = age / 0.18f;
+            else if (age > 2.1f) t = Math.Max(0f, (2.6f - age) / 0.5f);
+            int ta = (int)(235 * t * a / 255f);
+            if (ta <= 2) return;
+            using (Font f = new Font("Microsoft YaHei UI", 10f))
+            {
+                SizeF sz = g.MeasureString(_toast, f);
+                float w = sz.Width + 34f, h = sz.Height + 16f;
+                SizeF ls2 = LogicalSize();
+                float x = 26f + (1f - t) * 14f, y = ls2.Height - h - 26f;
+                using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
+                {
+                    BackdropClip(g, pp, ta);
+                    Gfx.GlassPanel(g, pp, new RectangleF(x, y, w, h), Gfx.A(GlassBase(), GlassA((int)(ta * 0.86f))),
+                        (int)(ta * 0.16f), (int)(ta * 0.14f), !StyleFlatOnly());
+                    using (Pen p = new Pen(Gfx.A(Gfx.Shade(_accentCur, 0.15f), (int)(ta * 0.42f)), 1.2f))
+                        g.DrawPath(p, pp);
+                }
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
+                    g.DrawString(_toast, f, tb, x + 17f, y + 8f);
+            }
+        }
+    }
+}
+
+namespace SnapWheel
+{
+    partial class WheelForm
+    {
+
+        RectangleF NubOutRect()
+        {
+            SizeF ls = LogicalSize();
+            float cy = (Sy() > 0) ? NubDistOut() : ls.Height - NubDistOut();
+            float x = (Sx() > 0) ? 0f : ls.Width - NubThick;
+            return new RectangleF(x, cy - NubLong / 2f, NubThick, NubLong);
+        }
+
+
+        RectangleF NubInRect()
+        {
+            SizeF ls = LogicalSize();
+            float cx = (Sx() > 0) ? NubDistIn() : ls.Width - NubDistIn();
+            float y = (Sy() > 0) ? 0f : ls.Height - NubThick;
+            return new RectangleF(cx - NubLong / 2f, y, NubLong, NubThick);
+        }
+
+
+        // 一整趟 0 -> 1 的时间基准（不含速度设置）
+        float RingUnitDurBase()
+        {
+            // 固定时长。早先是 0.82 + 0.05*图片数 —— 图一多收起就明显更慢，
+            // 但展开/收起本来是一段固定几何过渡，跟盘里存了几张图没关系。
+            return 1.0f;
+        }
+
+
+        // 一趟 0->1 的时长：展开和收起各用各的速度百分比（越大越快）
+        float RingUnitDur() { return RingUnitDur(false); }
+
+        float RingUnitDur(bool collapsing)
+        {
+            int sp = collapsing ? _settings.CollapseSpeed : _settings.ExpandSpeed;
+            if (sp < 40) sp = 40;
+            if (sp > 250) sp = 250;
+            return RingUnitDurBase() * AnimK() * (100f / sp);
+        }
+
+
+        // 展开（彩虹拉出）；fast=true 用于截图流程，快一点
+        public void ExpandWheel() { ExpandWheel(false); }
+
+        public void ExpandWheel(bool fast)
+        {
+            if (IsExpanded && Visible) { _lastActive = DateTime.Now; return; }
+            if (_settings.IntroAnim)
+            {
+                StartIntro();
+                if (fast) { _introAt = DateTime.Now; _introDur = RingUnitDur(false) * 0.55f; }
+            }
+            else { _collapsed = false; _collapsing = false; _intro = false; _introT = 1f; ShowWheel(); }
+            _lastActive = DateTime.Now;
+        }
+
+
+        // 开机直接进入收起态：窗口显示出来，但只有贴边那个小把手
+        public void StartCollapsed()
+        {
+            _collapsed = true;
+            _collapsing = false;
+            _intro = false;
+            _introT = 0f;
+            _nubAppearT = 0f;                      // 把手从屏幕边滑出来，不要"啪"地出现
+            _nubAppearAt = DateTime.Now;
+            // 首次运行：把手旁边自动亮一次"点我展开"，让新用户知道它是干嘛的
+            if (!_settings.NubHintDone)
+            {
+                _firstRunHintUntil = DateTime.Now.AddSeconds(14);
+                _settings.NubHintDone = true;
+            }
+            CaptureBackdrop();
+            _show = 1f; _targetShow = 1f; _showAnimating = false;
+            _rendered = false;
+            Show();
+            Render();
+            _lastActive = DateTime.Now;
+        }
+
+
+        // 收起（彩虹缩回）—— 收起态没开的话就退回原来的"直接隐藏"
+        public void CollapseWheel() { CollapseWheel(false); }
+
+        public void CollapseWheel(bool fast)
+        {
+            if (!_settings.CollapseMode) { HideWheel(); return; }
+            if (_collapsed) return;
+            if (!Visible) { _collapsed = true; _collapsing = false; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; _collapsedAt = DateTime.Now; CaptureBackdrop(); Show(); Render(); return; }
+            _collapsing = true;
+            _intro = true;
+            _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
+            _ringTo = 0f;
+            _introAt = DateTime.Now;
+            _introDur = RingUnitDur(true) * (fast ? 0.14f : 1f);   // 收起用「收起速度」
+            _keyDown = false; _menuOpen = false; _menuT = 0f; _enlarged = -1; _hover = -1;
+            _lastActive = DateTime.Now;
+            Render();                       // 立刻出一帧，点了就能看到动
+        }
+
+
+        // 界面上"关掉轮盘"的动作：收起态开着就收起，否则完全隐藏
+        public void DismissWheel()
+        {
+            if (_settings.CollapseMode) CollapseWheel();
+            else HideWheel();
+        }
+
+
+        public void ShowWheel()
+        {
+            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
+            SetShow(1f);
+            _lastActive = DateTime.Now;
+            Render();
+        }
+
+
+        // 软件刚启动时用它：带开启动画地显示出来
+        public void ShowWheelWithIntro()
+        {
+            if (_settings.IntroAnim) { StartIntro(); }
+            else ShowWheel();
+        }
+
+
+        // 开启动画：整条环像彩虹一样扫出来，图片一张张沿弧线滑落，万能键/按钮/文字从屏幕外滑入并渐显
+        public void StartIntro()
+        {
+            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
+            _show = 1f; _targetShow = 1f; _showAnimating = false;
+            _collapsed = false; _collapsing = false;
+            _intro = true;
+            _ringFrom = _introT;
+            _ringTo = 1f;
+            _introAt = DateTime.Now;
+            _introDur = RingUnitDur();
+            _scales.Clear(); _enterT0.Clear();
+            for (int i = 0; i < _store.Items.Count; i++)
+                _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(0.45 + i * 0.13);
+            Render();
+        }
+
+
+        // 开启动画里每个元素的进度（1 = 完全就位）；delay 越大越晚出场。
+        // 收起时 _introT 是往回走的，同一个公式自然就变成倒放。
+        //
+        // delay 是 0..1 的"相对出场顺序"，不是秒！原来写的是秒（最大 0.72s + 0.55s 过渡），
+        // 总时长从 2.15s 压到 1.07s 后，后面的元素根本走不到位 ——
+        // 动画一结束就从半路"啪"地闪到最终位置（按钮、计数胶囊就是这么闪的）。
+        float IntroP(float delay)
+        {
+            if (_collapsed) return 0f;
+            if (!_intro) return 1f;
+            const float span = 0.46f;                  // 单个元素自己的过渡长度（占总时长比例）
+            float start = delay * (1f - span);
+            float x = (_introT - start) / span;
+            if (x <= 0f) return 0f;
+            if (x >= 1f) return 1f;
+            // 每个元素自己用 easeOut：一进窗口就动起来，落点又是缓的
+            float u2 = 1f - x;
+            return 1f - u2 * u2 * u2;
+        }
+
+
+        // 从屏幕外滑进来的位移（朝角落方向，也就是朝屏幕外）
+        PointF IntroShift(float p)
+        {
+            if (!_intro && !_collapsed) return new PointF(0f, 0f);
+            float off = (1f - p) * 110f;
+            return new PointF((Sx() > 0 ? -off : off), (Sy() > 0 ? -off : off));
+        }
+
+
+        // 收起过程中图片的淡出因子（1 -> 0，在环完全缩回之前就淡完）
+        float CollapseCardP()
+        {
+            if (_collapsed) return 0f;
+            if (!_intro || !_collapsing) return 1f;
+            float v = _introT / 0.55f;
+            return v < 0f ? 0f : (v > 1f ? 1f : v);
+        }
+
+
+
+        public void HideWheel() { SetShow(0f); }
+        public void ToggleWheel()
+        {
+            if (_collapsed) ShowWheelWithIntro();          // 收起态 -> 拉出来（带彩虹动画）
+            else if (_targetShow > 0.5f) DismissWheel();   // 展开中 -> 收起（或隐藏）
+            else ShowWheelWithIntro();
+        }
+
+
+        void SetShow(float target)
+        {
+            if (Math.Abs(_targetShow - target) < 0.001f && _showAnimating == false) { _targetShow = target; return; }
+            _showFrom = _show;
+            _showT0 = DateTime.Now;
+            _targetShow = target;
+            _showAnimating = true;
+        }
+
+
+        // 这一帧算错了不该让整个程序挂掉（Timer 里抛异常会直接弹崩溃框）
+        void AnimTick(object sender, EventArgs e)
+        {
+            try { AnimTickCore(); }
+            catch (Exception ex) { try { Err.Log("wheel.AnimTick", ex); } catch { } }
+        }
+
+
+        void AnimTickCore()
+        {
+            bool need = false;
+            bool hide = _targetShow < _show;
+            if (_showAnimating)
+            {
+                float dur = (hide ? 0.50f : 0.30f) * AnimK();      // 速度设置会一起缩放
+                float t = (float)((DateTime.Now - _showT0).TotalSeconds / dur);
+                if (t >= 1f) { t = 1f; _showAnimating = false; }
+                float ease = t * t * (3f - 2f * t);       // smoothstep
+                _show = _showFrom + (_targetShow - _showFrom) * ease;
+                need = true;
+            }
+            else if (_show != _targetShow) { _show = _targetShow; need = true; }
+
+            float dop = _targetOffset - _offset;
+            bool scrolling = Math.Abs(dop) > 0.02f;
+            if (scrolling) { _offset += dop * 0.20f; need = true; }
+            else if (_offset != _targetOffset) { _offset = _targetOffset; need = true; }
+
+            // while the arc is sliding, freeze hover so cards don't grow/shrink alternately (no tremble)
+            if (scrolling)
+            {
+                if (_hover != -1) { _hover = -1; need = true; }
+            }
+            else if (_show > 0.6f && Visible)
+            {
+                Point cp = ToLogicalPt(PointToClient(Cursor.Position));
+                int hh = HitTest(cp);
+                bool gh = GearButtonRect().Contains(cp);
+                bool ch = CloseButtonRect().Contains(cp);
+                bool sH = ShootButtonRect().Contains(cp);
+                bool kh = KeyRect().Width > 8 && KeyRect().Contains(cp);
+                bool nh = NamePillRect().Contains(cp);
+                if (hh != _hover) { _hover = hh; need = true; }
+                if (gh != _gearHover) { _gearHover = gh; need = true; }
+                if (ch != _closeHover) { _closeHover = ch; need = true; }
+                if (sH != _shootHover) { _shootHover = sH; need = true; }
+                if (kh != _keyHover) { _keyHover = kh; need = true; }
+                if (nh != _nameHover) { _nameHover = nh; need = true; }
+            }
+
+
+            if (_gearHold) { Point cp4 = ToLogicalPt(PointToClient(Cursor.Position)); if (!GearButtonRect().Contains(cp4)) _gearHold = false; }
+            if (_shootHold) { Point cp5 = ToLogicalPt(PointToClient(Cursor.Position)); if (!ShootButtonRect().Contains(cp5)) _shootHold = false; }
+
+            if (_holdIndex >= 0 && _maybeDrag && _enlarged < 0)
+                if ((DateTime.Now - _holdStart).TotalMilliseconds > 300) { _enlarged = _holdIndex; need = true; }
+
+            // per-item scale: hover 1.36x, hold-to-peek 2.4x - ONE animation, so it can never desync
+            for (int i = 0; i < _store.Items.Count; i++)
+            {
+                float tgt;
+                if (_store.Items[i] == _dragOutItem) tgt = 0f;
+                else if (i == _enlarged) tgt = PeekScale;                else if (i == _hover) tgt = HoverScale;
+                else tgt = 1f;
+                float cur;
+                if (!_scales.TryGetValue(i, out cur)) cur = 1f;
+                float rate = (tgt > 1.5f || cur > 1.5f) ? 0.16f : 0.19f;   // peek moves a little slower
+                rate = Math.Max(0.05f, Math.Min(0.5f, rate / AnimK()));
+                if (Math.Abs(cur - tgt) > 0.003f) { _scales[i] = cur + (tgt - cur) * rate; need = true; }
+                else if (cur != tgt) { _scales[i] = tgt; need = true; }
+            }
+            // hold-to-peek fade state kept in sync with the scale animation (single source of truth)
+            if (_enlarged >= 0) _peekIndex = _enlarged;
+            if (_enlarged < 0 && _peekIndex >= 0)
+            {
+                float cur; if (!_scales.TryGetValue(_peekIndex, out cur)) cur = 1f;
+                if (cur <= 1.02f) _peekIndex = -1;
+            }
+            if (_enlarged >= 0 || _peekIndex >= 0) need = true;
+
+            // 删除动画：必须独立判断（原来写成 else if，挂在"放大预览"后面 ——
+            // 放大预览一开着动画就不推进，于是"有动画但没删掉"）
+            if (_deletingItem != null)
+            {
+                _deleteProg += 0.055f;                     // ~0.28s collapse
+                need = true;
+                if (_deleteProg >= 1f)
+                {
+                    StoreItem victim = _deletingItem;
+                    _deletingItem = null;
+                    _deleteProg = 0f;
+                    RemoveItem(victim, true);
+                }
+            }
+
+            // keep animating while a freshly captured image is still sliding in / a delete is running
+            foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
+                if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
+            if (_deletingItem != null) need = true;
+
+            // 提示条（"已加入 N 张图片"）淡入淡出
+            if (_toast.Length > 0)
+            {
+                if ((DateTime.Now - _toastAt).TotalSeconds > 2.6f) _toast = "";
+                else need = true;
+            }
+
+            // 开启动画进度（收起时 _introT 往回走，同一个公式就是倒放）
+            if (_intro)
+            {
+                // 时间按"这次要走多远"算：走得近就快，走完就停 —— 展开/收起共用，随时可反向
+                float span = Math.Abs(_ringTo - _ringFrom);
+                float dur = Math.Max(0.10f, _introDur * span);
+                float t = (float)((DateTime.Now - _introAt).TotalSeconds / dur);
+                if (t >= 1f) { t = 1f; _intro = false; }
+                // 主进度走"线性"：这样展开和收起在时间上是对称的
+                // （之前用 easeOutCubic 作用在主进度上，展开时动作集中在开头、
+                //   收起时集中在结尾，于是"展开比收起快太多"）
+                _introT = _ringFrom + (_ringTo - _ringFrom) * t;
+                if (!_intro)
+                {
+                    _introT = _ringTo;
+                    if (_collapsing) { _collapsed = true; _collapsing = false; _collapsedAt = DateTime.Now; }   // 收完了：进入收起态
+                }
+                need = true;
+            }
+
+            // 把手出现动画（启动时）
+            if (_nubAppearT < 1f)
+            {
+                _nubAppearT += (float)((DateTime.Now - _nubAppearAt).TotalSeconds / 0.55f);
+                if (_nubAppearT >= 1f) _nubAppearT = 1f;
+                _nubAppearAt = DateTime.Now;
+                need = true;
+            }
+
+            // 关闭键长按：画一条红色进度环，按住 0.65s 变满 -> 变红，松手退出。
+            // 同时兜住"鼠标已经松开但 MouseUp 没收到"的情况（按住时轻微移动不该取消）。
+            if (_closeHold)
+            {
+                // 后悔机制：长按期间把鼠标挪开就作废（稍微留点余量，手抖不算离开）
+                if (!CursorOverCloseButton()) CancelCloseHold();
+            }
+            if (_closeHold)
+            {
+                float p = (float)Math.Min(1.0, (DateTime.Now - _closeDownAt).TotalMilliseconds / 650.0);
+                if (Math.Abs(p - _closeHoldP) > 0.004f) { _closeHoldP = p; need = true; }
+                if (p >= 1f && !_closeLong) { _closeLong = true; need = true; }
+                need = true;                     // 进度环一直动
+            }
+            else if (_closeHoldP > 0.004f)
+            {
+                // 作废/松手之后，红色是"渐变退回去"的，不是瞬间复位
+                _closeHoldP += (0f - _closeHoldP) * 0.20f;
+                if (_closeHoldP < 0.004f) _closeHoldP = 0f;
+                need = true;
+            }
+
+            // 圆钮按下反馈 + 延迟执行
+            {
+                float cd = (_closePend || _closeHold) ? 1f : 0f;
+                float gd = (_gearPend || _gearHold) ? 1f : 0f;
+                float sd = (_shootPend || _shootHold) ? 1f : 0f;
+                if (Math.Abs(_closeDown - cd) > 0.01f) { _closeDown += (cd - _closeDown) * 0.35f; need = true; }
+                if (Math.Abs(_gearDown - gd) > 0.01f) { _gearDown += (gd - _gearDown) * 0.35f; need = true; }
+                if (Math.Abs(_shootDown - sd) > 0.01f) { _shootDown += (sd - _shootDown) * 0.35f; need = true; }
+                if (_pendingBtn.Length > 0 && (DateTime.Now - _pendingAt).TotalMilliseconds > 110)
+                {
+                    string b = _pendingBtn; _pendingBtn = "";
+                    _closePend = _gearPend = _shootPend = false;
+                    if (b == "close") DismissWheel();
+                    else if (b == "gear") { if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); }
+                    else if (b == "shoot") { if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty); }
+                    need = true;
+                }
+                if (_closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f) need = true;
+            }
+
+            // 把手悬停反馈
+            {
+                bool wantOut = false, wantIn = false;
+                if (Visible && _show > 0.6f)
+                {
+                    Point hp = ToLogicalPt(PointToClient(Cursor.Position));
+                    if (_collapsed) wantOut = NubOutRect().Contains(hp);
+                    else if (NubSingleMode()) wantOut = NubOutRect().Contains(hp);
+                    else if (!_intro) wantIn = NubInRect().Contains(hp);
+                }
+                if (wantOut != _nubOutHover) { _nubOutHover = wantOut; need = true; }
+                if (wantIn != _nubInHover) { _nubInHover = wantIn; need = true; }
+                float wantH = (wantOut || wantIn) ? 1f : 0f;
+                if (Math.Abs(_nubHov - wantH) > 0.006f) { _nubHov += (wantH - _nubHov) * 0.24f; need = true; }
+                else if (_nubHov != wantH) { _nubHov = wantH; need = true; }
+                if (_nubHov > 0.01f) need = true;
+
+                // 把手用途提示（"点我展开/收起"）：悬停时亮；首次运行的头 14 秒也自动亮一次
+                bool wantHint = wantOut || wantIn || DateTime.Now < _firstRunHintUntil;
+                float wantHT = wantHint ? 1f : 0f;
+                if (Math.Abs(_nubHintT - wantHT) > 0.006f) { _nubHintT += (wantHT - _nubHintT) * 0.18f; need = true; }
+                else if (_nubHintT != wantHT) { _nubHintT = wantHT; need = true; }
+                if (_nubHintT > 0.01f) need = true;
+            }
+
+            // 后台抓好的玻璃底：在 UI 线程这里换上。
+            // 但动画期间不换（尤其是展开/收起那趟）—— 换底会强制整窗重绘，正好卡在动画中间，看着就"顿"。
+            // 悬停/交互期间也不换：换底会强制整窗重绘，正好把交互那一下顶慢（"慢半拍"）
+            if (!_intro && _hover < 0 && !_closeHover && !_gearHover && !_shootHover && !_keyHover)
+                ApplyPendingBackdrop();
+
+            // 背景交叉淡入（换背景时玻璃颜色渐变，不跳）
+            if (_backdropOld != null && _backdropFade < 1f)
+            {
+                _backdropFade += (float)((DateTime.Now - _backdropFadeAt).TotalSeconds / 0.38f);
+                if (_backdropFade >= 1f) { _backdropFade = 1f; try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
+                _backdropFadeAt = DateTime.Now;
+                need = true;
+            }
+
+            // 玻璃底定时重抓：轮盘一直挂着也不会"糊的是半小时前的桌面"
+            // （窗口已设置 WDA_EXCLUDEFROMCAPTURE，抓屏不会把轮盘自己拍进去，所以显示中也能抓）
+            if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro)
+            {
+                if ((DateTime.Now - _backdropAt).TotalSeconds > 3.5)
+                {
+                    _backdropAt = DateTime.Now;
+                    if (_hover < 0 && !_menuOpen && _enlarged < 0 && !_dropActive && _dragOutItem == null && _deletingItem == null)
+                    {
+                        bool hoverAny = _gearHover || _closeHover || _shootHover || _keyHover || _nameHover;
+                        // 把手悬停/按钮按下时绝不重抓：抓屏+模糊要几十毫秒，会让人觉得"点了没反应"
+                        bool busy = _nubHov > 0.01f || _nubOutHover || _nubInHover
+                                    || _closePend || _gearPend || _shootPend
+                                    || _closeDown > 0.01f || _gearDown > 0.01f || _shootDown > 0.01f;
+                        if (!hoverAny && !_keyDown && !busy)
+                        {
+                            // 抓屏+模糊（几十毫秒）放到后台线程做，UI 线程下一帧换上去，绝不卡动画
+                            RequestBackdropAsync();
+                        }
+                    }
+                }
+            }
+
+            // 万能键按下/松开 + 悬停 的弹性反馈
+            {
+                float kt = _keyDown ? 1f : 0f;
+                float cur = _keyT;
+                if (Math.Abs(cur - kt) > 0.004f) { _keyT = cur + (kt - cur) * (kt > cur ? 0.35f : 0.22f); need = true; }
+                else if (cur != kt) { _keyT = kt; need = true; }
+
+                float kh = _keyHover ? 1f : 0f;
+                float curH = _keyHov;
+                if (Math.Abs(curH - kh) > 0.006f) { _keyHov = curH + (kh - curH) * 0.24f; need = true; }
+                else if (curH != kh) { _keyHov = kh; need = true; }
+                if (_keyHov > 0.01f) need = true;         // 悬停时保持刷新，光晕是渐变的
+            }
+
+            // 万能键：长按展开圆盘 / 滑动切换
+            if (_keyDown)
+            {
+                bool radial = (_settings.SwitchMode != "swipe");
+                if (radial && !_menuOpen && !_delConfirm && (DateTime.Now - _keyDownAt).TotalMilliseconds > KeyMenuDelayMs)
+                {
+                    _menuOpen = true; _sector = -1; need = true;
+                }
+                if (_menuOpen && _menuT < 1f) { _menuT += (1f - _menuT) * 0.28f; need = true; }
+            }
+            else if (_menuT > 0.001f)
+            {
+                _menuT += (0f - _menuT) * 0.22f;
+                if (_menuT < 0.01f) { _menuT = 0f; _menuOpen = false; _sector = -1; }
+                need = true;
+            }
+
+            // 主题色过渡 + 切换闪光
+            Color want = AccentColor();
+            if (_accentCur.ToArgb() != want.ToArgb())
+            {
+                _accentCur = Color.FromArgb(
+                    (int)Math.Round(_accentCur.R + (want.R - _accentCur.R) * 0.22f),
+                    (int)Math.Round(_accentCur.G + (want.G - _accentCur.G) * 0.22f),
+                    (int)Math.Round(_accentCur.B + (want.B - _accentCur.B) * 0.22f));
+                need = true;
+            }
+            if (_switchFlash > 0f) { _switchFlash += (0f - _switchFlash) * 0.16f; if (_switchFlash < 0.01f) _switchFlash = 0f; need = true; }
+
+            // 删除确认态：高亮鼠标所在的半 + 超时自动取消（避免一直挂着）
+            if (_delConfirm)
+            {
+                int want2 = -1;
+                if (Visible)
+                {
+                    Rectangle kr2 = KeyRect();
+                    Point cp2 = ToLogicalPt(PointToClient(Cursor.Position));
+                    if (kr2.Contains(cp2)) want2 = (cp2.X < kr2.X + kr2.Width / 2f) ? 0 : 1;
+                }
+                if (want2 != _delHalf) { _delHalf = want2; need = true; }
+                if ((DateTime.Now - _delConfirmAt).TotalSeconds > 10) { _delConfirm = false; _delHalf = -1; need = true; }
+            }
+            else if (_delHalf != -1) { _delHalf = -1; need = true; }
+
+            if (_settings.AutoHide && !_collapsed && _targetShow > 0.5f && _show > 0.99f && !_intro)
+                if ((DateTime.Now - _lastActive).TotalSeconds > _settings.AutoHideSeconds) DismissWheel();
+
+            if (_show <= 0.002f && _targetShow <= 0.002f)
+            {
+                if (Visible) { Hide(); CaptureBackdrop(); }   // 隐藏后再抓一次，下次显示时玻璃底是新的
+                return;
+            }
+            if (need || !_rendered) Render();   // render ONLY when something changed (smooth + cheap)
+        }
+
+
+        // only a NEWLY captured image slides in; everything else is already in place
+        public void MarkNew(StoreItem it)
+        {
+            if (it != null) _enterT0[it] = DateTime.Now;
+        }
+
+
+        float EnterProgress(int i)
+        {
+            if (i < 0 || i >= _store.Items.Count) return 1f;
+            DateTime t0;
+            if (!_enterT0.TryGetValue(_store.Items[i], out t0)) return 1f;
+            float d = (float)(DateTime.Now - t0).TotalSeconds;
+            if (d <= 0f) return 0f;
+            float t = d / (0.42f * AnimK());
+            if (t >= 1f) return 1f;
+            return t * t * (3f - 2f * t);      // smoothstep -> eased, silky
+        }
+    }
+}
+
+namespace SnapWheel
+{
+    partial class WheelForm
+    {
+
+        int GlassA(int baseA)
+        {
+            float g = StyleSolid() ? 1f : (_settings.GlassPercent / 100f);
+            int a = (int)(baseA * g);
+            return a < 0 ? 0 : (a > 255 ? 255 : a);
+        }
+
+
+        // ---------- 轮盘上的真·毛玻璃 ----------
+        // 分层窗口不能上系统 acrylic（会给整个窗口矩形蒙灰），所以自己来：
+        // 显示之前把轮盘背后那块屏幕抓下来 → 缩到 1/6 做盒式模糊 → 放大回去，
+        // 画面板时把这块模糊底裁进形状里，再叠玻璃色 —— 透过去的确实是真桌面。
+        DateTime _backdropAt = DateTime.MinValue;
+
+        Bitmap _backdropBlur;
+
+        bool _backdropValid;
+
+        Bitmap _backdropOld;                 // 上一张模糊背景（换背景时交叉淡入，避免玻璃颜色突然一跳）
+
+        float _backdropFade = 1f;            // 1 = 新背景完全不透明
+
+        DateTime _backdropFadeAt = DateTime.MinValue;
+
+
+        void FreeBackdrop()
+        {
+            if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } _backdropBlur = null; }
+            if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; }
+            _backdropFade = 1f;
+            _backdropValid = false;
+        }
+
+
+        // ---------- 毛玻璃后台抓取 ----------
+        // 抓屏 + 高斯模糊要几十毫秒，原来是在 UI 线程里做的，动画期间会卡一下。
+        // 现在：后台线程负责抓+糊，UI 线程只在下一帧把结果换上（沿用已有的交叉淡入，视觉不变）。
+        volatile bool _glassBusy = false;
+
+        Bitmap _glassPending = null;
+
+        Point _glassPendingOffset = Point.Empty;
+
+
+        void RequestBackdropAsync()
+        {
+            if (StyleFlatOnly()) { FreeBackdrop(); return; }
+            if (_glassBusy) return;
+            if (Width < 20 || Height < 20) return;
+            Rectangle vs = SystemInformation.VirtualScreen;
+            Rectangle want = new Rectangle(Left, Top, Width, Height);
+            Rectangle got = Rectangle.Intersect(want, vs);
+            if (got.Width < 8 || got.Height < 8) return;
+            _glassBusy = true;
+            Point off = new Point(got.Left - want.Left, got.Top - want.Top);
+            System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
+            {
+                Bitmap fresh = null;
+                try
+                {
+                    using (Bitmap full = new Bitmap(got.Width, got.Height, PixelFormat.Format32bppArgb))
+                    {
+                        using (Graphics g = Graphics.FromImage(full))
+                            g.CopyFromScreen(got.Left, got.Top, 0, 0, new Size(got.Width, got.Height), CopyPixelOperation.SourceCopy);
+                        fresh = BlurBitmap(full, 6);
+                    }
+                }
+                catch { fresh = null; }
+                lock (_glassLock)
+                {
+                    if (_glassPending != null) { try { _glassPending.Dispose(); } catch { } }
+                    _glassPending = fresh;
+                    _glassPendingOffset = off;
+                }
+                _glassBusy = false;
+            }));
+            th.IsBackground = true;
+            try { th.Priority = System.Threading.ThreadPriority.BelowNormal; } catch { }   // 别和 UI 抢 CPU
+            th.Start();
+        }
+
+
+        // 由 AnimTick 在 UI 线程调用：把后台糊好的底换上去
+        void ApplyPendingBackdrop()
+        {
+            Bitmap fresh = null;
+            Point off = Point.Empty;
+            lock (_glassLock)
+            {
+                if (_glassPending == null) return;
+                fresh = _glassPending; off = _glassPendingOffset; _glassPending = null;
+            }
+            if (StyleFlatOnly()) { try { fresh.Dispose(); } catch { } return; }
+            if (_backdropBlur != null && Visible)
+            {
+                if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
+                _backdropOld = _backdropBlur;
+                _backdropFade = 0f;
+                _backdropFadeAt = DateTime.Now;
+            }
+            else
+            {
+                if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } }
+                if (!Visible && _backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; _backdropFade = 1f; }
+            }
+            _backdropBlur = fresh;
+            _backdropOffset = off;
+            _backdropValid = true;
+            _backdropAt = DateTime.Now;
+            _rendered = false;
+        }
+
+
+        public void CaptureBackdrop()
+        {
+            if (StyleFlatOnly()) { FreeBackdrop(); return; }
+            try
+            {
+                if (Width < 20 || Height < 20) return;
+                Rectangle vs = SystemInformation.VirtualScreen;
+                Rectangle want = new Rectangle(Left, Top, Width, Height);
+                Rectangle got = Rectangle.Intersect(want, vs);
+                if (got.Width < 8 || got.Height < 8) return;
+                Bitmap fresh = null;
+                using (Bitmap full = new Bitmap(got.Width, got.Height, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(full))
+                        g.CopyFromScreen(got.Left, got.Top, 0, 0, new Size(got.Width, got.Height), CopyPixelOperation.SourceCopy);
+                    fresh = BlurBitmap(full, 6);
+                }
+                // 换背景不要"啪"地一跳：把旧图留着做交叉淡入（只有显示中才有必要看着它过渡）
+                if (_backdropBlur != null && Visible)
+                {
+                    if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
+                    _backdropOld = _backdropBlur;
+                    _backdropFade = 0f;
+                    _backdropFadeAt = DateTime.Now;
+                }
+                else
+                {
+                    if (_backdropBlur != null) { try { _backdropBlur.Dispose(); } catch { } }
+                    if (!Visible && _backdropOld != null) { try { _backdropOld.Dispose(); } catch { } _backdropOld = null; _backdropFade = 1f; }
+                }
+                _backdropBlur = fresh;
+                _backdropOffset = new Point(got.Left - want.Left, got.Top - want.Top);
+                _backdropValid = true;
+                _backdropAt = DateTime.Now;
+            }
+            catch { FreeBackdrop(); }
+        }
+
+
+        // 缩小 -> 盒式模糊 -> 放大，得到"毛玻璃"那种糊
+        static Bitmap BlurBitmap(Bitmap src, int down)
+        {
+            int w = Math.Max(2, src.Width / down), h = Math.Max(2, src.Height / down);
+            using (Bitmap small = new Bitmap(w, h, PixelFormat.Format32bppArgb))
+            {
+                using (Graphics g = Graphics.FromImage(small))
+                {
+                    g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                    g.DrawImage(src, new Rectangle(0, 0, w, h));
+                }
+                BoxBlur(small, 3);
+                BoxBlur(small, 3);
+                BoxBlur(small, 2);
+                Bitmap big = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(big))
+                {
+                    g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                    g.DrawImage(small, new Rectangle(0, 0, big.Width, big.Height));
+                }
+                return big;
+            }
+        }
+
+
+        static void BoxBlur(Bitmap bmp, int r)
+        {
+            try
+            {
+                Rectangle rc = new Rectangle(0, 0, bmp.Width, bmp.Height);
+                BitmapData d = bmp.LockBits(rc, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+                try
+                {
+                    int W = d.Width, H = d.Height, n = W * H;
+                    int[] px = new int[n];
+                    int[] tmp = new int[n];
+                    Marshal.Copy(d.Scan0, px, 0, n);
+                    for (int y = 0; y < H; y++)
+                    {
+                        int row = y * W;
+                        for (int x = 0; x < W; x++)
+                        {
+                            int a = 0, rr = 0, gg = 0, bb = 0, c = 0;
+                            for (int k = -r; k <= r; k++)
+                            {
+                                int xx = x + k; if (xx < 0) xx = 0; if (xx >= W) xx = W - 1;
+                                int v = px[row + xx];
+                                a += (v >> 24) & 0xFF; rr += (v >> 16) & 0xFF; gg += (v >> 8) & 0xFF; bb += v & 0xFF; c++;
+                            }
+                            tmp[row + x] = ((a / c) << 24) | ((rr / c) << 16) | ((gg / c) << 8) | (bb / c);
+                        }
+                    }
+                    for (int x = 0; x < W; x++)
+                        for (int y = 0; y < H; y++)
+                        {
+                            int a = 0, rr = 0, gg = 0, bb = 0, c = 0;
+                            for (int k = -r; k <= r; k++)
+                            {
+                                int yy = y + k; if (yy < 0) yy = 0; if (yy >= H) yy = H - 1;
+                                int v = tmp[yy * W + x];
+                                a += (v >> 24) & 0xFF; rr += (v >> 16) & 0xFF; gg += (v >> 8) & 0xFF; bb += v & 0xFF; c++;
+                            }
+                            px[y * W + x] = ((a / c) << 24) | ((rr / c) << 16) | ((gg / c) << 8) | (bb / c);
+                        }
+                    Marshal.Copy(px, 0, d.Scan0, n);
+                }
+                finally { bmp.UnlockBits(d); }
+            }
+            catch { }
+        }
+
+
+        bool UseBackdrop() { return _backdropValid && _backdropBlur != null && !StyleFlatOnly(); }
+
+        // 把模糊背景裁进这个形状里（画玻璃面板前先调它）
+        // alpha 必须传进来：否则淡出动画时玻璃底不跟着变淡，面板会像"卡住"一样不消失
+        void BackdropClip(Graphics g, GraphicsPath path, int alpha)
+        {
+            if (!UseBackdrop() || alpha <= 2) return;
+            try
+            {
+                GraphicsState st = g.Save();
+                g.SetClip(path, CombineMode.Replace);
+                // 这块模糊底是"物理像素"尺寸，而当前处在 UiK 缩放后的逻辑坐标系里，
+                // 必须除回去，否则高 DPI 下会画得又大又偏 —— 毛玻璃直接就废了
+                float bw = _backdropBlur.Width, bh = _backdropBlur.Height;
+                RectangleF dest = new RectangleF(_backdropOffset.X / UiK, _backdropOffset.Y / UiK,
+                                                 bw / UiK, bh / UiK);
+                int al = alpha > 255 ? 255 : alpha;
+                bool crossFade = _backdropOld != null && _backdropFade < 0.999f;
+                if (crossFade)
+                {
+                    // 旧背景也要按元素 alpha 淡（漏乘的话，轮盘淡出时这层背景会一直是不透明的）
+                    float ow = _backdropOld.Width, oh = _backdropOld.Height;
+                    Rectangle dr0 = new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
+                        Math.Max(1, (int)Math.Round(ow / UiK)), Math.Max(1, (int)Math.Round(oh / UiK)));
+                    ColorMatrix cmo = new ColorMatrix(); cmo.Matrix33 = al / 255f;
+                    _iaBack.SetColorMatrix(cmo);
+                    g.DrawImage(_backdropOld, dr0, 0, 0, ow, oh, GraphicsUnit.Pixel, _iaBack);
+                }
+                float newMul = crossFade ? Math.Max(0.06f, _backdropFade) : 1f;
+                int alNew = (int)(al * newMul);
+                if (alNew >= 250 && !crossFade) g.DrawImage(_backdropBlur, dest);
+                else
+                {
+                    ColorMatrix cm = new ColorMatrix();
+                    cm.Matrix33 = alNew / 255f;
+                    _iaBack.SetColorMatrix(cm);
+                    g.DrawImage(_backdropBlur,
+                        new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
+                                      Math.Max(1, (int)Math.Round(dest.Width)), Math.Max(1, (int)Math.Round(dest.Height))),
+                        0, 0, bw, bh, GraphicsUnit.Pixel, _iaBack);
+                }
+                // 压一层黑：不管背后是亮桌面还是暗桌面，面板都能保持"深色玻璃"、字看得清
+                int dk = (int)(26 * (StyleSolid() ? 1f : _settings.GlassPercent / 100f) * al / 255f);
+                if (dk > 0)
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(dk, 0, 0, 0)))
+                        g.FillPath(sb, path);
+                g.Restore(st);
+            }
+            catch { try { g.ResetClip(); } catch { } }
+        }
+    }
+}
+
+namespace SnapWheel
+{
+    partial class WheelForm
+    {
+
+        // 作废这次长按（红色渐变退回，完全不会触发退出）
+        public void CancelCloseHold()
+        {
+            if (!_closeHold && !_closeLong) return;
+            _closeHold = false;
+            _closeLong = false;
+            try { Capture = false; } catch { }
+        }
+
+
+        // 按下时把矩形按比例缩小（以中心为基准）
+        static Rectangle Shrink(Rectangle r, float k)
+        {
+            if (k <= 0.001f) return r;
+            float s = 1f - 0.10f * k;
+            int w = (int)Math.Round(r.Width * s), h = (int)Math.Round(r.Height * s);
+            return new Rectangle(r.X + (r.Width - w) / 2, r.Y + (r.Height - h) / 2, w, h);
+        }
+
+
+        int HitTest(Point p)
+        {
+            int best = -1; float bestD = float.MaxValue;
+            for (int i = 0; i < _store.Items.Count; i++)
+            {
+                float phi = ItemPhi(i);
+                if (phi < _phiMin - 0.45f || phi > _phiMax + 0.45f) continue;
+                if (EnterProgress(i) < 0.5f) continue;
+                if (_store.Items[i] == _dragOutItem) continue;
+                RectangleF rr = DrawnRect(i);
+                RectangleF hit = new RectangleF(rr.X - 2, rr.Y - 2, rr.Width + 4, rr.Height + 4);
+                if (hit.Contains(p))
+                {
+                    PointF c = ItemCenter(i);
+                    float d = (float)Math.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
+                    if (d < bestD) { bestD = d; best = i; }
+                }
+            }
+            return best;
+        }
+
+
+        PointF KeyCenter()
+        {
+            Rectangle r = KeyRect();
+            return new PointF(r.X + r.Width / 2f, r.Y + r.Height / 2f);
+        }
+
+
+        // 上=新建 右=下一个 左=上一个 下=删除
+        int SectorAt(PointF p)
+        {
+            PointF c = KeyCenter();
+            float dx = p.X - c.X, dy = p.Y - c.Y;
+            float d = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (d < 18f) return -1;
+            if (Math.Abs(dy) > Math.Abs(dx)) return dy < 0 ? 0 : 2;
+            return dx > 0 ? 1 : 3;
+        }
+
+
+        // 真正把一张图从轮盘拿走：内存 + 硬盘文件。
+        // 关键：图片列表是靠"扫描保存目录"恢复的，只删内存不删文件，下次启动它又回来了。
+        // 右键单击/双击删除进入点。上一张还在播删除动画就先把它真正删掉：
+        // 连点/来回点时"正在删的那张"只有一个，后来者会覆盖前者，否则两张都删不掉。
+        // （单独抽成方法是为了能直接测这条行为 —— 这正是之前测试漏掉的四个 bug 之一）
+        void BeginDelete(StoreItem it)
+        {
+            if (_deletingItem != null)
+            {
+                StoreItem prev = _deletingItem;
+                _deletingItem = null; _deleteProg = 0f;
+                RemoveItem(prev, true);
+            }
+            _deletingItem = it;        // 这张交给 AnimTick 播完动画再删
+            _deleteProg = 0f;
+        }
+
+
+        // 万能键圆盘松手时执行对应分区的动作（动作由用户在设置里自定义）
+        void DoKeyAction(int sector)
+        {            string a = _settings.KeyActionAt(sector);
+            try
+            {
+                switch (a)
+                {
+                    case "new": CreateWheel(); break;
+                    case "next": SwitchWheel(1); break;
+                    case "prev": SwitchWheel(-1); break;
+                    case "delete": _delConfirm = true; _delConfirmAt = DateTime.Now; break;  // 原地进入左右两半确认
+                    case "shot": if (CaptureRequested != null) CaptureRequested(this, EventArgs.Empty); break;
+                    case "collapse": DismissWheel(); break;
+                    case "folder":
+                        try { if (!Directory.Exists(_settings.Dir)) Directory.CreateDirectory(_settings.Dir); System.Diagnostics.Process.Start(_settings.Dir); } catch { }
+                        break;
+                    case "settings": if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); break;
+                    case "clear": ClearCurrentWheel(); break;
+                    case "paste":
+                        try { IDataObject dob = Clipboard.GetDataObject(); if (dob != null) ImportBitmap(dob); } catch { }
+                        break;
+                    default: break;   // "none"：什么都不做
+                }
+            }
+            catch (Exception ex) { Err.Log("DoKeyAction", ex); }
+        }
+
+
+        // buttons stack up from the corner (kept well above an auto-hiding taskbar)
+        Rectangle BtnRect(int order)
+        {
+            PointF c = Center();
+            int bx = (int)((Sx() > 0) ? c.X + 10 : c.X - 40);
+            float dist = 150f + order * 40f;
+            float by = c.Y + Sy() * dist;
+            if (Sy() > 0) by -= 30f;
+            return new Rectangle(bx, (int)by, 30, 30);
+        }
+
+
+        PointF HintPos(SizeF sz)
+        {
+            // 计数标签放到环外侧的 45° 对角线上，彻底离开万能键和角上的按钮
+            PointF c = Center();
+            float d = EffR() + 78f;
+            float dx = d * 0.7071f, dy = d * 0.7071f;
+            float bx = (Sx() > 0) ? c.X + dx : c.X - dx;
+            float by = (Sy() > 0) ? c.Y + dy : c.Y - dy;
+            return new PointF(bx - sz.Width / 2f, by - sz.Height / 2f);
+        }
+
+
+        bool OverContent(Point p)
+        {
+            // 贴边把手：收起态只有它可点；展开态它也算内容（不然点它会穿透到桌面）
+            if (NubSingleMode())
+            {
+                if (NubOutRect().Contains(p)) return true;
+            }
+            else if (_collapsed) return NubOutRect().Contains(p);
+            if (!NubSingleMode() && NubInRect().Contains(p)) return true;
+            if (HitTest(p) >= 0) return true;
+            if (CloseButtonRect().Contains(p)) return true;
+            if (GearButtonRect().Contains(p)) return true;
+            if (ShootButtonRect().Contains(p)) return true;
+            if (KeyRect().Contains(p)) return true;
+            // 名字药丸也要算"内容"，否则点它会直接穿透到桌面（改名点不动的根因）
+            RectangleF np = NamePillRect();
+            if (!np.IsEmpty)
+            {
+                RectangleF hit = np;
+                if (_nameHover) hit = new RectangleF(np.X, np.Y, np.Width + 96f, np.Height);   // 连右边的提示一起点
+                if (hit.Contains(p)) return true;
+            }
+            if (_menuOpen) return true;
+            PointF c = Center();
+            float d = (float)Math.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
+            return Math.Abs(d - _R) < _thumb * 0.75f;
+        }
+
+
         void OnGiveFeedback(object sender, GiveFeedbackEventArgs e)
         {
             e.UseDefaultCursors = false;
@@ -4604,20 +4896,13 @@ namespace SnapWheel
             if (_proxy.Visible) _proxy.MoveTo(OffsetPt());
         }
 
+
         Point OffsetPt()
         {
             Point p = Cursor.Position;
             return new Point(p.X + 18, p.Y + 18);
         }
 
-        bool _dropActive = false;
-        bool _returnedToWheel = false;
-        bool _dropExternal = false;      // 拖进来的是“外面的文件”（不是轮盘自己的图）
-        int _dropCount = 0;
-        object _dropCacheKey = null;
-        List<string> _dropCacheFiles = null;
-        DateTime _dropCacheAt = DateTime.MinValue;
-        const string DragFmt = "SnapWheelMove";     // 标记：这是轮盘自己在拖的图
 
         // 一次拖拽里 DragOver 会疯狂触发，扫文件夹太浪费：同一次拖拽只算一次，
         // 就算 DataObject 每次都换了新壳，也至少 400ms 才重算一次
@@ -4640,6 +4925,7 @@ namespace SnapWheel
             return r;
         }
 
+
         void ClearDropCache() { _dropCacheKey = null; _dropCacheFiles = null; _dropCacheAt = DateTime.MinValue; }
 
         // 拖进来的到底是啥：文件（含文件夹）还是直接一张位图（网页/其它程序里拖出来的图）
@@ -4649,6 +4935,7 @@ namespace SnapWheel
             try { return data.GetDataPresent(DataFormats.Bitmap) || data.GetDataPresent(DataFormats.Dib); }
             catch { return false; }
         }
+
 
         // 外部图片：整个窗口范围内都接收（不再要求必须正好压在图/环上 —— 太严格会让人以为坏了）
         void OnDragOverWheel(object sender, DragEventArgs e)
@@ -4676,6 +4963,7 @@ namespace SnapWheel
             }
         }
 
+
         void OnDragDropWheel(object sender, DragEventArgs e)
         {
             _dropActive = false; _dropExternal = false;
@@ -4701,6 +4989,7 @@ namespace SnapWheel
             ClearDropCache();
             Render();
         }
+
 
         // 直接拖过来的一张位图（不是文件）：网页、看图软件、聊天窗口里拖出来的图都走这里
         public void ImportBitmap(IDataObject data)
@@ -4739,6 +5028,7 @@ namespace SnapWheel
             ShowToast("已加入 1 张图片");
             Render();
         }
+
 
         // 剪贴板里出现图片就自动收进轮盘（可关）；和自己写的剪贴板做区分，并做去重
         void OnClipboardChanged()
@@ -4779,6 +5069,7 @@ namespace SnapWheel
             catch { }
         }
 
+
         // 便宜的指纹：尺寸 + 采样若干点，用来判断"是不是同一张图"
         static string Fingerprint(Image im)
         {
@@ -4796,6 +5087,7 @@ namespace SnapWheel
             }
             catch { return ""; }
         }
+
 
         // 把外部图片收进当前 wheel（失败的单张跳过，不打断其它）
         public void ImportFiles(List<string> files)
@@ -4817,43 +5109,6 @@ namespace SnapWheel
             Render();
         }
 
-        // 左下角的小提示条
-        string _toast = "";
-        DateTime _toastAt = DateTime.MinValue;
-        public void ShowToast(string s)
-        {
-            _toast = s == null ? "" : s;
-            _toastAt = DateTime.Now;
-        }
-
-        void DrawToast(Graphics g, int a)
-        {
-            if (_toast.Length == 0) return;
-            float age = (float)(DateTime.Now - _toastAt).TotalSeconds;
-            if (age > 2.6f) return;
-            float t = 1f;
-            if (age < 0.18f) t = age / 0.18f;
-            else if (age > 2.1f) t = Math.Max(0f, (2.6f - age) / 0.5f);
-            int ta = (int)(235 * t * a / 255f);
-            if (ta <= 2) return;
-            using (Font f = new Font("Microsoft YaHei UI", 10f))
-            {
-                SizeF sz = g.MeasureString(_toast, f);
-                float w = sz.Width + 34f, h = sz.Height + 16f;
-                SizeF ls2 = LogicalSize();
-                float x = 26f + (1f - t) * 14f, y = ls2.Height - h - 26f;
-                using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
-                {
-                    BackdropClip(g, pp, ta);
-                    Gfx.GlassPanel(g, pp, new RectangleF(x, y, w, h), Gfx.A(GlassBase(), GlassA((int)(ta * 0.86f))),
-                        (int)(ta * 0.16f), (int)(ta * 0.14f), !StyleFlatOnly());
-                    using (Pen p = new Pen(Gfx.A(Gfx.Shade(_accentCur, 0.15f), (int)(ta * 0.42f)), 1.2f))
-                        g.DrawPath(p, pp);
-                }
-                using (SolidBrush tb = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
-                    g.DrawString(_toast, f, tb, x + 17f, y + 8f);
-            }
-        }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
@@ -4903,6 +5158,7 @@ namespace SnapWheel
                 }
             }
         }
+
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
@@ -4997,6 +5253,7 @@ namespace SnapWheel
             }
         }
 
+
         protected override void OnMouseUp(MouseEventArgs e)
         {
             e = LogicalArgs(e);
@@ -5027,6 +5284,7 @@ namespace SnapWheel
             if (_enlarged >= 0) { _enlarged = -1; Render(); }
         }
 
+
         protected override void OnMouseDoubleClick(MouseEventArgs e)
         {
             e = LogicalArgs(e);
@@ -5037,6 +5295,7 @@ namespace SnapWheel
                 try { Clipboard.SetImage(_store.Items[hh].Image); } catch { }
             }
         }
+
 
         // 管理员模式下拖出去：Windows 的 UIPI 会拦掉跨权限拖拽，DoDragDrop 只会返回 None，
         // 用户看到的就是"拖了半天，图又弹回来了"。以前只有一条开机气泡（很多人把气泡关了，
@@ -5057,6 +5316,7 @@ namespace SnapWheel
                 try { BeginInvoke(new MethodInvoker(delegate { try { AdminHelpRequested(this, EventArgs.Empty); } catch { } })); }
                 catch { }
         }
+
 
         void StartDragOut(int index)
         {
@@ -5116,6 +5376,7 @@ namespace SnapWheel
             Render();
         }
 
+
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             _lastActive = DateTime.Now;
@@ -5123,40 +5384,11 @@ namespace SnapWheel
             if (_targetOffset < 0) _targetOffset = 0;
             if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
         }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                try { ReleaseDib(); } catch { }
-                try { if (IsHandleCreated) Native.RemoveClipboardFormatListener(Handle); } catch { }
-            }
-            base.Dispose(disposing);
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == ShowMsg) { ShowWheelWithIntro(); return; }   // second launch asks us to show
-            if (m.Msg == 0x031D) { OnClipboardChanged(); return; }      // WM_CLIPBOARDUPDATE：剪贴板有新图
-            if (m.Msg == 0x02E0 && _settings.UiScale <= 0)              // WM_DPICHANGED：系统缩放变了，重排一次
-            { try { ApplyLayout(); } catch { } }
-            if (m.Msg == 0x0084)
-            {
-                Point cpRaw = PointToClient(Cursor.Position);
-                // 空地方点穿（不误点）；但左键按着的时候不做穿透 ——
-                // 那多半正在拖拽，穿透会让系统找不到拖放目标，图就掉不进来了
-                bool dragging = (Control.MouseButtons & MouseButtons.Left) != 0;
-                bool inWin = cpRaw.X >= 0 && cpRaw.Y >= 0 && cpRaw.X < Width && cpRaw.Y < Height;
-                if (!dragging && inWin && !OverContent(ToLogicalPt(cpRaw)))
-                { m.Result = (IntPtr)(-1); return; }
-            }
-            base.WndProc(ref m);
-        }
-
-        public static readonly uint ShowMsg = Native.RegisterWindowMessage("SnapWheel_SHOW");
     }
+}
 
-    // 管理 Wheels：重命名 / 换色 / 新建 / 删除
+namespace SnapWheel
+{
     class WheelsForm : Form
     {
         WheelManager _mgr;
@@ -5319,6 +5551,87 @@ namespace SnapWheel
         }
     }
 
+    class RenameForm : Form
+    {
+        public const int MaxName = 12;      // 名字最长 12 个字（药丸宽度可控）
+        public string Value = "";
+        TextBox _box;
+
+        public RenameForm(string cur)
+        {
+            Text = "给这个 Wheel 起个名";
+            Icon = Brand.Get();
+            AutoScaleMode = AutoScaleMode.None;
+            Font = new Font("Microsoft YaHei UI", 9.5f);
+            BackColor = Color.FromArgb(250, 250, 252);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false; MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(360, 128);
+
+            Label l = new Label();
+            l.Text = "名字（最多 " + MaxName + " 个字，会显示在轮盘上）";
+            l.ForeColor = Color.FromArgb(110, 114, 124);
+            l.AutoSize = true;
+            l.Location = new Point(22, 18);
+            Controls.Add(l);
+
+            _box = new TextBox();
+            _box.Text = cur;
+            _box.Font = new Font("Microsoft YaHei UI", 11f);
+            _box.BorderStyle = BorderStyle.FixedSingle;
+            _box.Location = new Point(24, 44);
+            _box.Width = 250;
+            _box.MaxLength = MaxName;      // 直接限制输入长度，避免打到超长
+            Controls.Add(_box);
+
+            RoundButton ok = new RoundButton();
+            ok.Text = "改好了";
+            ok.Size = new Size(104, 34);
+            ok.Fill = Color.FromArgb(0, 122, 204);
+            ok.FillHover = Color.FromArgb(0, 140, 232);
+            ok.TextColor = Color.White;
+            ok.Primary = true;
+            ok.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            ok.Location = new Point(ClientSize.Width - 24 - 104, ClientSize.Height - 46);
+            ok.Click += new EventHandler(delegate(object o, EventArgs e2)
+            {
+                Value = _box.Text.Trim();
+                if (Value == null || Value.Length == 0) Value = cur;
+                if (Value.Length > MaxName) Value = Value.Substring(0, MaxName);   // 名字太长会把药丸撑宽、挡住旁边
+                DialogResult = DialogResult.OK;
+                Close();
+            });
+            Controls.Add(ok);
+
+            RoundButton cancel = new RoundButton();
+            cancel.Text = "取消";
+            cancel.Size = new Size(90, 34);
+            cancel.Fill = Color.FromArgb(234, 235, 240);
+            cancel.FillHover = Color.FromArgb(222, 224, 230);
+            cancel.TextColor = Color.FromArgb(58, 60, 66);
+            cancel.Font = new Font("Microsoft YaHei UI", 10f);
+            cancel.Location = new Point(ok.Left - 10 - 90, ok.Top);
+            cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
+            Controls.Add(cancel);
+
+            AcceptButton = ok;
+            CancelButton = cancel;
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            Gfx.RepaintAll(this);
+            _box.Focus();
+            _box.SelectAll();
+        }
+    }
+}
+
+namespace SnapWheel
+{
     class SettingsForm : Form
     {
         TableLayoutPanel _root;
@@ -5944,87 +6257,10 @@ namespace SnapWheel
             return f;
         }
     }
+}
 
-    // 点 Wheel 名药丸弹出来的小改名框
-    class RenameForm : Form
-    {
-        public const int MaxName = 12;      // 名字最长 12 个字（药丸宽度可控）
-        public string Value = "";
-        TextBox _box;
-
-        public RenameForm(string cur)
-        {
-            Text = "给这个 Wheel 起个名";
-            Icon = Brand.Get();
-            AutoScaleMode = AutoScaleMode.None;
-            Font = new Font("Microsoft YaHei UI", 9.5f);
-            BackColor = Color.FromArgb(250, 250, 252);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false; MinimizeBox = false;
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(360, 128);
-
-            Label l = new Label();
-            l.Text = "名字（最多 " + MaxName + " 个字，会显示在轮盘上）";
-            l.ForeColor = Color.FromArgb(110, 114, 124);
-            l.AutoSize = true;
-            l.Location = new Point(22, 18);
-            Controls.Add(l);
-
-            _box = new TextBox();
-            _box.Text = cur;
-            _box.Font = new Font("Microsoft YaHei UI", 11f);
-            _box.BorderStyle = BorderStyle.FixedSingle;
-            _box.Location = new Point(24, 44);
-            _box.Width = 250;
-            _box.MaxLength = MaxName;      // 直接限制输入长度，避免打到超长
-            Controls.Add(_box);
-
-            RoundButton ok = new RoundButton();
-            ok.Text = "改好了";
-            ok.Size = new Size(104, 34);
-            ok.Fill = Color.FromArgb(0, 122, 204);
-            ok.FillHover = Color.FromArgb(0, 140, 232);
-            ok.TextColor = Color.White;
-            ok.Primary = true;
-            ok.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            ok.Location = new Point(ClientSize.Width - 24 - 104, ClientSize.Height - 46);
-            ok.Click += new EventHandler(delegate(object o, EventArgs e2)
-            {
-                Value = _box.Text.Trim();
-                if (Value == null || Value.Length == 0) Value = cur;
-                if (Value.Length > MaxName) Value = Value.Substring(0, MaxName);   // 名字太长会把药丸撑宽、挡住旁边
-                DialogResult = DialogResult.OK;
-                Close();
-            });
-            Controls.Add(ok);
-
-            RoundButton cancel = new RoundButton();
-            cancel.Text = "取消";
-            cancel.Size = new Size(90, 34);
-            cancel.Fill = Color.FromArgb(234, 235, 240);
-            cancel.FillHover = Color.FromArgb(222, 224, 230);
-            cancel.TextColor = Color.FromArgb(58, 60, 66);
-            cancel.Font = new Font("Microsoft YaHei UI", 10f);
-            cancel.Location = new Point(ok.Left - 10 - 90, ok.Top);
-            cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
-            Controls.Add(cancel);
-
-            AcceptButton = ok;
-            CancelButton = cancel;
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
-            Gfx.RepaintAll(this);
-            _box.Focus();
-            _box.SelectAll();
-        }
-    }
-
-    // 新手引导：第一次打开时自动出现一次，之后可以从托盘/设置里再叫出来
+namespace SnapWheel
+{
     class GuideForm : Form
     {
         protected override void OnHandleCreated(EventArgs e)
@@ -6128,8 +6364,6 @@ namespace SnapWheel
         }
     }
 
-    // 管理员模式说明框：为什么拖不动 / 怎么换普通权限 / 不换权限现在还能怎么用。
-    // 两个入口：托盘菜单，以及轮盘"拖了半天没反应"的那一刻（见 WheelForm.NotifyAdminDragBlocked）。
     class AdminForm : Form
     {
         protected override void OnHandleCreated(EventArgs e)
@@ -6265,7 +6499,10 @@ namespace SnapWheel
 
         protected override void SetVisibleCore(bool value) { base.SetVisibleCore(false); }
     }
+}
 
+namespace SnapWheel
+{
     class AppCtx : ApplicationContext
     {
         Settings _settings;

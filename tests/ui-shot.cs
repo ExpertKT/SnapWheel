@@ -1,6 +1,6 @@
 // UI 截图工具：把设置窗口和轮盘"画"到 PNG 里，方便离线看设计效果（不会弹窗、不碰鼠标）
 // 编译：
-//   csc /nologo /target:exe /main:SnapWheel.UiShot /out:uishot.exe SnapWheel.cs tests\ui-shot.cs
+//   csc /nologo /target:exe /main:SnapWheel.UiShot /out:uishot.exe src\*.cs tests\ui-shot.cs
 // 用法：uishot.exe [输出目录]      默认输出到 %TEMP%\snapwheel_ui\
 using System;
 using System.Collections.Generic;
