@@ -99,22 +99,32 @@ namespace SnapWheel
                 _wheel.StartCollapsed();     // 就算开机不显示轮盘，也留个贴边把手，否则没法鼠标叫出来
             }
 
-            // 管理员模式下，开机就在轮盘上说一句。气泡（上面那条）很多人是关掉的
-            // （本机设置里 ShowBalloon=0），关了就等于永远不知道自己为什么拖不动。
-            if (Elev.Is)
+            // 新功能首次提示：中键贴图这条只在轮盘上冒一句 —— 新功能藏在托盘菜单里没人找得到。
+            // （管理员那条让位：拖不动的时候会当场弹说明，不缺这一次。）
+            if (!_settings.PinHintDone)
+            {
+                _settings.PinHintDone = true;
+                _settings.Save();
+                _wheel.ShowToast("新功能：缩略图上按鼠标中键 = 把图钉在屏幕上");
+            }
+            else if (Elev.Is)
                 _wheel.ShowToast("管理员模式：拖拽会被 Windows 拦（托盘右键看说明）");
 
-            // 第一次打开：先播开启动画，再弹一次新手引导（看过就不再弹）
-            if (!_settings.IntroSeen)
+            // 第一次打开、或者换到没见过的版本：都自动弹一次引导（"看过就不再弹"只对同一版本成立）。
+            // 需要自己去托盘里找的引导留不住人，所以升级后也主动亮一次。
+            bool firstEver = !_settings.IntroSeen;
+            bool newVersion = (_settings.GuideSeenVersion != AppInfo.Version);
+            if (firstEver || newVersion)
             {
                 _settings.IntroSeen = true;
+                _settings.GuideSeenVersion = AppInfo.Version;
                 _settings.Save();
                 Timer g = new Timer();
                 g.Interval = 900;
                 g.Tick += new EventHandler(delegate(object o, EventArgs e2)
                 {
                     g.Stop(); g.Dispose();
-                    try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
+                    try { GuideForm gf = new GuideForm(firstEver); gf.ShowDialog(); } catch { }
                 });
                 g.Start();
             }
@@ -327,7 +337,13 @@ namespace SnapWheel
             }
             catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
 
-            OverlayForm ov = new OverlayForm(vs, shot);
+            // 第一次用截图浮层：让工具条旁边亮一次"能标注"的提示（只亮这一次）
+            if (!_settings.AnnotHintDone)
+            {
+                _settings.AnnotHintDone = true;
+                _settings.Save();
+            }
+            OverlayForm ov = new OverlayForm(vs, shot, _settings);
             ov.ShowDialog();
             if (ov.Result != null)
             {

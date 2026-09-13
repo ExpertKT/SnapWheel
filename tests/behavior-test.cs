@@ -176,6 +176,33 @@ namespace SnapWheel
             return o;
         }
 
+        // 造一张深色图、写一行"重点"，数一下图里近白像素有多少（用来判断有没有白底）
+        static int TextWhitePixels(bool bg)
+        {
+            Bitmap shot = Solid(400, 300, Color.FromArgb(40, 40, 40));
+            OverlayForm o = MakeOverlay(shot, "Text");
+            F(o, "_textBg", bg);
+            Mouse(o, "OnMouseDown", 150, 140);
+            TextBox tb = null;
+            foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+            if (tb == null) { o.Dispose(); return -1; }
+            tb.Text = "重点";
+            Call(o, "EndText", true);
+            Call(o, "Confirm");
+            Bitmap res = o.Result;
+            int n = 0;
+            if (res != null)
+                for (int y = 0; y < res.Height; y++)
+                    for (int x = 0; x < res.Width; x++)
+                    {
+                        Color c = res.GetPixel(x, y);
+                        // 白底是 65% 不透明叠在深灰底上 → 实际约 180 灰，不是纯白，阈值别卡太死
+                        if (c.R > 140 && c.G > 140 && c.B > 140) n++;
+                    }
+            o.Dispose();
+            return n;
+        }
+
         [STAThread]
         public static void Main()
         {
@@ -539,6 +566,68 @@ namespace SnapWheel
                 int after = ShapeCount(o);
                 o.Dispose();
                 if (after != 1) return "撤销后剩 " + after + " 个（应为 1）";
+                return null;
+            });
+
+            // ================= 15. 打字时按回车：只落字，别确认整张截图 =================
+            Run("文字输入中按回车只落字（不会把截图确认掉）；再按一次才确认", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Text");
+                Mouse(o, "OnMouseDown", 160, 150);
+                TextBox tb = null;
+                foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+                if (tb == null) return "点了没弹出输入框";
+                tb.Text = "改这里";
+
+                Call(o, "OnKeyDown", new KeyEventArgs(Keys.Enter));      // 第一次：应该只落字
+                if (ShapeCount(o) != 1) return "回车没把文字落下来（shapes=" + ShapeCount(o) + "）";
+                if (o.Result != null) return "回车把整张截图确认掉了（就是用户踩到的那个 bug）";
+                if (G(o, "_textBox") != null) return "输入框没收掉";
+
+                Call(o, "OnKeyDown", new KeyEventArgs(Keys.Enter));      // 第二次：没有输入框了，确认
+                if (o.Result == null) return "再按一次回车却没确认";
+                o.Dispose();
+                return null;
+            });
+
+            // ================= 16. 标注文字的白底开关 =================
+            Run("标注文字：白底可开关（带底和不带底真的不一样）", delegate
+            {
+                int withBg = TextWhitePixels(true);
+                int noBg = TextWhitePixels(false);
+                if (withBg < 0 || noBg < 0) return "输入框没建起来";
+                if (!(withBg > noBg * 1.5)) return "带底和不带底差不多（近白像素 " + withBg + " vs " + noBg + "）";
+                return null;
+            });
+
+            // ================= 17. 超大图贴图先缩进屏幕 =================
+            Run("贴图：比屏幕还大的图自动先缩小，不糊满整个桌面", delegate
+            {
+                Bitmap big = Solid(4000, 2400, Color.SteelBlue);
+                PinForm p = new PinForm(big, new Point(600, 400));
+                p.Show();
+                Application.DoEvents();
+                float z = p.Zoom;
+                int w = p.Width, h = p.Height;
+                p.Close();
+                Rectangle vs = SystemInformation.VirtualScreen;
+                if (z >= 1f) return "没有自动缩小（zoom=" + z.ToString("0.00") + "）";
+                if (w > vs.Width || h > vs.Height) return "还是超出屏幕：" + w + "x" + h;
+                return null;
+            });
+
+            // ================= 18. 新增的设置项要能存住 =================
+            Run("提示开关 / 引导版本 / 文字底 存盘后读得回来（漏一行就会每次启动都弹提示）", delegate
+            {
+                Settings a = new Settings();
+                a.AnnotHintDone = true; a.PinHintDone = true;
+                a.GuideSeenVersion = "9.9.9"; a.TextBg = false;
+                a.Save();
+                Settings b = Settings.Load();
+                if (!b.AnnotHintDone || !b.PinHintDone) return "提示开关没存住";
+                if (b.GuideSeenVersion != "9.9.9") return "引导版本没存住：" + b.GuideSeenVersion;
+                if (b.TextBg) return "文字底开关没存住";
                 return null;
             });
 

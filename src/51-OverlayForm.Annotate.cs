@@ -51,12 +51,14 @@ namespace SnapWheel
         const int BtnW = 34;                 // 都会被 _k 缩放
         const int BtnH = 30;
         const int Gap = 6;
+        const int IdxBg = 5 + 4;             // 工具条上"文字底"按钮的下标（颜色点占 5..8）
+        const int IdxUndo = IdxBg + 1;
 
         // ---------- 工具条布局 ----------
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
-            int n = 5 + AnnotColors.Length + 1;      // 5 个工具 + 4 个颜色 + 撤销
+            int n = 5 + AnnotColors.Length + 2;      // 5 个工具 + 4 个颜色 + 文字底 + 撤销
             int total = n * bw + (n - 1) * gp + gp * 2;
             int h = bh + gp * 2;
             RectangleF sb = SelBounds();
@@ -135,11 +137,14 @@ namespace SnapWheel
                 case AnnotKind.Text:
                     {
                         if (string.IsNullOrEmpty(s.Text)) break;
-                        using (Font f = new Font("Microsoft YaHei UI", 12f * _k, FontStyle.Bold))
-                        using (SolidBrush bg = new SolidBrush(Color.FromArgb(150, 255, 255, 255)))
+                        if (_textBg)
                         {
-                            SizeF sz = g.MeasureString(s.Text, f);
-                            g.FillRectangle(bg, s.A.X - 2 * _k, s.A.Y - 1 * _k, sz.Width + 4 * _k, sz.Height);
+                            using (Font f = new Font("Microsoft YaHei UI", 12f * _k, FontStyle.Bold))
+                            using (SolidBrush bg = new SolidBrush(Color.FromArgb(165, 255, 255, 255)))
+                            {
+                                SizeF sz = g.MeasureString(s.Text, f);
+                                g.FillRectangle(bg, s.A.X - 3 * _k, s.A.Y - 2 * _k, sz.Width + 6 * _k, sz.Height + 2 * _k);
+                            }
                         }
                         using (Font f = new Font("Microsoft YaHei UI", 12f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(s.Color))
@@ -305,6 +310,22 @@ namespace SnapWheel
                             g.DrawString("T", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
                         }
                         break;
+                    case IdxBg:  // 文字底：方块填实=带白底，只描边=不带底
+                        {
+                            RectangleF sq = new RectangleF(d2.Left, d2.Top + d2.Height * 0.12f, d2.Width, d2.Height * 0.88f);
+                            if (_textBg)
+                                using (SolidBrush b = new SolidBrush(Color.White)) g.FillRectangle(b, sq);
+                            using (Pen p = new Pen(Color.White, 1.4f * _k)) g.DrawRectangle(p, sq.X, sq.Y, sq.Width, sq.Height);
+                            using (Font f = new Font("Microsoft YaHei UI", 8.5f * _k, FontStyle.Bold))
+                            using (SolidBrush b = new SolidBrush(_textBg ? Color.FromArgb(22, 24, 28) : Color.White))
+                            {
+                                StringFormat sf = new StringFormat();
+                                sf.Alignment = StringAlignment.Center;
+                                sf.LineAlignment = StringAlignment.Center;
+                                g.DrawString("T", f, b, sq, sf);
+                            }
+                            break;
+                        }
                     default:     // 撤销
                         using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb(110, 255, 255, 255), 2f * _k))
                         {
@@ -322,6 +343,44 @@ namespace SnapWheel
             return new RectangleF(r.X + pad, r.Y + pad, Math.Max(2, r.Width - pad * 2), Math.Max(2, r.Height - pad * 2));
         }
 
+        // 第一次用的时候，在工具条上方亮一条说明 —— 新功能不能被埋在托盘菜单里，
+        // 用户得"一眼看到"。第一次画了标注 / 过了 10 秒就收掉。
+        void PaintAnnotCoach(Graphics g)
+        {
+            if (!_annotHint || !ToolbarVisible() || _drawing != null) return;
+            if ((DateTime.Now - _annotHintAt).TotalSeconds > 10) { _annotHint = false; return; }
+            if (_shapes.Count > 0) { _annotHint = false; return; }
+
+            string txt = "截图可以直接标注：箭头 A · 方框 R · 马赛克 M · 文字 T　（Ctrl+Z 撤销）";
+            using (Font f = new Font("Microsoft YaHei UI", 10f * _k, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(txt, f);
+                int pad = (int)(12 * _k);
+                int w = (int)sz.Width + pad * 2;
+                int h = (int)sz.Height + pad;
+                int x = _toolRect.X + _toolRect.Width / 2 - w / 2;
+                int y = _toolRect.Y - h - (int)(10 * _k);
+                if (y < 8) y = _toolRect.Bottom + (int)(10 * _k);
+                if (x < 8) x = 8;
+                if (x + w > _vs.Width - 8) x = _vs.Width - 8 - w;
+
+                Rectangle box = new Rectangle(x, y, w, h);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath bp = Gfx.Round(box, 9f * _k))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(242, 255, 196, 60)))
+                    g.FillPath(b, bp);
+                // 小箭头：指着下面的工具条
+                bool below = (y < _toolRect.Y);
+                float ax = _toolRect.X + _toolRect.Width / 2f;
+                PointF[] tri = below
+                    ? new PointF[] { new PointF(ax - 8 * _k, box.Bottom - 1), new PointF(ax + 8 * _k, box.Bottom - 1), new PointF(ax, box.Bottom + 9 * _k) }
+                    : new PointF[] { new PointF(ax - 8 * _k, box.Top + 1), new PointF(ax + 8 * _k, box.Top + 1), new PointF(ax, box.Top - 9 * _k) };
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(242, 255, 196, 60))) g.FillPolygon(b, tri);
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb(30, 26, 16)))
+                    g.DrawString(txt, f, tb, x + pad, y + pad / 2 - 1);
+            }
+        }
+
         // ---------- 鼠标 / 键盘钩子（由 OverlayForm 主文件调进来） ----------
         bool AnnotMouseDown(MouseEventArgs e)
         {
@@ -334,6 +393,7 @@ namespace SnapWheel
                     if (!_toolBtns[i].Contains(e.Location)) continue;
                     if (i < 5) { EndText(true); _tool = (AnnotKind)i; }
                     else if (i < 5 + AnnotColors.Length) _annotColor = AnnotColors[i - 5];
+                    else if (i == IdxBg) { _textBg = !_textBg; if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } } }
                     else Undo();
                     Invalidate();
                     return true;
@@ -384,7 +444,7 @@ namespace SnapWheel
             _drawing = null;
             RectangleF r = RectOf(s.A, s.B);
             bool ok = (s.Kind == AnnotKind.Arrow) || (r.Width >= 4 && r.Height >= 4);
-            if (ok) _shapes.Add(s);
+            if (ok) { _shapes.Add(s); _annotHint = false; }     // 画了一笔，首次提示就收掉
             Invalidate();
             return true;
         }
@@ -405,6 +465,9 @@ namespace SnapWheel
                 case Keys.R: _tool = AnnotKind.Rect; break;
                 case Keys.M: _tool = AnnotKind.Mosaic; break;
                 case Keys.T: _tool = AnnotKind.Text; break;
+                case Keys.B: _textBg = !_textBg;
+                    if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }
+                    break;
                 case Keys.D1: case Keys.NumPad1: _annotColor = AnnotColors[0]; break;
                 case Keys.D2: case Keys.NumPad2: _annotColor = AnnotColors[1]; break;
                 case Keys.D3: case Keys.NumPad3: _annotColor = AnnotColors[2]; break;
@@ -438,6 +501,8 @@ namespace SnapWheel
                 if (ke.KeyCode == Keys.Enter) { ke.SuppressKeyPress = true; EndText(true); }
                 else if (ke.KeyCode == Keys.Escape) { ke.SuppressKeyPress = true; EndText(false); }
             });
+            // 点到别处（比如去点工具条）也要把字落下，不然打好的字会莫名其妙丢掉
+            _textBox.Leave += new EventHandler(delegate(object o, EventArgs e2) { EndText(true); });
             Controls.Add(_textBox);
             _textBox.Focus();
         }
