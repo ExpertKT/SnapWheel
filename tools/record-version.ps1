@@ -40,6 +40,14 @@ function Ok($s)   { Write-Host "  [OK] $s" -ForegroundColor Green }
 function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red }
 
 if ($sources.Count -eq 0) { Bad "找不到源码: $codeDir"; exit 1 }
+
+# OCR 走 WinRT：需要 .NET 框架自带的桥接程序集（系统自带，非第三方）
+$winrtRefs = @()
+foreach ($cand in @(
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll'),
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\System.Runtime.WindowsRuntime.dll'))) {
+    if (Test-Path $cand) { $winrtRefs = @("/r:$cand"); break }
+}
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
 $csc = @(
@@ -82,8 +90,8 @@ Ok "源码版本号已更新"
 
 # ---- 2) 编译两条线 ----
 function Build($outExe, $define, $label) {
-    $a = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $sources
-    if ($define) { $a = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $sources }
+    $a = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $winrtRefs + $sources
+    if ($define) { $a = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$outExe") + $winrtRefs + $sources }
     $log = & $csc @a 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $outExe)) {
         Bad "$label 编译失败"

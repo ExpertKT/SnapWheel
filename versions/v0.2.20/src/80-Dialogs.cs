@@ -30,7 +30,16 @@ namespace SnapWheel
             Gfx.RepaintAll(this);
         }
 
-        public GuideForm()
+        public GuideForm() : this(AppInfo.Name + " 快照轮环 · 使用说明", "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", false) { }
+
+        // firstEver=true：全新安装的欢迎引导；false：升级后自动弹的"这次多了什么"
+        public GuideForm(bool firstEver) : this(
+            firstEver ? "欢迎用 SnapWheel 快照轮环" : ("SnapWheel 更新到 v" + AppInfo.Version),
+            firstEver ? "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。"
+                      : "这次加了新东西 —— 下面标了「新」的两条就是，一分钟看完就能用上。",
+            !firstEver) { }
+
+        GuideForm(string title, string subtitle, bool markNew)
         {
             Text = AppInfo.Name + " 新手上路";
             Icon = Brand.Get();
@@ -45,7 +54,7 @@ namespace SnapWheel
             SuspendLayout();
 
             Label head = new Label();
-            head.Text = "欢迎用 SnapWheel 快照轮环";
+            head.Text = title;
             head.Font = new Font("Microsoft YaHei UI", 15f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.AutoSize = true;
@@ -53,17 +62,18 @@ namespace SnapWheel
             Controls.Add(head);
 
             Label sub = new Label();
-            sub.Text = "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。";
+            sub.Text = subtitle;
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             sub.AutoSize = true;
             sub.Location = new Point(31, 60);
             Controls.Add(sub);
 
             int y = 100;
+            string nw = markNew ? "【新】" : "";
             AddTip(28, ref y, "第 1 步：截一张", "按 " + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
-            AddTip(28, ref y, "截完直接标注", "浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。");
+            AddTip(28, ref y, nw + "截完直接标注", "浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。");
             AddTip(28, ref y, "第 2 步：拖出去（最常用）", "把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。");
-            AddTip(28, ref y, "要对照着看：贴到屏幕上", "缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。");
+            AddTip(28, ref y, nw + "要对照着看：贴到屏幕上", "缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。");
             AddTip(28, ref y, "反过来：拖回来", "从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。");
             AddTip(28, ref y, "连拖都不用：复制即收纳", "在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。");
             AddTip(28, ref y, "按住看大图", "缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。");

@@ -51,8 +51,21 @@ namespace SnapWheel
 
         public Bitmap Result;
 
-        public OverlayForm(Rectangle virtualScreen, Bitmap shot)
+        // 0.5.0 起：浮层也拿得到设置（可以为 null —— 测试里就不传）。
+        // 用它做两件事：第一次用的时候在工具条旁边弹一次"能标注"的提示；记住文字要不要白底。
+        internal Settings _set;
+        bool _textBg = true;             // 标注文字是否带白底（可在工具条上切换）
+        bool _annotHint = false;         // 首次提示：还没展示过就亮一下
+        DateTime _annotHintAt = DateTime.MinValue;
+
+        public OverlayForm(Rectangle virtualScreen, Bitmap shot) : this(virtualScreen, shot, null) { }
+
+        public OverlayForm(Rectangle virtualScreen, Bitmap shot, Settings settings)
         {
+            _set = settings;
+            _annotHint = (settings != null && !settings.AnnotHintDone);
+            _textBg = (settings == null) || settings.TextBg;
+            _annotHintAt = DateTime.Now;
             _vs = virtualScreen;
             _shot = shot;
             try { _k = Math.Max(0.75f, Math.Min(3f, Native.DpiScaleOf(IntPtr.Zero))); } catch { _k = 1f; }
@@ -441,7 +454,16 @@ namespace SnapWheel
             }
             PlaceToolbar();
             PaintToolbar(g, 255);
+            PaintShapeSelection(g);
+            PaintIntroPanel(g);
             DrawChips(g);
+        }
+
+        // 滚轮：选中了标注图元就调它的大小（文字改字号），否则不动
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            if (AnnotWheel(e)) return;
+            base.OnMouseWheel(e);
         }
 
         // ---------- 交互 ----------
@@ -689,16 +711,34 @@ namespace SnapWheel
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Escape && _textBox != null) { EndText(false); return; }   // 先收掉正在输入的文字
+            // 正在打字：回车只把这段字落下去，绝不确认整张截图。
+            // （以前这里把键"让给输入框"，结果回车漏到下面的"回车=确认截图"分支 ——
+            //   用户打个字按回车，截图当场被确认并进了轮盘，非常懵。）
+            if (_textBox != null)
+            {
+                if (e.KeyCode == Keys.Enter) { EndText(true); e.SuppressKeyPress = true; return; }
+                if (e.KeyCode == Keys.Escape) { EndText(false); e.SuppressKeyPress = true; return; }
+                return;                       // 其它键交给输入框
+            }
+            if (_annotHint) { _annotHint = false; Invalidate(); }   // 按任意键 = 开始用（键本身照常生效）
             if (AnnotKey(e)) return;
             if (e.KeyCode == Keys.Escape) Cancel();
-            else if (e.KeyCode == Keys.Enter && _hasSel) { EndText(true); Confirm(); }
+            else if (e.KeyCode == Keys.Enter && _hasSel) Confirm();
         }
 
         void Confirm()
         {
             if (_shot == null || !_hasSel) { Close(); return; }
             EndText(true);                       // 还在输入框里的文字也算数
+            if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }   // 记住"文字底"的选择
+            Result = CropSelection(true);
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        // 按当前选区裁一张图（withAnnotations=false 时只裁原图）
+        internal Bitmap CropSelection(bool withAnnotations)
+        {
             int w = Math.Max(1, (int)Math.Round(_sz.Width));
             int h = Math.Max(1, (int)Math.Round(_sz.Height));
             Bitmap crop = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
@@ -710,12 +750,9 @@ namespace SnapWheel
                 g.RotateTransform(-_ang * 180f / (float)Math.PI);
                 g.TranslateTransform(-_c.X, -_c.Y);
                 g.DrawImageUnscaled(_shot, 0, 0);
-                // 标注用同一套坐标和同一个变换画进去 —— 屏幕上看到什么，存下来就是什么
-                DrawAnnotationShapes(g);
+                if (withAnnotations) DrawAnnotationShapes(g);   // 标注用同一套坐标和变换画进去 —— 所见即所得
             }
-            Result = crop;
-            DialogResult = DialogResult.OK;
-            Close();
+            return crop;
         }
 
         void Cancel() { Result = null; DialogResult = DialogResult.Cancel; Close(); }

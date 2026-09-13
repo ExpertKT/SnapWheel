@@ -53,6 +53,10 @@ namespace SnapWheel
         public bool DragOutAsFile = false;    // 拖出时是否同时提供"文件"格式（关掉就不会往桌面落地成文件）
         public bool CheckUpdate = true;       // 启动时检查 GitHub 有没有新版本
         public bool NubHintDone = false;      // 把手用途提示是否已经自动展示过
+        public bool AnnotHintDone = false;    // 截图标注（工具条）的首次提示是否已展示过
+        public bool PinHintDone = false;      // 贴图（中键）的首次提示是否已展示过
+        public string GuideSeenVersion = "";  // 上一次自动弹出新手引导/更新说明时的版本号
+        public bool TextBg = true;            // 标注文字默认带白底（可关，见截图工具条上的"文字底"）
         public string KeyActions = "new,next,delete,prev";  // 万能键四分区动作：上,右,下,左
         public int Rev = 0;                   // 配置版本号（用于默认值迁移）
 
@@ -121,6 +125,10 @@ namespace SnapWheel
                         else if (k == "DragOutAsFile") s.DragOutAsFile = (v == "1");
                         else if (k == "CheckUpdate") s.CheckUpdate = (v == "1");
                         else if (k == "NubHintDone") s.NubHintDone = (v == "1");
+                        else if (k == "AnnotHintDone") s.AnnotHintDone = (v == "1");
+                        else if (k == "PinHintDone") s.PinHintDone = (v == "1");
+                        else if (k == "GuideSeenVersion") s.GuideSeenVersion = v;
+                        else if (k == "TextBg") s.TextBg = (v == "1");
                         else if (k == "KeyActions" && v.Length > 0) s.KeyActions = v;
                         else if (k == "Rev") { int n; if (int.TryParse(v, out n)) s.Rev = n; }
                     }
@@ -237,6 +245,10 @@ namespace SnapWheel
                 lines.Add("DragOutAsFile=" + (DragOutAsFile ? "1" : "0"));
                 lines.Add("CheckUpdate=" + (CheckUpdate ? "1" : "0"));
                 lines.Add("NubHintDone=" + (NubHintDone ? "1" : "0"));
+                lines.Add("AnnotHintDone=" + (AnnotHintDone ? "1" : "0"));
+                lines.Add("PinHintDone=" + (PinHintDone ? "1" : "0"));
+                lines.Add("GuideSeenVersion=" + (GuideSeenVersion ?? ""));
+                lines.Add("TextBg=" + (TextBg ? "1" : "0"));
                 lines.Add("KeyActions=" + KeyActions);
                 Rev = 2;                       // 配置格式版本：写了它以后就不再被默认值迁移覆盖
                 lines.Add("Rev=" + Rev);

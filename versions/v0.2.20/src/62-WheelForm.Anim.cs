@@ -85,7 +85,9 @@ namespace SnapWheel
                 _firstRunHintUntil = DateTime.Now.AddSeconds(14);
                 _settings.NubHintDone = true;
             }
-            CaptureBackdrop();
+            // 后台抓玻璃底（同步抓一次要 12~16ms，会正好把"点开轮盘"那一下顶慢；
+            // 窗口设了 WDA_EXCLUDEFROMCAPTURE，显示中抓也不会拍到轮盘自己）
+            RequestBackdropAsync();
             _show = 1f; _targetShow = 1f; _showAnimating = false;
             _rendered = false;
             Show();
@@ -101,7 +103,7 @@ namespace SnapWheel
         {
             if (!_settings.CollapseMode) { HideWheel(); return; }
             if (_collapsed) return;
-            if (!Visible) { _collapsed = true; _collapsing = false; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; _collapsedAt = DateTime.Now; CaptureBackdrop(); Show(); Render(); return; }
+            if (!Visible) { _collapsed = true; _collapsing = false; _introT = 0f; _intro = false; _show = 1f; _targetShow = 1f; _showAnimating = false; _collapsedAt = DateTime.Now; RequestBackdropAsync(); Show(); Render(); return; }
             _collapsing = true;
             _intro = true;
             _ringFrom = _introT;              // 从"现在伸到哪"开始往回收，不跳到完全展开
@@ -124,7 +126,7 @@ namespace SnapWheel
 
         public void ShowWheel()
         {
-            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
+            if (!Visible) { RequestBackdropAsync(); _show = 0f; _rendered = false; Show(); }
             SetShow(1f);
             _lastActive = DateTime.Now;
             Render();
@@ -142,7 +144,7 @@ namespace SnapWheel
         // 开启动画：整条环像彩虹一样扫出来，图片一张张沿弧线滑落，万能键/按钮/文字从屏幕外滑入并渐显
         public void StartIntro()
         {
-            if (!Visible) { CaptureBackdrop(); _show = 0f; _rendered = false; Show(); }
+            if (!Visible) { RequestBackdropAsync(); _show = 0f; _rendered = false; Show(); }
             _show = 1f; _targetShow = 1f; _showAnimating = false;
             _collapsed = false; _collapsing = false;
             _intro = true;
@@ -521,7 +523,7 @@ namespace SnapWheel
 
             if (_show <= 0.002f && _targetShow <= 0.002f)
             {
-                if (Visible) { Hide(); CaptureBackdrop(); }   // 隐藏后再抓一次，下次显示时玻璃底是新的
+                if (Visible) { Hide(); RequestBackdropAsync(); }   // 隐藏后再抓一次，下次显示时玻璃底是新的（后台抓，别卡 UI）
                 return;
             }
             if (need || !_rendered) Render();   // render ONLY when something changed (smooth + cheap)

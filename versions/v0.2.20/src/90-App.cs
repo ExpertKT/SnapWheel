@@ -59,6 +59,7 @@ namespace SnapWheel
                 menu.Items.Add("管理员模式说明…（拖拽为什么不动）", null, new EventHandler(OnAdminHelp));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
             menu.Items.Add("关掉所有贴图", null, new EventHandler(delegate(object o, EventArgs e) { CloseAllPins(); }));
+            menu.Items.Add("取字：识别剪贴板里的图", null, new EventHandler(OnOcrClipboard));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
             menu.Items.Add("打开项目主页", null, new EventHandler(delegate(object o, EventArgs e) {
@@ -99,22 +100,32 @@ namespace SnapWheel
                 _wheel.StartCollapsed();     // 就算开机不显示轮盘，也留个贴边把手，否则没法鼠标叫出来
             }
 
-            // 管理员模式下，开机就在轮盘上说一句。气泡（上面那条）很多人是关掉的
-            // （本机设置里 ShowBalloon=0），关了就等于永远不知道自己为什么拖不动。
-            if (Elev.Is)
+            // 新功能首次提示：中键贴图这条只在轮盘上冒一句 —— 新功能藏在托盘菜单里没人找得到。
+            // （管理员那条让位：拖不动的时候会当场弹说明，不缺这一次。）
+            if (!_settings.PinHintDone)
+            {
+                _settings.PinHintDone = true;
+                _settings.Save();
+                _wheel.ShowToast("新功能：缩略图上按鼠标中键 = 把图钉在屏幕上");
+            }
+            else if (Elev.Is)
                 _wheel.ShowToast("管理员模式：拖拽会被 Windows 拦（托盘右键看说明）");
 
-            // 第一次打开：先播开启动画，再弹一次新手引导（看过就不再弹）
-            if (!_settings.IntroSeen)
+            // 第一次打开、或者换到没见过的版本：都自动弹一次引导（"看过就不再弹"只对同一版本成立）。
+            // 需要自己去托盘里找的引导留不住人，所以升级后也主动亮一次。
+            bool firstEver = !_settings.IntroSeen;
+            bool newVersion = (_settings.GuideSeenVersion != AppInfo.Version);
+            if (firstEver || newVersion)
             {
                 _settings.IntroSeen = true;
+                _settings.GuideSeenVersion = AppInfo.Version;
                 _settings.Save();
                 Timer g = new Timer();
                 g.Interval = 900;
                 g.Tick += new EventHandler(delegate(object o, EventArgs e2)
                 {
                     g.Stop(); g.Dispose();
-                    try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
+                    try { GuideForm gf = new GuideForm(firstEver); gf.ShowDialog(); } catch { }
                 });
                 g.Start();
             }
@@ -149,6 +160,44 @@ namespace SnapWheel
             PinForm[] arr = _pins.ToArray();
             for (int i = 0; i < arr.Length; i++) { try { arr[i].Close(); } catch { } }
             _pins.Clear();
+        }
+
+        // 取字（OCR）：把剪贴板里的图认成文字。懒得截图时最顺手 —— 微信里复制一张图直接取字。
+        void OnOcrClipboard(object sender, EventArgs e)
+        {
+            Bitmap img = null;
+            try
+            {
+                if (Clipboard.ContainsImage()) img = Clipboard.GetImage() as Bitmap;
+            }
+            catch (Exception ex) { Err.Log("OcrClipboard", ex); }
+            if (img == null)
+            {
+                try
+                {
+                    MessageBox.Show("剪贴板里没有图片。先复制一张图（或截图），再来点这里。",
+                        AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+                return;
+            }
+            string err = null, txt = null;
+            Cursor prev = null;
+            try { prev = Cursor.Current; Cursor.Current = Cursors.WaitCursor; } catch { }
+            try { txt = Ocr.Recognize(img, out err); }
+            catch (Exception ex) { err = ex.Message; }
+            finally { try { Cursor.Current = prev; } catch { } try { img.Dispose(); } catch { } }
+
+            if (txt == null)
+            {
+                try { MessageBox.Show(err ?? "识别失败了", AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
+                return;
+            }
+            try
+            {
+                using (OcrForm of = new OcrForm(txt)) { of.ShowDialog(); }
+            }
+            catch (Exception ex) { Err.Log("OcrForm", ex); }
         }
 
         // 管理员模式说明框：托盘菜单、"拖不动"的那一刻都走这里。
@@ -327,7 +376,13 @@ namespace SnapWheel
             }
             catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
 
-            OverlayForm ov = new OverlayForm(vs, shot);
+            // 第一次用截图浮层：让工具条旁边亮一次"能标注"的提示（只亮这一次）
+            if (!_settings.AnnotHintDone)
+            {
+                _settings.AnnotHintDone = true;
+                _settings.Save();
+            }
+            OverlayForm ov = new OverlayForm(vs, shot, _settings);
             ov.ShowDialog();
             if (ov.Result != null)
             {
@@ -337,7 +392,7 @@ namespace SnapWheel
                 // 关键：浮层关掉之后重抓一次背景。
                 // 之前是拿着"截图浮层还在时抓的"背景去显示玻璃，所以截图完轮盘是暗的，
                 // 过一会儿定时刷新才突然变亮 —— 现在这里立刻换新背景（带淡入过渡）。
-                try { _wheel.CaptureBackdrop(); } catch { }
+                try { _wheel.RequestBackdropAsync(); } catch { }
                 // 截完播拉出动画（收起态拉出来最自然；原来是展开的就直接显示）
                 if (_settings.CollapseMode) _wheel.ExpandWheel(true);   // 截图流程：拉出也快一点
                 else _wheel.ShowWheel();

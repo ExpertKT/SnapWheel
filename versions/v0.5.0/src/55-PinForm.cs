@@ -47,6 +47,18 @@ namespace SnapWheel
 
             ApplyZoom(1f, false);
             Location = ClampToScreen(new Point(at.X - Width / 2, at.Y - Height / 2));
+
+            // 比屏幕还大的图（整屏截图之类）：开机先缩到能放进屏幕，别一贴上来糊满整个桌面。
+            // 只缩不放 —— 小图还是原尺寸贴。
+            try
+            {
+                Rectangle wa = Screen.FromPoint(at).WorkingArea;
+                float fit = 1f;
+                if (_img.Width > wa.Width * 0.9f) fit = Math.Min(fit, wa.Width * 0.9f / _img.Width);
+                if (_img.Height > wa.Height * 0.9f) fit = Math.Min(fit, wa.Height * 0.9f / _img.Height);
+                if (fit < 1f) { ApplyZoom(fit, false); Location = ClampToScreen(new Point(at.X - Width / 2, at.Y - Height / 2)); }
+            }
+            catch { }
         }
 
         protected override void OnShown(EventArgs e)

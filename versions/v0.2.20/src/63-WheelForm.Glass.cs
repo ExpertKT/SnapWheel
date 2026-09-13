@@ -59,7 +59,7 @@ namespace SnapWheel
         Point _glassPendingOffset = Point.Empty;
 
 
-        void RequestBackdropAsync()
+        public void RequestBackdropAsync()
         {
             if (StyleFlatOnly()) { FreeBackdrop(); return; }
             if (_glassBusy) return;
@@ -128,6 +128,8 @@ namespace SnapWheel
         }
 
 
+        // 同步版：当场抓屏 + 模糊，要 12~16ms（窗口 658x658 实测），会卡住 UI 线程。
+        // 正常路径一律用 RequestBackdropAsync —— 这里留着只是为了排查问题和测试对比。
         public void CaptureBackdrop()
         {
             if (StyleFlatOnly()) { FreeBackdrop(); return; }
