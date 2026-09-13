@@ -725,6 +725,26 @@ namespace SnapWheel
             return true;
         }
 
+        // "取字中…"的小提示：识别在后台跑，但得让用户看见"它在干活"（不显示的话还是像卡住）
+        void PaintOcrBusy(Graphics g)
+        {
+            if (!_ocrBusy) return;
+            string txt = "取字中…";
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Font f = new Font("Microsoft YaHei UI", 11f * _k, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(txt, f);
+                int pad = (int)(14 * _k);
+                int w = (int)sz.Width + pad * 2, h = (int)sz.Height + pad;
+                Rectangle box = new Rectangle(_vs.Width / 2 - w / 2, 24, w, h);
+                using (GraphicsPath bp = Gfx.Round(box, 9f * _k))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(238, 22, 24, 28)))
+                    g.FillPath(b, bp);
+                using (SolidBrush tb = new SolidBrush(Color.White))
+                    g.DrawString(txt, f, tb, box.X + pad, box.Y + pad / 2f);
+            }
+        }
+
         void SaveTextBg()
         {
             if (_set == null) return;
@@ -737,16 +757,9 @@ namespace SnapWheel
         {
             if (!_hasSel || _shot == null || _sz.Width < 4 || _sz.Height < 4) return;
             EndText(true);
-            string err = null, txt = null;
-            Cursor prev = null;
-            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
-            try
-            {
-                using (Bitmap crop = CropSelection(false)) txt = Ocr.Recognize(crop, out err);
-            }
-            catch (Exception ex) { err = ex.Message; }
-            finally { try { Cursor = prev; } catch { } }
-            ShowOcrResult(txt, err);
+            Bitmap crop = null;
+            try { crop = CropSelection(false); } catch { }
+            if (crop != null) StartOcrAsync(crop);
         }
 
         // 拖出来的框里取字：从**原图**（不带标注）裁这一块去认，框越贴合文字越准
@@ -758,21 +771,50 @@ namespace SnapWheel
             rc = Rectangle.Intersect(rc, new Rectangle(0, 0, _shot.Width, _shot.Height));
             if (rc.Width < 4 || rc.Height < 4) return;
             EndText(true);
-
-            string err = null, txt = null;
-            Cursor prev = null;
-            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
             try
             {
-                using (Bitmap crop = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppPArgb))
-                {
-                    using (Graphics g = Graphics.FromImage(crop)) g.DrawImageUnscaled(_shot, -rc.Left, -rc.Top);
-                    txt = Ocr.Recognize(crop, out err);
-                }
+                Bitmap crop = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(crop)) g.DrawImageUnscaled(_shot, -rc.Left, -rc.Top);
+                StartOcrAsync(crop);
             }
-            catch (Exception ex) { err = ex.Message; }
-            finally { try { Cursor = prev; } catch { } }
-            ShowOcrResult(txt, err);
+            catch (Exception ex) { Err.Log("OcrCrop", ex); }
+        }
+
+        bool _ocrBusy = false;
+
+        // 取字丢到后台线程去做 —— 以前是同步跑的：界面整整卡 100~300ms、鼠标变等待圈、
+        // 还没有任何反馈，用户当然觉得"性能垃圾"。现在轮盘照常能用，识别完结果框自己弹出来。
+        void StartOcrAsync(Bitmap crop)
+        {
+            if (crop == null) return;
+            if (_ocrBusy) { try { crop.Dispose(); } catch { } return; }     // 上一次还没完，直接忽略这一次
+            _ocrBusy = true;
+
+            // 先在 UI 线程把像素拷出来：后台线程就完全不碰 GDI 位图了
+            byte[] px = null; int pw = 0, ph = 0;
+            try { px = Ocr.PixelsOf(crop, out pw, out ph); } catch { px = null; }
+            if (px == null) { try { crop.Dispose(); } catch { } _ocrBusy = false; return; }
+            try { crop.Dispose(); } catch { }        // 像素到手，位图就可以扔了
+
+            Invalidate();                            // 让"取字中…"立刻显示出来
+            byte[] data = px; int w = pw, h = ph;
+            System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
+            {
+                string err = null, txt = null;
+                try { txt = Ocr.RecognizePixels(data, w, h, out err); }
+                catch (Exception ex) { err = ex.Message; }
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate()
+                    {
+                        _ocrBusy = false;
+                        ShowOcrResult(txt, err);
+                    }));
+                }
+                catch { _ocrBusy = false; }
+            }));
+            th.IsBackground = true;
+            th.Start();
         }
 
         void ShowOcrResult(string txt, string err)

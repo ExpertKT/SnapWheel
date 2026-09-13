@@ -511,6 +511,7 @@ namespace SnapWheel
             PaintToolbar(g, 255);
             PaintShapeSelection(g);
             PaintIntroPanel(g);
+            PaintOcrBusy(g);
             DrawChips(g);
         }
 

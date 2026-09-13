@@ -946,6 +946,28 @@ namespace SnapWheel
                 return null;
             });
 
+            Run("取字：像素直通路径（省掉 PNG 来回）也能认出同样的字", delegate
+            {
+                if (!Ocr.Available) { Console.WriteLine("       （没有 OCR 语言包，跳过）"); return null; }
+                Bitmap img = new Bitmap(640, 200, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(img))
+                {
+                    g.Clear(Color.White);
+                    using (Font f = new Font("Microsoft YaHei UI", 26f, FontStyle.Bold))
+                    using (SolidBrush b = new SolidBrush(Color.Black))
+                        g.DrawString("像素直通 4321", f, b, 20, 50);
+                }
+                int w, h;
+                byte[] px = Ocr.PixelsOf(img, out w, out h);
+                img.Dispose();
+                if (px == null || px.Length != w * h * 4) return "像素长度不对：" + (px == null ? "null" : px.Length.ToString());
+                string err;
+                string txt = Ocr.RecognizePixels(px, w, h, out err);
+                if (txt == null) return "识别失败：" + err;
+                if (txt.IndexOf("4321") < 0) return "没认出关键数字：" + txt;
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 

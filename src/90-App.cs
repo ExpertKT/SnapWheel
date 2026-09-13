@@ -89,6 +89,9 @@ namespace SnapWheel
                 }
                 catch { }
 
+            // 取字（OCR）引擎在后台焐热：第一次真用的时候就不用等引擎激活那几百毫秒
+            Ocr.WarmUpAsync();
+
             if (_settings.ShowWheelOnStart)
             {
                 // 开机一律把轮盘**展开**（带开启动画）。
