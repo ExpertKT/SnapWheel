@@ -60,8 +60,9 @@ namespace SnapWheel
         const int IdxBg = 5 + 4;             // 颜色点占 5..8
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
-        const int IdxUndo = IdxBg + 3;
-        const int BtnCount = IdxBg + 4;
+        const int IdxOcr = IdxBg + 3;        // 取字（OCR）
+        const int IdxUndo = IdxBg + 4;
+        const int BtnCount = IdxBg + 5;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -415,6 +416,16 @@ namespace SnapWheel
                             }
                             break;
                         }
+                    case IdxOcr:        // 取字：一个"字"比任何图标都好认
+                        using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
+                        using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
+                        {
+                            StringFormat sf = new StringFormat();
+                            sf.Alignment = StringAlignment.Center;
+                            sf.LineAlignment = StringAlignment.Center;
+                            g.DrawString("字", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
+                        }
+                        break;
                     default:     // 撤销
                         using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb(110, 255, 255, 255), 2f * _k))
                         {
@@ -467,7 +478,7 @@ namespace SnapWheel
         void PaintIntroPanel(Graphics g)
         {
             if (!_annotHint) return;
-            int w = (int)(440 * _k), h = (int)(252 * _k);
+            int w = (int)(440 * _k), h = (int)(292 * _k);
             RectangleF sb = _hasSel ? SelBounds() : new RectangleF(_vs.Width / 2f - 200 * _k, _vs.Height / 2f - 130 * _k, 400 * _k, 260 * _k);
             int x = (int)(sb.Left + (sb.Width - w) / 2f);
             int y = (int)(sb.Top + Math.Max(20 * _k, (sb.Height - h) / 2f));
@@ -494,7 +505,8 @@ namespace SnapWheel
                 "②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T",
                 "      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销",
                 "      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉",
-                "③  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
+                "③  工具条上的「字」= 取字（OCR）：把框里的文字认出来并复制",
+                "④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
             };
             int ly = y + pad + (int)(34 * _k);
             using (Font fl = new Font("Microsoft YaHei UI", 10f * _k))
@@ -541,6 +553,7 @@ namespace SnapWheel
                     else if (i == IdxBg) { _textBg = !_textBg; SaveTextBg(); }
                     else if (i == IdxSizeDown) { if (_sel != null) ResizeShape(_sel, -1f); else SetNextTextSize(_textSize - 2f); }
                     else if (i == IdxSizeUp) { if (_sel != null) ResizeShape(_sel, 1f); else SetNextTextSize(_textSize + 2f); }
+                    else if (i == IdxOcr) { DoOcr(); return true; }
                     else Undo();
                     Invalidate();
                     return true;
@@ -684,6 +697,45 @@ namespace SnapWheel
         {
             if (_set == null) return;
             try { _set.TextBg = _textBg; _set.Save(); } catch { }
+        }
+
+        // 取字（OCR）：识别选区里的文字，弹结果框（自动复制到剪贴板）。
+        // 用**不做标注**的原图去识别 —— 箭头方框反而会干扰识别。
+        internal void DoOcr()
+        {
+            if (!_hasSel || _shot == null || _sz.Width < 4 || _sz.Height < 4) return;
+            EndText(true);
+            string err = null, txt = null;
+            Cursor prev = null;
+            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
+            try
+            {
+                using (Bitmap crop = CropSelection(false)) txt = Ocr.Recognize(crop, out err);
+            }
+            catch (Exception ex) { err = ex.Message; }
+            finally { try { Cursor = prev; } catch { } }
+
+            if (txt == null)
+            {
+                try
+                {
+                    MessageBox.Show(this, err ?? "识别失败了", "取字", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+                return;
+            }
+            try
+            {
+                bool wasTop = TopMost;
+                TopMost = false;
+                using (OcrForm of = new OcrForm(txt))
+                {
+                    of.TopMost = true;
+                    of.ShowDialog(this);
+                }
+                TopMost = wasTop;
+            }
+            catch (Exception ex) { Err.Log("OcrForm", ex); }
         }
 
         void Undo()

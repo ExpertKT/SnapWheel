@@ -36,6 +36,15 @@ function Ok($s)   { Write-Host "  [OK] $s" -ForegroundColor Green }
 function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red }
 
 if ($sources.Count -eq 0) { Bad "找不到源码: $codeDir"; exit 1 }
+
+# OCR 走 WinRT，需要 .NET 框架自带的 WinRT 桥接程序集（不是第三方依赖，系统里就有）
+$winrtRefs = @()
+foreach ($cand in @(
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll'),
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\System.Runtime.WindowsRuntime.dll'))) {
+    if (Test-Path $cand) { $winrtRefs = @("/r:$cand"); break }
+}
+if ($winrtRefs.Count -eq 0) { Write-Host "  [i] 没找到 System.Runtime.WindowsRuntime.dll —— OCR 会编译不进去" -ForegroundColor Yellow }
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
 # ---- 找 csc.exe（.NET Framework 自带的编译器，无需装 Visual Studio）----
@@ -71,8 +80,8 @@ Info ""
 # ---- 编译两条线 ----
 function Invoke-Build($define, $exeName, $label) {
     $target = Join-Path $out $exeName
-    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target") + $sources
-    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target") + $sources }
+    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target") + $winrtRefs + $sources
+    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target") + $winrtRefs + $sources }
     $log = & $csc @args 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $target)) {
         Bad "$label 编译失败"
@@ -126,7 +135,7 @@ if ($Test) {
         if ($define) { $a += "/define:$define" }
         if ($main)   { $a += "/main:$main" }
         $a += @("/out:$exe")
-        if ($main -or $define) { $a += $sources }
+        if ($main -or $define) { $a += $winrtRefs; $a += $sources }
         $a += (Join-Path $root "tests\$file")
         & $csc @a 2>&1 | Where-Object { $_ -match ': error' } | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
         if (-not (Test-Path $exe)) { Bad "$name 编译失败"; return }

@@ -295,7 +295,7 @@ namespace SnapWheel
             PlaceBottomLeft();
             _rendered = false;
             FreeBackdrop();                    // 尺寸/位置变了，玻璃底得重抓
-            if (Visible) { CaptureBackdrop(); Render(); }
+            if (Visible) { RequestBackdropAsync(); Render(); }
         }
 
 

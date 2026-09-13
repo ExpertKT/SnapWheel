@@ -774,6 +774,56 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 23. 取字（OCR）=================
+            Run("取字：中文逐字空格要拼回来，英文空格要留着", delegate
+            {
+                MethodInfo tighten = typeof(Ocr).GetMethod("TightenCjk", BindingFlags.NonPublic | BindingFlags.Static);
+                if (tighten == null) return "找不到 TightenCjk";
+                string a = (string)tighten.Invoke(null, new object[] { "本 周 报 告 已 发 出 ， 请 查 收 。" });
+                if (a != "本周报告已发出，请查收。") return "中文没拼回去：「" + a + "」";
+                string b = (string)tighten.Invoke(null, new object[] { "Deadline is Friday 5pm, please confirm." });
+                if (b != "Deadline is Friday 5pm, please confirm.") return "英文空格被吃了：「" + b + "」";
+                string c = (string)tighten.Invoke(null, new object[] { "交 付 时 间 ： 9 月 1 2 日 1 8 ： 00" });
+                if (c != "交付时间：9月12日18：00") return "中英数混排没弄对：「" + c + "」";
+                return null;
+            });
+
+            Run("取字：系统 OCR 真能把图上的字认出来（没装语言包就跳过）", delegate
+            {
+                if (!Ocr.Available)
+                {
+                    Console.WriteLine("       （这台机器没有 OCR 语言包，跳过：{0}）", Ocr.Why);
+                    return null;
+                }
+                Bitmap img = new Bitmap(700, 200, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(img))
+                {
+                    g.Clear(Color.White);
+                    using (Font f = new Font("Microsoft YaHei UI", 28f, FontStyle.Bold))
+                    using (SolidBrush b = new SolidBrush(Color.Black))
+                        g.DrawString("轮盘取字测试 OK 9527", f, b, 20, 50);
+                }
+                string err;
+                string txt = Ocr.Recognize(img, out err);
+                img.Dispose();
+                if (txt == null) return "识别失败：" + err;
+                if (txt.IndexOf("9527") < 0) return "没认出关键数字，结果是：" + txt;
+                return null;
+            });
+
+            Run("取字按钮：没框选时点它直接返回，不弹窗卡住", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = new OverlayForm(new Rectangle(0, 0, 400, 300), shot);
+                F(o, "_hasSel", false);
+                o.DoOcr();
+                Call(o, "PlaceToolbar");
+                Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
+                o.Dispose();
+                if (btns.Length != 14) return "工具条按钮数不对：" + btns.Length + "（应为 14 = 5 工具 + 4 颜色 + 文字底 + A- + A+ + 字 + 撤销）";
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 

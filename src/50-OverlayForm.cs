@@ -731,6 +731,14 @@ namespace SnapWheel
             if (_shot == null || !_hasSel) { Close(); return; }
             EndText(true);                       // 还在输入框里的文字也算数
             if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }   // 记住"文字底"的选择
+            Result = CropSelection(true);
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        // 按当前选区裁一张图（withAnnotations=false 时只裁原图）
+        internal Bitmap CropSelection(bool withAnnotations)
+        {
             int w = Math.Max(1, (int)Math.Round(_sz.Width));
             int h = Math.Max(1, (int)Math.Round(_sz.Height));
             Bitmap crop = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
@@ -742,12 +750,9 @@ namespace SnapWheel
                 g.RotateTransform(-_ang * 180f / (float)Math.PI);
                 g.TranslateTransform(-_c.X, -_c.Y);
                 g.DrawImageUnscaled(_shot, 0, 0);
-                // 标注用同一套坐标和同一个变换画进去 —— 屏幕上看到什么，存下来就是什么
-                DrawAnnotationShapes(g);
+                if (withAnnotations) DrawAnnotationShapes(g);   // 标注用同一套坐标和变换画进去 —— 所见即所得
             }
-            Result = crop;
-            DialogResult = DialogResult.OK;
-            Close();
+            return crop;
         }
 
         void Cancel() { Result = null; DialogResult = DialogResult.Cancel; Close(); }
