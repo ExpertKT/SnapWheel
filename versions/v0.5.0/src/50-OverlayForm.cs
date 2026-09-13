@@ -97,14 +97,49 @@ namespace SnapWheel
         // 右上角信息面板：可输入宽高、角度归零
         TextBox _inW, _inH;
         Label _lblAngle;
+        Panel _infoPanel;
+        int _panelW = 0, _panelH = 0;
+
+        // 当前该贴在"哪块屏幕"上：有选区就用选区中心那块，没有就用鼠标所在那块。
+        // 以前这里是整个虚拟屏幕（_vs）的右边缘 —— 副屏在右边时，虚拟屏幕的右边缘就是副屏，
+        // 这块面板和比例胶囊就会跑到副屏上去（用户报的"老 bug"）。
+        internal static Rectangle ScreenFor(Rectangle virtualScreen, Point clientPoint, bool hasPoint)
+        {
+            try
+            {
+                // 客户坐标 -> 屏幕坐标（浮层左上角 = 虚拟屏幕左上角），再问系统那块屏幕
+                Point screenPt = hasPoint ? new Point(virtualScreen.Left + clientPoint.X, virtualScreen.Top + clientPoint.Y)
+                                          : Cursor.Position;
+                return Screen.FromPoint(screenPt).Bounds;
+            }
+            catch { return virtualScreen; }
+        }
+
+        // 把"贴屏幕右上角"换算成浮层客户坐标（纯计算，方便测）
+        internal static Rectangle InfoPanelRect(Rectangle virtualScreen, Rectangle screen, int panelW, int panelH)
+        {
+            int margin = 20;
+            int x = (screen.Right - virtualScreen.Left) - panelW - margin;
+            int y = (screen.Top - virtualScreen.Top) + 18;
+            // 夹进这块屏幕里（别压出屏幕边）
+            int minX = screen.Left - virtualScreen.Left, minY = screen.Top - virtualScreen.Top;
+            int maxX = (screen.Right - virtualScreen.Left) - panelW, maxY = (screen.Bottom - virtualScreen.Top) - panelH;
+            if (x < minX) x = minX;
+            if (x > maxX) x = maxX;
+            if (y < minY) y = minY;
+            if (y > maxY) y = maxY;
+            return new Rectangle(x, y, panelW, panelH);
+        }
 
         void BuildInfoPanel()
         {
-            int px = _vs.Width - (int)(420 * _k);
-            Panel panel = new Panel();
-            panel.Bounds = new Rectangle(px, (int)(18 * _k), (int)(400 * _k), (int)(40 * _k));
-            panel.BackColor = Color.FromArgb(210, 18, 20, 24);
-            Controls.Add(panel);
+            _infoPanel = new Panel();
+            _panelW = (int)(400 * _k);
+            _panelH = (int)(40 * _k);
+            _infoPanel.BackColor = Color.FromArgb(210, 18, 20, 24);
+            Controls.Add(_infoPanel);
+            Panel panel = _infoPanel;
+            PlaceInfoPanel();
 
             Label l1 = new Label(); l1.Text = "宽"; l1.ForeColor = Color.White;
             l1.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
@@ -266,6 +301,39 @@ namespace SnapWheel
                     _chipW[i] = (int)g.MeasureString(labels[i], f).Width + (int)(22 * _k);
         }
 
+        // 把信息面板摆到"当前这块屏幕"的右上角；**被选区盖住时挪到选区外面**（上 → 下）。
+        // 关键是"没被盖住就别动"：拖选区的时候位置一直变，面板跟着跳会很晕。
+        void PlaceInfoPanel()
+        {
+            if (_infoPanel == null) return;
+            Point refPt = _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty;
+            Rectangle scr = ScreenFor(_vs, refPt, _hasSel);
+            Rectangle want = InfoPanelRect(_vs, scr, _panelW, _panelH);
+
+            if (_hasSel)
+            {
+                RectangleF sb = SelBounds();
+                Rectangle cur = new Rectangle(_infoPanel.Left, _infoPanel.Top, _panelW, _panelH);
+                // 现在的位置没被盖住 → 保持不变
+                if (cur.Width > 0 && !cur.IntersectsWith(Rectangle.Round(sb))) { _panelBounds = cur; return; }
+                int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top, cb = scr.Bottom - _vs.Top;
+                int above = (int)sb.Top - _panelH - 10;
+                int below = (int)sb.Bottom + 10;
+                if (above >= ct + 8) want.Y = above;
+                else if (below + _panelH <= cb - 8) want.Y = below;
+                else { _panelBounds = cur; return; }      // 上下都没地方：保持原位（配合工具条变淡，不至于太挡）
+                if (want.X + _panelW > scr.Right - _vs.Left - 12) want.X = scr.Right - _vs.Left - 12 - _panelW;
+                int minX = scr.Left - _vs.Left + 12;
+                if (want.X < minX) want.X = minX;
+            }
+            if (_infoPanel.Bounds != want)
+            {
+                _infoPanel.Bounds = want;
+                try { Invalidate(); } catch { }
+            }
+            _panelBounds = want;
+        }
+
         void PlaceChips()
         {
             string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
@@ -279,22 +347,26 @@ namespace SnapWheel
             int totalW = _toggleW + gap + chipsW;
 
             int rowX, rowY;
+            // 一直贴"当前这块屏幕"（而不是整个虚拟屏幕）—— 双屏时胶囊才不会卡在两屏中间
+            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
+            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;      // 这块屏幕在客户坐标里的左上角
+            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
             if (_hasSel)
             {
                 RectangleF bb = SelBounds();
                 rowX = (int)bb.Left;
                 rowY = (int)bb.Bottom + (int)(14 * _k);
-                if (rowY + h > _vs.Height - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
+                if (rowY + h > cb - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
             }
             else
             {
-                rowX = (_vs.Width - totalW) / 2;
-                rowY = _vs.Height - h - (int)(44 * _k);
+                rowX = cl + (scr.Width - totalW) / 2;
+                rowY = cb - h - (int)(44 * _k);
             }
-            if (rowX < 10) rowX = 10;
-            if (rowX + totalW > _vs.Width - 10) rowX = _vs.Width - 10 - totalW;
-            if (rowY < 10) rowY = 10;
-            if (rowY + h > _vs.Height - 10) rowY = _vs.Height - 10 - h;
+            if (rowX < cl + 10) rowX = cl + 10;
+            if (rowX + totalW > cr - 10) rowX = cr - 10 - totalW;
+            if (rowY < ct + 10) rowY = ct + 10;
+            if (rowY + h > cb - 10) rowY = cb - 10 - h;
 
             _toggleRect = new Rectangle(rowX, rowY, _toggleW, h);
             int x = rowX + _toggleW + gap;
@@ -312,6 +384,7 @@ namespace SnapWheel
         void DrawChips(Graphics g)
         {
             PlaceChips();
+            PlaceInfoPanel();
             if (_chips == null) return;
             using (Font f = new Font("Microsoft YaHei UI", 10f * _k))
             {
@@ -456,6 +529,7 @@ namespace SnapWheel
             PaintToolbar(g, 255);
             PaintShapeSelection(g);
             PaintIntroPanel(g);
+            PaintOcrBusy(g);
             DrawChips(g);
         }
 

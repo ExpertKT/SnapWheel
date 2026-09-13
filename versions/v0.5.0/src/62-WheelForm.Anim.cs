@@ -174,9 +174,12 @@ namespace SnapWheel
             float x = (_introT - start) / span;
             if (x <= 0f) return 0f;
             if (x >= 1f) return 1f;
-            // 每个元素自己用 easeOut：一进窗口就动起来，落点又是缓的
-            float u2 = 1f - x;
-            return 1f - u2 * u2 * u2;
+            // 每个元素自己的过渡曲线。
+            // 原来这里是 easeOutCubic（1-(1-x)^3）：一进窗口就窜出去 —— 按 66 帧算，
+            // 头两帧每帧要走十几像素，后面几帧几乎不动，看起来就是"啪一下到位、然后爬"；
+            // 而图片是缓缓滑进来的，于是万能键/按钮/胶囊这几样就显得"帧率更低"。
+            // 换成 smoothstep：**窗口和总时长一个字没动**，只把头尾放缓、把位移摊匀。
+            return x * x * (3f - 2f * x);
         }
 
 

@@ -139,6 +139,10 @@ namespace SnapWheel
         }
 
         // ---------- 工具条布局 ----------
+        // 原则：**优先放在选区外面**，别压住用户正要截的内容。
+        // 以前只有"下面放不下就翻到上面"，再放不下就被夹到边距里 —— 选区一大就压在截图上了。
+        int _toolAlpha = 255;        // 鼠标不在附近时自动变淡（不挡内容），靠近就完全不透明
+
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
@@ -146,11 +150,30 @@ namespace SnapWheel
             int total = n * bw + (n - 1) * gp + gp * 2;
             int h = bh + gp * 2;
             RectangleF sb = SelBounds();
-            int x = (int)Math.Max(8, sb.Left);
-            int y = (int)(sb.Bottom + 12);
-            if (y + h > _vs.Height - 8) y = (int)(sb.Top - h - 12);      // 下面放不下就翻到上面
-            if (y < 8) y = 8;
-            if (x + total > _vs.Width - 8) x = Math.Max(8, _vs.Width - 8 - total);
+
+            // 按"当前这块屏幕"来算（多屏时别摆到别的屏去）
+            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
+            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;
+            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
+
+            int x = (int)Math.Max(cl + 8, sb.Left);
+            if (x + total > cr - 8) x = Math.Max(cl + 8, cr - 8 - total);
+
+            int below = (int)sb.Bottom + 12;          // 选区下方（外面）
+            int above = (int)sb.Top - h - 12;         // 选区上方（外面）
+            int y;
+            if (below + h <= cb - 8) y = below;
+            else if (above >= ct + 8) y = above;
+            else
+            {
+                // 上下都放不下（选区几乎占满屏幕）：挑"外面空一点"的那一侧，
+                // 实在没地方才允许压一点，并且配合下面的自动变淡，不至于挡住看不清
+                int roomAbove = (int)sb.Top - ct - 8;
+                int roomBelow = cb - 8 - (int)sb.Bottom;
+                y = (roomBelow >= roomAbove) ? (cb - 8 - h) : (ct + 8);
+            }
+            if (y < ct + 8) y = ct + 8;
+            if (y + h > cb - 8) y = cb - 8 - h;
 
             // 别压住左下角那个「比例」按钮（选区别在左下角时正好会撞上）
             Rectangle avoid = _toggleRect;
@@ -158,8 +181,8 @@ namespace SnapWheel
             if (new Rectangle(x, y, total, h).IntersectsWith(avoid))
             {
                 int up = avoid.Top - h - 6;
-                y = (up >= 8) ? up : Math.Min(_vs.Height - 8 - h, avoid.Bottom + 6);
-                if (y < 8) y = 8;
+                y = (up >= ct + 8) ? up : Math.Min(cb - 8 - h, avoid.Bottom + 6);
+                if (y < ct + 8) y = ct + 8;
             }
 
             _toolRect = new Rectangle(x, y, total, h);
@@ -169,6 +192,26 @@ namespace SnapWheel
         }
 
         bool ToolbarVisible() { return _hasSel && _sz.Width > 20 && _sz.Height > 20; }
+
+        // 鼠标离工具条远就变淡（不挡截图），靠近就恢复不透明。
+        // 只做"远/近"两档、阈值给足余量，不做连续渐变 —— 免得看着晃。
+        void UpdateToolAlpha()
+        {
+            if (_toolRect.Width == 0) { _toolAlpha = 255; return; }
+            try
+            {
+                Point cp = PointToClient(Cursor.Position);
+                int dx = 0, dy = 0;
+                if (cp.X < _toolRect.Left) dx = _toolRect.Left - cp.X;
+                else if (cp.X > _toolRect.Right) dx = cp.X - _toolRect.Right;
+                if (cp.Y < _toolRect.Top) dy = _toolRect.Top - cp.Y;
+                else if (cp.Y > _toolRect.Bottom) dy = cp.Y - _toolRect.Bottom;
+                int d = (int)Math.Sqrt(dx * dx + dy * dy);
+                int want = (d < 90) ? 255 : 165;
+                if (want != _toolAlpha) _toolAlpha = want;
+            }
+            catch { _toolAlpha = 255; }
+        }
 
         // ---------- 画标注内容（预览与合成共用） ----------
         void DrawAnnotationShapes(Graphics g)

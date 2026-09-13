@@ -102,8 +102,11 @@ namespace SnapWheel
                    " offset=" + _offset.ToString("0.0") + "/" + _targetOffset.ToString("0.0") +
                    " hover=" + _hover + " 放大=" + _enlarged + " peek=" + _peekIndex +
                    " 菜单=" + _menuOpen + " intro=" + _intro + " 收起中=" + _collapsing + " 已收起=" + _collapsed +
-                   " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0);
+                   " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0) +
+                   " 拖出=" + (_dragOutItem != null ? "进行中" : "无") + (_lastDragInfo.Length > 0 ? " 上次【" + _lastDragInfo + "】" : "");
         }
+
+        string _lastDragInfo = "";      // 上一次拖出去的结果（只给日志看：格式 / 目标有没有接收）
 
 
         void RenderCore()

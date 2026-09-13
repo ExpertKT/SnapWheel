@@ -7,7 +7,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![version](https://img.shields.io/badge/version-v0.5.0-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-158%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-188%20KB-lightgrey?style=flat-square)
 
 <p align="center">
   <img src="docs/wheel.png" width="330" alt="SnapWheel">
@@ -19,7 +19,7 @@
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 158 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 188 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
 ## 为什么用它
 

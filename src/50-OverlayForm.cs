@@ -301,13 +301,31 @@ namespace SnapWheel
                     _chipW[i] = (int)g.MeasureString(labels[i], f).Width + (int)(22 * _k);
         }
 
-        // 把信息面板摆到"当前这块屏幕"的右上角（选区换屏时会跟着挪）
+        // 把信息面板摆到"当前这块屏幕"的右上角；**被选区盖住时挪到选区外面**（上 → 下）。
+        // 关键是"没被盖住就别动"：拖选区的时候位置一直变，面板跟着跳会很晕。
         void PlaceInfoPanel()
         {
             if (_infoPanel == null) return;
             Point refPt = _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty;
             Rectangle scr = ScreenFor(_vs, refPt, _hasSel);
             Rectangle want = InfoPanelRect(_vs, scr, _panelW, _panelH);
+
+            if (_hasSel)
+            {
+                RectangleF sb = SelBounds();
+                Rectangle cur = new Rectangle(_infoPanel.Left, _infoPanel.Top, _panelW, _panelH);
+                // 现在的位置没被盖住 → 保持不变
+                if (cur.Width > 0 && !cur.IntersectsWith(Rectangle.Round(sb))) { _panelBounds = cur; return; }
+                int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top, cb = scr.Bottom - _vs.Top;
+                int above = (int)sb.Top - _panelH - 10;
+                int below = (int)sb.Bottom + 10;
+                if (above >= ct + 8) want.Y = above;
+                else if (below + _panelH <= cb - 8) want.Y = below;
+                else { _panelBounds = cur; return; }      // 上下都没地方：保持原位（配合工具条变淡，不至于太挡）
+                if (want.X + _panelW > scr.Right - _vs.Left - 12) want.X = scr.Right - _vs.Left - 12 - _panelW;
+                int minX = scr.Left - _vs.Left + 12;
+                if (want.X < minX) want.X = minX;
+            }
             if (_infoPanel.Bounds != want)
             {
                 _infoPanel.Bounds = want;

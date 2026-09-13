@@ -20,7 +20,7 @@ namespace SnapWheel
     //   选中一个图元后：拖动 = 移动，滚轮 = 改字号（文字）/ 粗细（其它），Del = 删除
     partial class OverlayForm
     {
-        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4 }
+        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4, Ocr = 5 }
 
         class Shape
         {
@@ -57,12 +57,11 @@ namespace SnapWheel
         const int BtnW = 34;                 // 都会被 _k 缩放
         const int BtnH = 30;
         const int Gap = 6;
-        const int IdxBg = 5 + 4;             // 颜色点占 5..8
+        const int IdxBg = 6 + 4;             // 工具 6 个（选择/箭头/方框/马赛克/文字/取字），颜色点占 6..9
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
-        const int IdxOcr = IdxBg + 3;        // 取字（OCR）
-        const int IdxUndo = IdxBg + 4;
-        const int BtnCount = IdxBg + 5;
+        const int IdxUndo = IdxBg + 3;
+        const int BtnCount = IdxBg + 4;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -140,6 +139,10 @@ namespace SnapWheel
         }
 
         // ---------- 工具条布局 ----------
+        // 原则：**优先放在选区外面**，别压住用户正要截的内容。
+        // 以前只有"下面放不下就翻到上面"，再放不下就被夹到边距里 —— 选区一大就压在截图上了。
+        int _toolAlpha = 255;        // 鼠标不在附近时自动变淡（不挡内容），靠近就完全不透明
+
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
@@ -147,11 +150,30 @@ namespace SnapWheel
             int total = n * bw + (n - 1) * gp + gp * 2;
             int h = bh + gp * 2;
             RectangleF sb = SelBounds();
-            int x = (int)Math.Max(8, sb.Left);
-            int y = (int)(sb.Bottom + 12);
-            if (y + h > _vs.Height - 8) y = (int)(sb.Top - h - 12);      // 下面放不下就翻到上面
-            if (y < 8) y = 8;
-            if (x + total > _vs.Width - 8) x = Math.Max(8, _vs.Width - 8 - total);
+
+            // 按"当前这块屏幕"来算（多屏时别摆到别的屏去）
+            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
+            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;
+            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
+
+            int x = (int)Math.Max(cl + 8, sb.Left);
+            if (x + total > cr - 8) x = Math.Max(cl + 8, cr - 8 - total);
+
+            int below = (int)sb.Bottom + 12;          // 选区下方（外面）
+            int above = (int)sb.Top - h - 12;         // 选区上方（外面）
+            int y;
+            if (below + h <= cb - 8) y = below;
+            else if (above >= ct + 8) y = above;
+            else
+            {
+                // 上下都放不下（选区几乎占满屏幕）：挑"外面空一点"的那一侧，
+                // 实在没地方才允许压一点，并且配合下面的自动变淡，不至于挡住看不清
+                int roomAbove = (int)sb.Top - ct - 8;
+                int roomBelow = cb - 8 - (int)sb.Bottom;
+                y = (roomBelow >= roomAbove) ? (cb - 8 - h) : (ct + 8);
+            }
+            if (y < ct + 8) y = ct + 8;
+            if (y + h > cb - 8) y = cb - 8 - h;
 
             // 别压住左下角那个「比例」按钮（选区别在左下角时正好会撞上）
             Rectangle avoid = _toggleRect;
@@ -159,8 +181,8 @@ namespace SnapWheel
             if (new Rectangle(x, y, total, h).IntersectsWith(avoid))
             {
                 int up = avoid.Top - h - 6;
-                y = (up >= 8) ? up : Math.Min(_vs.Height - 8 - h, avoid.Bottom + 6);
-                if (y < 8) y = 8;
+                y = (up >= ct + 8) ? up : Math.Min(cb - 8 - h, avoid.Bottom + 6);
+                if (y < ct + 8) y = ct + 8;
             }
 
             _toolRect = new Rectangle(x, y, total, h);
@@ -170,6 +192,26 @@ namespace SnapWheel
         }
 
         bool ToolbarVisible() { return _hasSel && _sz.Width > 20 && _sz.Height > 20; }
+
+        // 鼠标离工具条远就变淡（不挡截图），靠近就恢复不透明。
+        // 只做"远/近"两档、阈值给足余量，不做连续渐变 —— 免得看着晃。
+        void UpdateToolAlpha()
+        {
+            if (_toolRect.Width == 0) { _toolAlpha = 255; return; }
+            try
+            {
+                Point cp = PointToClient(Cursor.Position);
+                int dx = 0, dy = 0;
+                if (cp.X < _toolRect.Left) dx = _toolRect.Left - cp.X;
+                else if (cp.X > _toolRect.Right) dx = cp.X - _toolRect.Right;
+                if (cp.Y < _toolRect.Top) dy = _toolRect.Top - cp.Y;
+                else if (cp.Y > _toolRect.Bottom) dy = cp.Y - _toolRect.Bottom;
+                int d = (int)Math.Sqrt(dx * dx + dy * dy);
+                int want = (d < 90) ? 255 : 165;
+                if (want != _toolAlpha) _toolAlpha = want;
+            }
+            catch { _toolAlpha = 255; }
+        }
 
         // ---------- 画标注内容（预览与合成共用） ----------
         void DrawAnnotationShapes(Graphics g)
@@ -217,6 +259,17 @@ namespace SnapWheel
                         }
                         if (s.Cache == null) break;
                         g.DrawImageUnscaled(s.Cache, r.Left, r.Top);
+                        break;
+                    }
+                case AnnotKind.Ocr:
+                    {
+                        // 取字时拖出来的框：只是"要认哪一块"的示意，不会画进图里
+                        RectangleF r = RectOf(s.A, s.B);
+                        using (Pen p = new Pen(Color.FromArgb(245, 166, 35), 1.8f * _k))
+                        {
+                            p.DashStyle = DashStyle.Dash;
+                            g.DrawRectangle(p, r.X, r.Y, r.Width, r.Height);
+                        }
                         break;
                     }
                 case AnnotKind.Text:
@@ -310,7 +363,7 @@ namespace SnapWheel
             for (int i = 0; i < _toolBtns.Length; i++)
             {
                 Rectangle r = _toolBtns[i];
-                bool isTool = i < 5;
+                bool isTool = i < 6;
                 bool sel = isTool && ((AnnotKind)i == _tool);
                 if (sel || i == _toolHover)
                 {
@@ -320,10 +373,10 @@ namespace SnapWheel
                 }
 
                 Color ic = Color.White;
-                if (i >= 5 && i < 5 + AnnotColors.Length)
+                if (i >= 6 && i < 6 + AnnotColors.Length)
                 {
                     // 颜色点：当前色描粗白边；其余也描一圈细边 —— 黑点在深色工具条上不然看不见
-                    int ci = i - 5;
+                    int ci = i - 6;
                     bool cur = (_annotColor.ToArgb() == AnnotColors[ci].ToArgb());
                     int d = (int)(15 * _k);
                     Rectangle cr = new Rectangle(r.X + (r.Width - d) / 2, r.Y + (r.Height - d) / 2, d, d);
@@ -416,7 +469,7 @@ namespace SnapWheel
                             }
                             break;
                         }
-                    case IdxOcr:        // 取字：一个"字"比任何图标都好认
+                    case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
                         {
@@ -505,7 +558,8 @@ namespace SnapWheel
                 "②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T",
                 "      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销",
                 "      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉",
-                "③  工具条上的「字」= 取字（OCR）：把框里的文字认出来并复制",
+                "③  选「字」工具（或按 O）拖一个框圈住文字 = 取字，框越小越准；",
+                "      取字窗口里还能一键翻译成中文/英文",
                 "④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
             };
             int ly = y + pad + (int)(34 * _k);
@@ -548,12 +602,12 @@ namespace SnapWheel
                 for (int i = 0; i < _toolBtns.Length; i++)
                 {
                     if (!_toolBtns[i].Contains(e.Location)) continue;
-                    if (i < 5) { EndText(true); _tool = (AnnotKind)i; }
-                    else if (i < 5 + AnnotColors.Length) { _annotColor = AnnotColors[i - 5]; }
+                    if (i < 6) { EndText(true); _tool = (AnnotKind)i; }
+                    else if (i < 6 + AnnotColors.Length) { _annotColor = AnnotColors[i - 6]; }
                     else if (i == IdxBg) { _textBg = !_textBg; SaveTextBg(); }
                     else if (i == IdxSizeDown) { if (_sel != null) ResizeShape(_sel, -1f); else SetNextTextSize(_textSize - 2f); }
                     else if (i == IdxSizeUp) { if (_sel != null) ResizeShape(_sel, 1f); else SetNextTextSize(_textSize + 2f); }
-                    else if (i == IdxOcr) { DoOcr(); return true; }
+
                     else Undo();
                     Invalidate();
                     return true;
@@ -597,6 +651,18 @@ namespace SnapWheel
 
             if (_tool == AnnotKind.Text) { BeginText(e.Location); return true; }
 
+            if (_tool == AnnotKind.Ocr)
+            {
+                // 取字工具：拖一个框圈住要认的文字（框小=只是想认整块选区）
+                _drawing = new Shape();
+                _drawing.Kind = AnnotKind.Ocr;
+                _drawing.A = e.Location;
+                _drawing.B = e.Location;
+                SelectShape(null);
+                Invalidate();
+                return true;
+            }
+
             _drawing = new Shape();
             _drawing.Kind = _tool;
             _drawing.A = e.Location;
@@ -635,6 +701,14 @@ namespace SnapWheel
             if (_drawing == null) return false;
             Shape s = _drawing;
             _drawing = null;
+            if (s.Kind == AnnotKind.Ocr)
+            {
+                // 取字：不去动 _shapes（它不是标注，不该被画进成品图）
+                RectangleF rc = RectOf(s.A, s.B);
+                Invalidate();
+                DoOcrRegion(rc);
+                return true;
+            }
             RectangleF r = RectOf(s.A, s.B);
             bool ok = (s.Kind == AnnotKind.Arrow) || (r.Width >= 4 && r.Height >= 4);
             if (ok) { _shapes.Add(s); _annotHint = false; }
@@ -666,6 +740,7 @@ namespace SnapWheel
                 case Keys.R: _tool = AnnotKind.Rect; break;
                 case Keys.M: _tool = AnnotKind.Mosaic; break;
                 case Keys.T: _tool = AnnotKind.Text; break;
+                case Keys.O: _tool = AnnotKind.Ocr; break;      // O = 取字（OCR）
                 case Keys.B: _textBg = !_textBg; SaveTextBg(); break;
                 case Keys.OemOpenBrackets: ResizeShape(_sel, -1f); return true;
                 case Keys.OemCloseBrackets: ResizeShape(_sel, 1f); return true;
@@ -693,28 +768,100 @@ namespace SnapWheel
             return true;
         }
 
+        // "取字中…"的小提示：识别在后台跑，但得让用户看见"它在干活"（不显示的话还是像卡住）
+        void PaintOcrBusy(Graphics g)
+        {
+            if (!_ocrBusy) return;
+            string txt = "取字中…";
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Font f = new Font("Microsoft YaHei UI", 11f * _k, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(txt, f);
+                int pad = (int)(14 * _k);
+                int w = (int)sz.Width + pad * 2, h = (int)sz.Height + pad;
+                Rectangle box = new Rectangle(_vs.Width / 2 - w / 2, 24, w, h);
+                using (GraphicsPath bp = Gfx.Round(box, 9f * _k))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(238, 22, 24, 28)))
+                    g.FillPath(b, bp);
+                using (SolidBrush tb = new SolidBrush(Color.White))
+                    g.DrawString(txt, f, tb, box.X + pad, box.Y + pad / 2f);
+            }
+        }
+
         void SaveTextBg()
         {
             if (_set == null) return;
             try { _set.TextBg = _textBg; _set.Save(); } catch { }
         }
 
-        // 取字（OCR）：识别选区里的文字，弹结果框（自动复制到剪贴板）。
-        // 用**不做标注**的原图去识别 —— 箭头方框反而会干扰识别。
+        // 取字（OCR）：识别整块选区里的文字。
+        // 更准的用法是选「字」工具拖一个框（DoOcrRegion）—— 框小一点、只圈文字，识别率明显更好。
         internal void DoOcr()
         {
             if (!_hasSel || _shot == null || _sz.Width < 4 || _sz.Height < 4) return;
             EndText(true);
-            string err = null, txt = null;
-            Cursor prev = null;
-            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
+            Bitmap crop = null;
+            try { crop = CropSelection(false); } catch { }
+            if (crop != null) StartOcrAsync(crop);
+        }
+
+        // 拖出来的框里取字：从**原图**（不带标注）裁这一块去认，框越贴合文字越准
+        internal void DoOcrRegion(RectangleF rect)
+        {
+            if (!_hasSel || _shot == null) return;
+            Rectangle rc = ToRect(rect);
+            if (rc.Width < 10 || rc.Height < 10) { DoOcr(); return; }      // 只是点了一下：认整块选区
+            rc = Rectangle.Intersect(rc, new Rectangle(0, 0, _shot.Width, _shot.Height));
+            if (rc.Width < 4 || rc.Height < 4) return;
+            EndText(true);
             try
             {
-                using (Bitmap crop = CropSelection(false)) txt = Ocr.Recognize(crop, out err);
+                Bitmap crop = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(crop)) g.DrawImageUnscaled(_shot, -rc.Left, -rc.Top);
+                StartOcrAsync(crop);
             }
-            catch (Exception ex) { err = ex.Message; }
-            finally { try { Cursor = prev; } catch { } }
+            catch (Exception ex) { Err.Log("OcrCrop", ex); }
+        }
 
+        bool _ocrBusy = false;
+
+        // 取字丢到后台线程去做 —— 以前是同步跑的：界面整整卡 100~300ms、鼠标变等待圈、
+        // 还没有任何反馈，用户当然觉得"性能垃圾"。现在轮盘照常能用，识别完结果框自己弹出来。
+        void StartOcrAsync(Bitmap crop)
+        {
+            if (crop == null) return;
+            if (_ocrBusy) { try { crop.Dispose(); } catch { } return; }     // 上一次还没完，直接忽略这一次
+            _ocrBusy = true;
+
+            // 先在 UI 线程把像素拷出来：后台线程就完全不碰 GDI 位图了
+            byte[] px = null; int pw = 0, ph = 0;
+            try { px = Ocr.PixelsOf(crop, out pw, out ph); } catch { px = null; }
+            if (px == null) { try { crop.Dispose(); } catch { } _ocrBusy = false; return; }
+            try { crop.Dispose(); } catch { }        // 像素到手，位图就可以扔了
+
+            Invalidate();                            // 让"取字中…"立刻显示出来
+            byte[] data = px; int w = pw, h = ph;
+            System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
+            {
+                string err = null, txt = null;
+                try { txt = Ocr.RecognizePixels(data, w, h, out err); }
+                catch (Exception ex) { err = ex.Message; }
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate()
+                    {
+                        _ocrBusy = false;
+                        ShowOcrResult(txt, err);
+                    }));
+                }
+                catch { _ocrBusy = false; }
+            }));
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        void ShowOcrResult(string txt, string err)
+        {
             if (txt == null)
             {
                 try

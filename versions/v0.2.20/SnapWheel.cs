@@ -10,6 +10,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using System.Net;
+using System.Threading;
 
 namespace SnapWheel
 {
@@ -1100,7 +1102,10 @@ namespace SnapWheel
         public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
         public int CollapseSpeed = 150;       // 收起动画速度 %（默认"快"一档，收起要干脆）
         public bool NubSingle = false;        // 只用一个把手：左边那个点一下展开、再点一下收起（底部不占地方）
-        public bool DragOutAsFile = false;    // 拖出时是否同时提供"文件"格式（关掉就不会往桌面落地成文件）
+        // 拖出时要不要同时给"文件"格式。
+        // v0.4.8 曾把这里默认改成关，结果老用户拖到资源管理器 / 只吃文件的程序直接放不进去
+        // （"缩略图拖出去放不了"就是这么来的）—— 现在默认开，Rev<3 的老配置会被迁移回开。
+        public bool DragOutAsFile = true;
         public bool CheckUpdate = true;       // 启动时检查 GitHub 有没有新版本
         public bool NubHintDone = false;      // 把手用途提示是否已经自动展示过
         public bool AnnotHintDone = false;    // 截图标注（工具条）的首次提示是否已展示过
@@ -1189,7 +1194,16 @@ namespace SnapWheel
             // ---- 配置迁移 ----
             // 只补一个版本标记。默认值（例如"收起态默认关"）只影响「全新安装」，
             // 绝不覆盖老用户自己的选择 —— 上一版会强制改，把明明开着收起的人给关掉了。
-            s.Rev = 2;
+            //
+            // 唯一的例外（Rev<3）：v0.4.8 把"拖出也带文件格式"的默认改成了关，而老配置里没这一行，
+            // 于是升级后拖到资源管理器/桌面/某些 App 全部放不进去。这不是用户的"选择"，
+            // 是默认值改动的副作用，所以这里强制恢复成开。
+            bool migrated = false;
+            if (s.Rev < 3) { s.DragOutAsFile = true; migrated = true; }
+            s.Rev = 3;
+            // 迁移必须立刻落盘：不然只改了内存里的值，配置文件还是旧的（下次启动又会"迁移"一遍，
+            // 而且设置界面显示的还是旧值）。用户报的拖拽 bug 就是靠这条迁移修好的。
+            if (migrated) { try { s.Save(); } catch { } }
 
             return s;
         }
@@ -1300,7 +1314,10 @@ namespace SnapWheel
                 lines.Add("GuideSeenVersion=" + (GuideSeenVersion ?? ""));
                 lines.Add("TextBg=" + (TextBg ? "1" : "0"));
                 lines.Add("KeyActions=" + KeyActions);
-                Rev = 2;                       // 配置格式版本：写了它以后就不再被默认值迁移覆盖
+                // 配置格式版本：写了它以后就不再被默认值迁移覆盖（迁移逻辑见 Load）。
+                // 这里别写死数字 —— 之前写死 2，把 Load 里刚升到 3 的迁移标记又按回去了，
+                // 结果每次启动都重跑一遍迁移（而且"迁移没落盘"这类问题很难看出来）。
+                if (Rev < 3) Rev = 3;
                 lines.Add("Rev=" + Rev);
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
@@ -1517,14 +1534,49 @@ namespace SnapWheel
         // 右上角信息面板：可输入宽高、角度归零
         TextBox _inW, _inH;
         Label _lblAngle;
+        Panel _infoPanel;
+        int _panelW = 0, _panelH = 0;
+
+        // 当前该贴在"哪块屏幕"上：有选区就用选区中心那块，没有就用鼠标所在那块。
+        // 以前这里是整个虚拟屏幕（_vs）的右边缘 —— 副屏在右边时，虚拟屏幕的右边缘就是副屏，
+        // 这块面板和比例胶囊就会跑到副屏上去（用户报的"老 bug"）。
+        internal static Rectangle ScreenFor(Rectangle virtualScreen, Point clientPoint, bool hasPoint)
+        {
+            try
+            {
+                // 客户坐标 -> 屏幕坐标（浮层左上角 = 虚拟屏幕左上角），再问系统那块屏幕
+                Point screenPt = hasPoint ? new Point(virtualScreen.Left + clientPoint.X, virtualScreen.Top + clientPoint.Y)
+                                          : Cursor.Position;
+                return Screen.FromPoint(screenPt).Bounds;
+            }
+            catch { return virtualScreen; }
+        }
+
+        // 把"贴屏幕右上角"换算成浮层客户坐标（纯计算，方便测）
+        internal static Rectangle InfoPanelRect(Rectangle virtualScreen, Rectangle screen, int panelW, int panelH)
+        {
+            int margin = 20;
+            int x = (screen.Right - virtualScreen.Left) - panelW - margin;
+            int y = (screen.Top - virtualScreen.Top) + 18;
+            // 夹进这块屏幕里（别压出屏幕边）
+            int minX = screen.Left - virtualScreen.Left, minY = screen.Top - virtualScreen.Top;
+            int maxX = (screen.Right - virtualScreen.Left) - panelW, maxY = (screen.Bottom - virtualScreen.Top) - panelH;
+            if (x < minX) x = minX;
+            if (x > maxX) x = maxX;
+            if (y < minY) y = minY;
+            if (y > maxY) y = maxY;
+            return new Rectangle(x, y, panelW, panelH);
+        }
 
         void BuildInfoPanel()
         {
-            int px = _vs.Width - (int)(420 * _k);
-            Panel panel = new Panel();
-            panel.Bounds = new Rectangle(px, (int)(18 * _k), (int)(400 * _k), (int)(40 * _k));
-            panel.BackColor = Color.FromArgb(210, 18, 20, 24);
-            Controls.Add(panel);
+            _infoPanel = new Panel();
+            _panelW = (int)(400 * _k);
+            _panelH = (int)(40 * _k);
+            _infoPanel.BackColor = Color.FromArgb(210, 18, 20, 24);
+            Controls.Add(_infoPanel);
+            Panel panel = _infoPanel;
+            PlaceInfoPanel();
 
             Label l1 = new Label(); l1.Text = "宽"; l1.ForeColor = Color.White;
             l1.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
@@ -1686,6 +1738,39 @@ namespace SnapWheel
                     _chipW[i] = (int)g.MeasureString(labels[i], f).Width + (int)(22 * _k);
         }
 
+        // 把信息面板摆到"当前这块屏幕"的右上角；**被选区盖住时挪到选区外面**（上 → 下）。
+        // 关键是"没被盖住就别动"：拖选区的时候位置一直变，面板跟着跳会很晕。
+        void PlaceInfoPanel()
+        {
+            if (_infoPanel == null) return;
+            Point refPt = _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty;
+            Rectangle scr = ScreenFor(_vs, refPt, _hasSel);
+            Rectangle want = InfoPanelRect(_vs, scr, _panelW, _panelH);
+
+            if (_hasSel)
+            {
+                RectangleF sb = SelBounds();
+                Rectangle cur = new Rectangle(_infoPanel.Left, _infoPanel.Top, _panelW, _panelH);
+                // 现在的位置没被盖住 → 保持不变
+                if (cur.Width > 0 && !cur.IntersectsWith(Rectangle.Round(sb))) { _panelBounds = cur; return; }
+                int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top, cb = scr.Bottom - _vs.Top;
+                int above = (int)sb.Top - _panelH - 10;
+                int below = (int)sb.Bottom + 10;
+                if (above >= ct + 8) want.Y = above;
+                else if (below + _panelH <= cb - 8) want.Y = below;
+                else { _panelBounds = cur; return; }      // 上下都没地方：保持原位（配合工具条变淡，不至于太挡）
+                if (want.X + _panelW > scr.Right - _vs.Left - 12) want.X = scr.Right - _vs.Left - 12 - _panelW;
+                int minX = scr.Left - _vs.Left + 12;
+                if (want.X < minX) want.X = minX;
+            }
+            if (_infoPanel.Bounds != want)
+            {
+                _infoPanel.Bounds = want;
+                try { Invalidate(); } catch { }
+            }
+            _panelBounds = want;
+        }
+
         void PlaceChips()
         {
             string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
@@ -1699,22 +1784,26 @@ namespace SnapWheel
             int totalW = _toggleW + gap + chipsW;
 
             int rowX, rowY;
+            // 一直贴"当前这块屏幕"（而不是整个虚拟屏幕）—— 双屏时胶囊才不会卡在两屏中间
+            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
+            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;      // 这块屏幕在客户坐标里的左上角
+            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
             if (_hasSel)
             {
                 RectangleF bb = SelBounds();
                 rowX = (int)bb.Left;
                 rowY = (int)bb.Bottom + (int)(14 * _k);
-                if (rowY + h > _vs.Height - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
+                if (rowY + h > cb - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
             }
             else
             {
-                rowX = (_vs.Width - totalW) / 2;
-                rowY = _vs.Height - h - (int)(44 * _k);
+                rowX = cl + (scr.Width - totalW) / 2;
+                rowY = cb - h - (int)(44 * _k);
             }
-            if (rowX < 10) rowX = 10;
-            if (rowX + totalW > _vs.Width - 10) rowX = _vs.Width - 10 - totalW;
-            if (rowY < 10) rowY = 10;
-            if (rowY + h > _vs.Height - 10) rowY = _vs.Height - 10 - h;
+            if (rowX < cl + 10) rowX = cl + 10;
+            if (rowX + totalW > cr - 10) rowX = cr - 10 - totalW;
+            if (rowY < ct + 10) rowY = ct + 10;
+            if (rowY + h > cb - 10) rowY = cb - 10 - h;
 
             _toggleRect = new Rectangle(rowX, rowY, _toggleW, h);
             int x = rowX + _toggleW + gap;
@@ -1732,6 +1821,7 @@ namespace SnapWheel
         void DrawChips(Graphics g)
         {
             PlaceChips();
+            PlaceInfoPanel();
             if (_chips == null) return;
             using (Font f = new Font("Microsoft YaHei UI", 10f * _k))
             {
@@ -1876,6 +1966,7 @@ namespace SnapWheel
             PaintToolbar(g, 255);
             PaintShapeSelection(g);
             PaintIntroPanel(g);
+            PaintOcrBusy(g);
             DrawChips(g);
         }
 
@@ -2269,7 +2360,7 @@ namespace SnapWheel
     //   选中一个图元后：拖动 = 移动，滚轮 = 改字号（文字）/ 粗细（其它），Del = 删除
     partial class OverlayForm
     {
-        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4 }
+        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4, Ocr = 5 }
 
         class Shape
         {
@@ -2306,12 +2397,11 @@ namespace SnapWheel
         const int BtnW = 34;                 // 都会被 _k 缩放
         const int BtnH = 30;
         const int Gap = 6;
-        const int IdxBg = 5 + 4;             // 颜色点占 5..8
+        const int IdxBg = 6 + 4;             // 工具 6 个（选择/箭头/方框/马赛克/文字/取字），颜色点占 6..9
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
-        const int IdxOcr = IdxBg + 3;        // 取字（OCR）
-        const int IdxUndo = IdxBg + 4;
-        const int BtnCount = IdxBg + 5;
+        const int IdxUndo = IdxBg + 3;
+        const int BtnCount = IdxBg + 4;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -2389,6 +2479,10 @@ namespace SnapWheel
         }
 
         // ---------- 工具条布局 ----------
+        // 原则：**优先放在选区外面**，别压住用户正要截的内容。
+        // 以前只有"下面放不下就翻到上面"，再放不下就被夹到边距里 —— 选区一大就压在截图上了。
+        int _toolAlpha = 255;        // 鼠标不在附近时自动变淡（不挡内容），靠近就完全不透明
+
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
@@ -2396,11 +2490,30 @@ namespace SnapWheel
             int total = n * bw + (n - 1) * gp + gp * 2;
             int h = bh + gp * 2;
             RectangleF sb = SelBounds();
-            int x = (int)Math.Max(8, sb.Left);
-            int y = (int)(sb.Bottom + 12);
-            if (y + h > _vs.Height - 8) y = (int)(sb.Top - h - 12);      // 下面放不下就翻到上面
-            if (y < 8) y = 8;
-            if (x + total > _vs.Width - 8) x = Math.Max(8, _vs.Width - 8 - total);
+
+            // 按"当前这块屏幕"来算（多屏时别摆到别的屏去）
+            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
+            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;
+            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
+
+            int x = (int)Math.Max(cl + 8, sb.Left);
+            if (x + total > cr - 8) x = Math.Max(cl + 8, cr - 8 - total);
+
+            int below = (int)sb.Bottom + 12;          // 选区下方（外面）
+            int above = (int)sb.Top - h - 12;         // 选区上方（外面）
+            int y;
+            if (below + h <= cb - 8) y = below;
+            else if (above >= ct + 8) y = above;
+            else
+            {
+                // 上下都放不下（选区几乎占满屏幕）：挑"外面空一点"的那一侧，
+                // 实在没地方才允许压一点，并且配合下面的自动变淡，不至于挡住看不清
+                int roomAbove = (int)sb.Top - ct - 8;
+                int roomBelow = cb - 8 - (int)sb.Bottom;
+                y = (roomBelow >= roomAbove) ? (cb - 8 - h) : (ct + 8);
+            }
+            if (y < ct + 8) y = ct + 8;
+            if (y + h > cb - 8) y = cb - 8 - h;
 
             // 别压住左下角那个「比例」按钮（选区别在左下角时正好会撞上）
             Rectangle avoid = _toggleRect;
@@ -2408,8 +2521,8 @@ namespace SnapWheel
             if (new Rectangle(x, y, total, h).IntersectsWith(avoid))
             {
                 int up = avoid.Top - h - 6;
-                y = (up >= 8) ? up : Math.Min(_vs.Height - 8 - h, avoid.Bottom + 6);
-                if (y < 8) y = 8;
+                y = (up >= ct + 8) ? up : Math.Min(cb - 8 - h, avoid.Bottom + 6);
+                if (y < ct + 8) y = ct + 8;
             }
 
             _toolRect = new Rectangle(x, y, total, h);
@@ -2419,6 +2532,26 @@ namespace SnapWheel
         }
 
         bool ToolbarVisible() { return _hasSel && _sz.Width > 20 && _sz.Height > 20; }
+
+        // 鼠标离工具条远就变淡（不挡截图），靠近就恢复不透明。
+        // 只做"远/近"两档、阈值给足余量，不做连续渐变 —— 免得看着晃。
+        void UpdateToolAlpha()
+        {
+            if (_toolRect.Width == 0) { _toolAlpha = 255; return; }
+            try
+            {
+                Point cp = PointToClient(Cursor.Position);
+                int dx = 0, dy = 0;
+                if (cp.X < _toolRect.Left) dx = _toolRect.Left - cp.X;
+                else if (cp.X > _toolRect.Right) dx = cp.X - _toolRect.Right;
+                if (cp.Y < _toolRect.Top) dy = _toolRect.Top - cp.Y;
+                else if (cp.Y > _toolRect.Bottom) dy = cp.Y - _toolRect.Bottom;
+                int d = (int)Math.Sqrt(dx * dx + dy * dy);
+                int want = (d < 90) ? 255 : 165;
+                if (want != _toolAlpha) _toolAlpha = want;
+            }
+            catch { _toolAlpha = 255; }
+        }
 
         // ---------- 画标注内容（预览与合成共用） ----------
         void DrawAnnotationShapes(Graphics g)
@@ -2466,6 +2599,17 @@ namespace SnapWheel
                         }
                         if (s.Cache == null) break;
                         g.DrawImageUnscaled(s.Cache, r.Left, r.Top);
+                        break;
+                    }
+                case AnnotKind.Ocr:
+                    {
+                        // 取字时拖出来的框：只是"要认哪一块"的示意，不会画进图里
+                        RectangleF r = RectOf(s.A, s.B);
+                        using (Pen p = new Pen(Color.FromArgb(245, 166, 35), 1.8f * _k))
+                        {
+                            p.DashStyle = DashStyle.Dash;
+                            g.DrawRectangle(p, r.X, r.Y, r.Width, r.Height);
+                        }
                         break;
                     }
                 case AnnotKind.Text:
@@ -2559,7 +2703,7 @@ namespace SnapWheel
             for (int i = 0; i < _toolBtns.Length; i++)
             {
                 Rectangle r = _toolBtns[i];
-                bool isTool = i < 5;
+                bool isTool = i < 6;
                 bool sel = isTool && ((AnnotKind)i == _tool);
                 if (sel || i == _toolHover)
                 {
@@ -2569,10 +2713,10 @@ namespace SnapWheel
                 }
 
                 Color ic = Color.White;
-                if (i >= 5 && i < 5 + AnnotColors.Length)
+                if (i >= 6 && i < 6 + AnnotColors.Length)
                 {
                     // 颜色点：当前色描粗白边；其余也描一圈细边 —— 黑点在深色工具条上不然看不见
-                    int ci = i - 5;
+                    int ci = i - 6;
                     bool cur = (_annotColor.ToArgb() == AnnotColors[ci].ToArgb());
                     int d = (int)(15 * _k);
                     Rectangle cr = new Rectangle(r.X + (r.Width - d) / 2, r.Y + (r.Height - d) / 2, d, d);
@@ -2665,7 +2809,7 @@ namespace SnapWheel
                             }
                             break;
                         }
-                    case IdxOcr:        // 取字：一个"字"比任何图标都好认
+                    case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
                         {
@@ -2754,7 +2898,8 @@ namespace SnapWheel
                 "②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T",
                 "      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销",
                 "      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉",
-                "③  工具条上的「字」= 取字（OCR）：把框里的文字认出来并复制",
+                "③  选「字」工具（或按 O）拖一个框圈住文字 = 取字，框越小越准；",
+                "      取字窗口里还能一键翻译成中文/英文",
                 "④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
             };
             int ly = y + pad + (int)(34 * _k);
@@ -2797,12 +2942,12 @@ namespace SnapWheel
                 for (int i = 0; i < _toolBtns.Length; i++)
                 {
                     if (!_toolBtns[i].Contains(e.Location)) continue;
-                    if (i < 5) { EndText(true); _tool = (AnnotKind)i; }
-                    else if (i < 5 + AnnotColors.Length) { _annotColor = AnnotColors[i - 5]; }
+                    if (i < 6) { EndText(true); _tool = (AnnotKind)i; }
+                    else if (i < 6 + AnnotColors.Length) { _annotColor = AnnotColors[i - 6]; }
                     else if (i == IdxBg) { _textBg = !_textBg; SaveTextBg(); }
                     else if (i == IdxSizeDown) { if (_sel != null) ResizeShape(_sel, -1f); else SetNextTextSize(_textSize - 2f); }
                     else if (i == IdxSizeUp) { if (_sel != null) ResizeShape(_sel, 1f); else SetNextTextSize(_textSize + 2f); }
-                    else if (i == IdxOcr) { DoOcr(); return true; }
+
                     else Undo();
                     Invalidate();
                     return true;
@@ -2846,6 +2991,18 @@ namespace SnapWheel
 
             if (_tool == AnnotKind.Text) { BeginText(e.Location); return true; }
 
+            if (_tool == AnnotKind.Ocr)
+            {
+                // 取字工具：拖一个框圈住要认的文字（框小=只是想认整块选区）
+                _drawing = new Shape();
+                _drawing.Kind = AnnotKind.Ocr;
+                _drawing.A = e.Location;
+                _drawing.B = e.Location;
+                SelectShape(null);
+                Invalidate();
+                return true;
+            }
+
             _drawing = new Shape();
             _drawing.Kind = _tool;
             _drawing.A = e.Location;
@@ -2884,6 +3041,14 @@ namespace SnapWheel
             if (_drawing == null) return false;
             Shape s = _drawing;
             _drawing = null;
+            if (s.Kind == AnnotKind.Ocr)
+            {
+                // 取字：不去动 _shapes（它不是标注，不该被画进成品图）
+                RectangleF rc = RectOf(s.A, s.B);
+                Invalidate();
+                DoOcrRegion(rc);
+                return true;
+            }
             RectangleF r = RectOf(s.A, s.B);
             bool ok = (s.Kind == AnnotKind.Arrow) || (r.Width >= 4 && r.Height >= 4);
             if (ok) { _shapes.Add(s); _annotHint = false; }
@@ -2915,6 +3080,7 @@ namespace SnapWheel
                 case Keys.R: _tool = AnnotKind.Rect; break;
                 case Keys.M: _tool = AnnotKind.Mosaic; break;
                 case Keys.T: _tool = AnnotKind.Text; break;
+                case Keys.O: _tool = AnnotKind.Ocr; break;      // O = 取字（OCR）
                 case Keys.B: _textBg = !_textBg; SaveTextBg(); break;
                 case Keys.OemOpenBrackets: ResizeShape(_sel, -1f); return true;
                 case Keys.OemCloseBrackets: ResizeShape(_sel, 1f); return true;
@@ -2942,28 +3108,100 @@ namespace SnapWheel
             return true;
         }
 
+        // "取字中…"的小提示：识别在后台跑，但得让用户看见"它在干活"（不显示的话还是像卡住）
+        void PaintOcrBusy(Graphics g)
+        {
+            if (!_ocrBusy) return;
+            string txt = "取字中…";
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Font f = new Font("Microsoft YaHei UI", 11f * _k, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(txt, f);
+                int pad = (int)(14 * _k);
+                int w = (int)sz.Width + pad * 2, h = (int)sz.Height + pad;
+                Rectangle box = new Rectangle(_vs.Width / 2 - w / 2, 24, w, h);
+                using (GraphicsPath bp = Gfx.Round(box, 9f * _k))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(238, 22, 24, 28)))
+                    g.FillPath(b, bp);
+                using (SolidBrush tb = new SolidBrush(Color.White))
+                    g.DrawString(txt, f, tb, box.X + pad, box.Y + pad / 2f);
+            }
+        }
+
         void SaveTextBg()
         {
             if (_set == null) return;
             try { _set.TextBg = _textBg; _set.Save(); } catch { }
         }
 
-        // 取字（OCR）：识别选区里的文字，弹结果框（自动复制到剪贴板）。
-        // 用**不做标注**的原图去识别 —— 箭头方框反而会干扰识别。
+        // 取字（OCR）：识别整块选区里的文字。
+        // 更准的用法是选「字」工具拖一个框（DoOcrRegion）—— 框小一点、只圈文字，识别率明显更好。
         internal void DoOcr()
         {
             if (!_hasSel || _shot == null || _sz.Width < 4 || _sz.Height < 4) return;
             EndText(true);
-            string err = null, txt = null;
-            Cursor prev = null;
-            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
+            Bitmap crop = null;
+            try { crop = CropSelection(false); } catch { }
+            if (crop != null) StartOcrAsync(crop);
+        }
+
+        // 拖出来的框里取字：从**原图**（不带标注）裁这一块去认，框越贴合文字越准
+        internal void DoOcrRegion(RectangleF rect)
+        {
+            if (!_hasSel || _shot == null) return;
+            Rectangle rc = ToRect(rect);
+            if (rc.Width < 10 || rc.Height < 10) { DoOcr(); return; }      // 只是点了一下：认整块选区
+            rc = Rectangle.Intersect(rc, new Rectangle(0, 0, _shot.Width, _shot.Height));
+            if (rc.Width < 4 || rc.Height < 4) return;
+            EndText(true);
             try
             {
-                using (Bitmap crop = CropSelection(false)) txt = Ocr.Recognize(crop, out err);
+                Bitmap crop = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(crop)) g.DrawImageUnscaled(_shot, -rc.Left, -rc.Top);
+                StartOcrAsync(crop);
             }
-            catch (Exception ex) { err = ex.Message; }
-            finally { try { Cursor = prev; } catch { } }
+            catch (Exception ex) { Err.Log("OcrCrop", ex); }
+        }
 
+        bool _ocrBusy = false;
+
+        // 取字丢到后台线程去做 —— 以前是同步跑的：界面整整卡 100~300ms、鼠标变等待圈、
+        // 还没有任何反馈，用户当然觉得"性能垃圾"。现在轮盘照常能用，识别完结果框自己弹出来。
+        void StartOcrAsync(Bitmap crop)
+        {
+            if (crop == null) return;
+            if (_ocrBusy) { try { crop.Dispose(); } catch { } return; }     // 上一次还没完，直接忽略这一次
+            _ocrBusy = true;
+
+            // 先在 UI 线程把像素拷出来：后台线程就完全不碰 GDI 位图了
+            byte[] px = null; int pw = 0, ph = 0;
+            try { px = Ocr.PixelsOf(crop, out pw, out ph); } catch { px = null; }
+            if (px == null) { try { crop.Dispose(); } catch { } _ocrBusy = false; return; }
+            try { crop.Dispose(); } catch { }        // 像素到手，位图就可以扔了
+
+            Invalidate();                            // 让"取字中…"立刻显示出来
+            byte[] data = px; int w = pw, h = ph;
+            System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
+            {
+                string err = null, txt = null;
+                try { txt = Ocr.RecognizePixels(data, w, h, out err); }
+                catch (Exception ex) { err = ex.Message; }
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate()
+                    {
+                        _ocrBusy = false;
+                        ShowOcrResult(txt, err);
+                    }));
+                }
+                catch { _ocrBusy = false; }
+            }));
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        void ShowOcrResult(string txt, string err)
+        {
             if (txt == null)
             {
                 try
@@ -3366,6 +3604,153 @@ namespace SnapWheel
             return m.Invoke(null, new object[] { ms });
         }
 
+        // 直接把像素喂给 OCR：省掉"位图→PNG→再解码"这一趟来回。
+        // 这一步是给后台线程用的 —— 传进来的是已经拷好的 BGRA 字节，后台线程不碰任何 GDI 对象。
+        static object SoftwareBitmapFromPixels(byte[] bgra, int w, int h)
+        {
+            Type bufExt = typeof(System.WindowsRuntimeSystemExtensions).Assembly
+                .GetType("System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions");
+            if (bufExt == null) return null;
+            MethodInfo asBuffer = bufExt.GetMethod("AsBuffer", new Type[] { typeof(byte[]) });
+            if (asBuffer == null) return null;
+            object ibuf = asBuffer.Invoke(null, new object[] { bgra });
+
+            Type sbT = WinRT("Windows.Graphics.Imaging.SoftwareBitmap");
+            Type fmtT = WinRT("Windows.Graphics.Imaging.BitmapPixelFormat");
+            Type alphaT = WinRT("Windows.Graphics.Imaging.BitmapAlphaMode");
+            Type ibufT = WinRT("Windows.Storage.Streams.IBuffer");
+            if (sbT == null || fmtT == null || alphaT == null || ibufT == null) return null;
+            MethodInfo create = sbT.GetMethod("CreateCopyFromBuffer", new Type[] { ibufT, fmtT, typeof(int), typeof(int), alphaT });
+            if (create == null) return null;
+            object fmt = Enum.Parse(fmtT, "Bgra8");
+            object alpha = Enum.Parse(alphaT, "Premultiplied");
+            return create.Invoke(null, new object[] { ibuf, fmt, w, h, alpha });
+        }
+
+        // 把一张位图的像素拷成 BGRA 字节（在 UI 线程调用，之后可以安全地丢给后台线程）
+        public static byte[] PixelsOf(Bitmap bmp, out int w, out int h)
+        {
+            w = bmp.Width; h = bmp.Height;
+            Rectangle rc = new Rectangle(0, 0, w, h);
+            BitmapData d = bmp.LockBits(rc, ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+            try
+            {
+                int stride = d.Stride;
+                byte[] raw = new byte[Math.Abs(stride) * h];
+                System.Runtime.InteropServices.Marshal.Copy(d.Scan0, raw, 0, raw.Length);
+                // 去掉行尾填充，拼成紧凑的 w*4 每行（WinRT 那边要求连续）
+                byte[] packed = new byte[w * 4 * h];
+                for (int y = 0; y < h; y++)
+                    Buffer.BlockCopy(raw, y * Math.Abs(stride), packed, y * w * 4, w * 4);
+                return packed;
+            }
+            finally { bmp.UnlockBits(d); }
+        }
+
+        // 识别已经拷好的像素（后台线程可调）
+        public static string RecognizePixels(byte[] bgra, int w, int h, out string error)
+        {
+            error = null;
+            Probe();
+            if (_engine == null) { error = _why; return null; }
+            try
+            {
+                object sw = SoftwareBitmapFromPixels(bgra, w, h);
+                if (sw == null) { error = "这台系统不支持直接把像素交给 OCR"; return null; }
+                float wordH;
+                string txt = RecognizeSoftwareBitmap(sw, out error, out wordH);
+                if (txt == null) return null;
+
+                // 字太小就放大再认一遍 —— 这是准确率的关键。
+                // 实测（900x380 合成图，字符级准确率）：14px 的字在 1x 下只有 25%，放大 2 倍到 92%；
+                // 20px 是 28% -> 96%；连 32px 低对比度也是 13% -> 99%。屏幕截图里的正文多半就是
+                // 14~20px，所以"不准"基本都是这个原因。
+                // 判据两条，缺一不可：
+                //   · 量到了文字框高度且偏小（< 24px）→ 按高度算放大倍数
+                //   · 第一遍"认出来的字太少"（含什么都没认出来）→ 高度也不可信，直接上 2 倍
+                string bigger = null;
+                float k = 2f;
+                double area = (double)w * h;
+                if (area * k * k > 8.0e6) k = (float)Math.Sqrt(8.0e6 / area);
+                if (k < 1f) k = 1f;
+                if (k > 1.15f)
+                {
+                    if (k < 1.5f) k = 1.5f;
+                    if (k > 3f) k = 3f;
+                    int nw = (int)(w * k), nh = (int)(h * k);
+                    if (nw <= 10000 && nh <= 10000 && nw * nh < 40 * 1000 * 1000)
+                    {
+                        byte[] scaled = ScalePixels(bgra, w, h, nw, nh);
+                        if (scaled != null)
+                        {
+                            object sw2 = SoftwareBitmapFromPixels(scaled, nw, nh);
+                            if (sw2 != null)
+                            {
+                                string e2 = null; float h2;
+                                string t2 = RecognizeSoftwareBitmap(sw2, out e2, out h2);
+                                // 放大后认出的字更多就更可信（实测基本都更多）
+                                if (t2 != null) bigger = t2;
+                            }
+                        }
+                    }
+                }
+                return bigger ?? txt;
+            }
+            catch (Exception ex)
+            {
+                Exception real = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                error = real.Message;
+                try { Err.Log("Ocr", real); } catch { }
+                return null;
+            }
+        }
+
+        static int Chars(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 0;
+            for (int i = 0; i < s.Length; i++) if (!char.IsWhiteSpace(s[i])) n++;
+            return n;
+        }
+
+        // 像素放大（自己算，不用 GDI 位图 —— 这样后台线程完全不碰 GDI）。
+        // 双线性足够：OCR 要的是"字够大"，不是像素级完美。
+        // 放大像素：用 GDI+ 的高质量双三次（自己写的双线性更糊，低对比度文字会被糊掉 —— 实测差很多）。
+        // 这里在后台线程里**新建**位图、用完就扔，不碰任何别的线程的 GDI 对象，所以是安全的。
+        static byte[] ScalePixels(byte[] src, int w, int h, int nw, int nh)
+        {
+            try
+            {
+                using (Bitmap small = new Bitmap(w, h, PixelFormat.Format32bppPArgb))
+                {
+                    BitmapData d = small.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
+                    try
+                    {
+                        int stride = d.Stride;
+                        byte[] row = new byte[w * 4];
+                        for (int y = 0; y < h; y++)
+                        {
+                            Buffer.BlockCopy(src, y * w * 4, row, 0, w * 4);
+                            System.Runtime.InteropServices.Marshal.Copy(row, 0, (IntPtr)((long)d.Scan0 + (long)y * stride), w * 4);
+                        }
+                    }
+                    finally { small.UnlockBits(d); }
+
+                    using (Bitmap big = new Bitmap(nw, nh, PixelFormat.Format32bppPArgb))
+                    {
+                        using (Graphics g = Graphics.FromImage(big))
+                        {
+                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                            g.DrawImage(small, new Rectangle(0, 0, nw, nh));
+                        }
+                        int aw, ah;
+                        return PixelsOf(big, out aw, out ah);
+                    }
+                }
+            }
+            catch { return null; }
+        }
         // 识别一张图里的文字。成功返回文字（可能为空串 = 图上没字），失败返回 null 并给出 error
         public static string Recognize(Bitmap bmp, out string error)
         {
@@ -3392,13 +3777,24 @@ namespace SnapWheel
                 }
                 catch { }
 
+                // 首选：直接把像素交过去（省掉 PNG 编码/解码那 6~20ms）
+                int pw = 0, ph = 0;
+                byte[] px = null;
+                try { px = PixelsOf(work, out pw, out ph); } catch { px = null; }
+                if (own) { try { work.Dispose(); } catch { } }
+                if (px != null)
+                {
+                    string r = RecognizePixels(px, pw, ph, out error);
+                    if (r != null || error == null) return r;
+                    // 直接喂像素失败就退回老路（PNG）
+                }
+
                 byte[] png;
                 using (MemoryStream ms = new MemoryStream())
                 {
                     work.Save(ms, ImageFormat.Png);
                     png = ms.ToArray();
                 }
-                if (own) { try { work.Dispose(); } catch { } }
 
                 Type decT = WinRT("Windows.Graphics.Imaging.BitmapDecoder");
                 MethodInfo create = decT.GetMethod("CreateAsync", BindingFlags.Public | BindingFlags.Static, null, new Type[] { WinRT("Windows.Storage.Streams.IRandomAccessStream") }, null);
@@ -3406,13 +3802,31 @@ namespace SnapWheel
                 object decoder = Await(create.Invoke(null, new object[] { RandomAccessStreamOf(png) }), "Windows.Graphics.Imaging.BitmapDecoder", 15000);
                 MethodInfo getSb = decoder.GetType().GetMethod("GetSoftwareBitmapAsync", Type.EmptyTypes);   // 它有 4 个重载，必须指定"无参"那个
                 object sw = Await(getSb.Invoke(decoder, null), "Windows.Graphics.Imaging.SoftwareBitmap", 15000);
+                float mh;
+                return RecognizeSoftwareBitmap(sw, out error, out mh);
+            }
+            catch (Exception ex)
+            {
+                Exception real = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                error = real.Message;
+                try { Err.Log("Ocr", real); } catch { }
+                return null;
+            }
+        }
 
+        static string RecognizeSoftwareBitmap(object sw, out string error, out float medianWordHeight)
+        {
+            error = null;
+            medianWordHeight = 0f;
+            try
+            {
                 MethodInfo rec = _engine.GetType().GetMethod("RecognizeAsync", new Type[] { WinRT("Windows.Graphics.Imaging.SoftwareBitmap") });
                 object result = Await(rec.Invoke(_engine, new object[] { sw }), "Windows.Media.Ocr.OcrResult", 30000);
                 try { ((IDisposable)sw).Dispose(); } catch { }
 
-                // 按行拼（比整段 Text 更接近原文排版）
+                // 按行拼（比整段 Text 更接近原文排版），顺便量一下文字框高度（判断"字有多小"）
                 StringBuilder sb = new StringBuilder();
+                System.Collections.Generic.List<float> hs = new System.Collections.Generic.List<float>();
                 object lines = null;
                 PropertyInfo lp = result.GetType().GetProperty("Lines");
                 if (lp != null) lines = lp.GetValue(result, null);
@@ -3424,8 +3838,30 @@ namespace SnapWheel
                         PropertyInfo tp = line.GetType().GetProperty("Text");
                         object t = tp == null ? null : tp.GetValue(line, null);
                         if (t != null) sb.AppendLine(((string)t).TrimEnd());
+
+                        PropertyInfo wp = line.GetType().GetProperty("Words");
+                        object words = wp == null ? null : wp.GetValue(line, null);
+                        System.Collections.IEnumerable we = words as System.Collections.IEnumerable;
+                        if (we == null) continue;
+                        foreach (object word in we)
+                        {
+                            PropertyInfo bp = word.GetType().GetProperty("BoundingRect");
+                            object box = bp == null ? null : bp.GetValue(word, null);
+                            if (box == null) continue;
+                            PropertyInfo hp = box.GetType().GetProperty("Height");
+                            if (hp == null) continue;
+                            object hv = hp.GetValue(box, null);
+                            if (hv is float) hs.Add((float)hv);
+                            else if (hv is double) hs.Add((float)(double)hv);
+                        }
                     }
                 }
+                if (hs.Count > 0)
+                {
+                    hs.Sort();
+                    medianWordHeight = hs[hs.Count / 2];
+                }
+
                 string text = sb.ToString().Trim();
                 if (text.Length == 0)
                 {
@@ -3442,6 +3878,40 @@ namespace SnapWheel
                 return null;
             }
         }
+
+        // 开机后台热身：第一次取字经常要几百毫秒（引擎要激活），先在后台认一张小图把它焐热，
+        // 用户第一次真用的时候就是 20ms 级别了。失败就失败，不影响任何功能。
+        public static void WarmUpAsync()
+        {
+            try
+            {
+                System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
+                {
+                    try
+                    {
+                        if (!Available) return;
+                        using (Bitmap b = new Bitmap(240, 64, PixelFormat.Format32bppPArgb))
+                        {
+                            using (Graphics g = Graphics.FromImage(b))
+                            {
+                                g.Clear(Color.White);
+                                using (Font f = new Font("Microsoft YaHei UI", 14f))
+                                using (SolidBrush br = new SolidBrush(Color.Black))
+                                    g.DrawString("warm up 热身", f, br, 6, 6);
+                            }
+                            string e;
+                            Recognize(b, out e);
+                        }
+                    }
+                    catch { }
+                }));
+                th.IsBackground = true;
+                try { th.Priority = System.Threading.ThreadPriority.BelowNormal; } catch { }
+                th.Start();
+            }
+            catch { }
+        }
+
         static bool IsCjk(char c)
         {
             return (c >= 0x3000 && c <= 0x303F)     // CJK 标点
@@ -3469,6 +3939,167 @@ namespace SnapWheel
                     if (char.IsDigit(p) && char.IsDigit(n)) continue;
                 }
                 sb.Append(c);
+            }
+            return sb.ToString();
+        }
+    }
+}
+
+namespace SnapWheel
+{
+    // 翻译：把 OCR 出来的文字一键翻成中文/英文。
+    //
+    // 为什么用 MyMemory：它是少数"不要 API key"的接口，实测这台机器能通；
+    // Google 那个免费端点国内是 429/连不上。只发一个普通的 HTTPS GET，
+    // 不碰系统网络设置、不改代理；失败就把原因原样告诉用户，绝不假装成功。
+    static class Translate
+    {
+        const int MaxChunk = 420;      // 免费接口对单次请求长度有限制，长文切段
+        const int TimeoutMs = 9000;
+
+        static bool IsCjk(char c)
+        {
+            return (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF)
+                || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFF00 && c <= 0xFFEF);
+        }
+
+        // 中文占三成以上就当它是中文 -> 翻成英文；否则翻成中文
+        public static bool LooksChinese(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            int cjk = 0, total = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (char.IsWhiteSpace(c)) continue;
+                total++;
+                if (IsCjk(c)) cjk++;
+            }
+            return total > 0 && cjk * 10 >= total * 3;
+        }
+
+        public static string TargetLabel(string text) { return LooksChinese(text) ? "英文" : "中文"; }
+
+        // 成功返回译文；失败返回 null 并给出人话原因
+        public static string Run(string text, out string error)
+        {
+            error = null;
+            if (string.IsNullOrEmpty(text) || text.Trim().Length == 0) { error = "没有要翻译的文字"; return null; }
+            string src = LooksChinese(text) ? "zh-CN" : "en";
+            string dst = LooksChinese(text) ? "en" : "zh-CN";
+
+            StringBuilder outp = new StringBuilder();
+            string[] chunks = Split(text, MaxChunk);
+            for (int i = 0; i < chunks.Length; i++)
+            {
+                string one = One(chunks[i], src, dst, out error);
+                if (one == null) return null;
+                if (outp.Length > 0) outp.Append(LooksChinese(text) ? "\n" : "\n");
+                outp.Append(one.Trim());
+            }
+            return outp.ToString();
+        }
+
+        static string[] Split(string s, int max)
+        {
+            if (s.Length <= max) return new string[] { s };
+            System.Collections.Generic.List<string> parts = new System.Collections.Generic.List<string>();
+            int start = 0;
+            while (start < s.Length)
+            {
+                int len = Math.Min(max, s.Length - start);
+                // 尽量在换行/句号/空格处断开，别把句子切两半
+                if (start + len < s.Length)
+                {
+                    int cut = -1;
+                    for (int k = start + len; k > start + max / 2; k--)
+                    {
+                        char c = s[k - 1];
+                        if (c == '\n' || c == '。' || c == '！' || c == '？' || c == '.' || c == '!' || c == '?' || c == ' ') { cut = k; break; }
+                    }
+                    if (cut > start) len = cut - start;
+                }
+                parts.Add(s.Substring(start, len));
+                start += len;
+            }
+            return parts.ToArray();
+        }
+
+        static string One(string text, string src, string dst, out string error)
+        {
+            error = null;
+            try
+            {
+                // .NET Framework 默认只肯用 TLS 1.0/SSL3，现代接口一律要求 TLS 1.2 ——
+                // 不设这句就会报"未能创建 SSL/TLS 安全通道"（实测就是这个错）
+                try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
+                string url = "https://api.mymemory.translated.net/get?q=" + Uri.EscapeDataString(text) +
+                             "&langpair=" + Uri.EscapeDataString(src) + "%7C" + Uri.EscapeDataString(dst) + "&de=snapwheel@example.com";
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Timeout = TimeoutMs;
+                req.ReadWriteTimeout = TimeoutMs;
+                req.UserAgent = "SnapWheel/" + AppInfo.Version;
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                {
+                    string json = sr.ReadToEnd();
+                    string t = ExtractField(json, "translatedText");
+                    if (t == null) { error = "接口返回的内容看不懂（可能被限流了）"; return null; }
+                    if (t.IndexOf("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) >= 0)
+                    { error = "免费翻译额度用完了（MyMemory 限流），过一会儿再试"; return null; }
+                    return t;
+                }
+            }
+            catch (WebException wex)
+            {
+                error = "翻译接口连不上：" + (wex.Status == WebExceptionStatus.Timeout ? "超时" : wex.Message);
+                return null;
+            }
+            catch (Exception ex) { error = "翻译失败：" + ex.Message; return null; }
+        }
+
+        // 从 {"responseData":{"translatedText":"..."}} 里把那个字段抠出来（不引 JSON 库，
+        // 只需要一个字段：先找 key，再按 JSON 字符串规则解转义）
+        internal static string ExtractField(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int k = json.IndexOf("\"" + key + "\"", StringComparison.Ordinal);
+            if (k < 0) return null;
+            int colon = json.IndexOf(':', k);
+            if (colon < 0) return null;
+            int i = colon + 1;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            if (i >= json.Length || json[i] != '"') return null;
+            i++;
+            StringBuilder sb = new StringBuilder();
+            while (i < json.Length)
+            {
+                char c = json[i];
+                if (c == '\\' && i + 1 < json.Length)
+                {
+                    char n = json[i + 1];
+                    i += 2;
+                    switch (n)
+                    {
+                        case 'n': sb.Append('\n'); break;
+                        case 'r': sb.Append('\r'); break;
+                        case 't': sb.Append('\t'); break;
+                        case 'u':
+                            if (i + 3 < json.Length)
+                            {
+                                int code;
+                                if (int.TryParse(json.Substring(i, 4), System.Globalization.NumberStyles.HexNumber, null, out code))
+                                { sb.Append((char)code); i += 4; }
+                            }
+                            break;
+                        default: sb.Append(n); break;
+                    }
+                    continue;
+                }
+                if (c == '"') break;
+                sb.Append(c);
+                i++;
             }
             return sb.ToString();
         }
@@ -4327,8 +4958,11 @@ namespace SnapWheel
                    " offset=" + _offset.ToString("0.0") + "/" + _targetOffset.ToString("0.0") +
                    " hover=" + _hover + " 放大=" + _enlarged + " peek=" + _peekIndex +
                    " 菜单=" + _menuOpen + " intro=" + _intro + " 收起中=" + _collapsing + " 已收起=" + _collapsed +
-                   " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0);
+                   " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0) +
+                   " 拖出=" + (_dragOutItem != null ? "进行中" : "无") + (_lastDragInfo.Length > 0 ? " 上次【" + _lastDragInfo + "】" : "");
         }
+
+        string _lastDragInfo = "";      // 上一次拖出去的结果（只给日志看：格式 / 目标有没有接收）
 
 
         void RenderCore()
@@ -5356,9 +5990,12 @@ namespace SnapWheel
             float x = (_introT - start) / span;
             if (x <= 0f) return 0f;
             if (x >= 1f) return 1f;
-            // 每个元素自己用 easeOut：一进窗口就动起来，落点又是缓的
-            float u2 = 1f - x;
-            return 1f - u2 * u2 * u2;
+            // 每个元素自己的过渡曲线。
+            // 原来这里是 easeOutCubic（1-(1-x)^3）：一进窗口就窜出去 —— 按 66 帧算，
+            // 头两帧每帧要走十几像素，后面几帧几乎不动，看起来就是"啪一下到位、然后爬"；
+            // 而图片是缓缓滑进来的，于是万能键/按钮/胶囊这几样就显得"帧率更低"。
+            // 换成 smoothstep：**窗口和总时长一个字没动**，只把头尾放缓、把位移摊匀。
+            return x * x * (3f - 2f * x);
         }
 
 
@@ -6629,19 +7266,30 @@ namespace SnapWheel
         }
 
 
+        // 组装"拖出去"的载荷。抽成单独方法是为了能测到底给了哪些格式 ——
+        // v0.4.8 把"文件格式"默认关掉了，结果拖到资源管理器 / 只吃文件的程序直接放不进去，
+        // 用户报的"缩略图拖出去放不了"就是它。少给一个格式 = 少一半能被接收的地方。
+        internal DataObject BuildDragData(StoreItem it)
+        {
+            DataObject data = new DataObject();
+            string file = null;
+            try { file = _store.EnsureFile(it); } catch { }
+            // 图片格式：拖到微信 / Word / PS 这类接受图片的地方，直接就是一张图
+            try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { }
+            // 文件格式：拖到桌面 / 资源管理器 / 只认文件的程序全靠它
+            if (_settings.DragOutAsFile && file != null)
+            {
+                try { data.SetData(DataFormats.FileDrop, new string[] { file }); } catch { }
+            }
+            try { data.SetData(DragFmt, 1); } catch { }        // 标记成"轮盘自己的拖拽"，别当成外部导入
+            return data;
+        }
+
         void StartDragOut(int index)
         {
             if (index < 0 || index >= _store.Items.Count) return;
             StoreItem it = _store.Items[index];
-            string file = _store.EnsureFile(it);
-            DataObject data = new DataObject();
-            // 先给"图片"格式：拖到微信/Word/PS 这类接受图片的地方直接就是图，不会多出文件。
-            try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { }
-            // "文件"格式只在你需要时给（设置里可开）。给了它，拖到桌面/资源管理器就会落地成一个文件——
-            // 很多人误以为"拖到不支持的地方啥也没发生"，结果桌面上多出一张，所以默认关掉。
-            if (_settings.DragOutAsFile && file != null) data.SetData(DataFormats.FileDrop, new string[] { file });
-            else if (file == null) { try { data.SetData(DataFormats.Bitmap, true, it.Image); } catch { } }
-            try { data.SetData(DragFmt, 1); } catch { }        // 标记成“轮盘自己的拖拽”，别当成外部导入
+            DataObject data = BuildDragData(it);
 
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             _dragOutItem = it; _dragOutProg = 0f;
@@ -6662,6 +7310,14 @@ namespace SnapWheel
 
             bool taken = (eff != DragDropEffects.None) && !_returnedToWheel;
             bool returned = _returnedToWheel;
+            // 记下来给 [Frame] 日志用：下次"拖不出去"时，日志里能直接看出是没被接收还是被拦了
+            try
+            {
+                string[] fmts = data.GetFormats(false);
+                _lastDragInfo = "给了 " + fmts.Length + " 种格式(" + string.Join("/", fmts) + ") 结果=" + eff +
+                                (returned ? " 拖回了轮盘" : "") + (_settings.DragOutAsFile ? "" : " 未带文件格式");
+            }
+            catch { _lastDragInfo = "结果=" + eff; }
             if (!taken && !returned) NotifyAdminDragBlocked();
             _returnedToWheel = false;
             _dragOutItem = null;
@@ -7826,10 +8482,17 @@ namespace SnapWheel
 
 namespace SnapWheel
 {
-    // 取字（OCR）的结果框：可编辑的多行文本 + 一键复制。
-    // 打开时自动把结果放进剪贴板 —— 取字的目的就是"拿去用"，少一步是一步。
+    // 取字（OCR）的结果框：原文可编辑 + 一键翻译 + 各自可复制。
+    // 打开时自动把原文放进剪贴板 —— 取字的目的就是"拿去用"，少一步是一步。
     class OcrForm : Form
     {
+        readonly TextBox _src;
+        readonly TextBox _dst;
+        readonly RoundButton _tr;
+        readonly Label _trState;
+        bool _busy;
+        string _translated = "";
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
@@ -7863,8 +8526,8 @@ namespace SnapWheel
             MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(560, 380);
-            MinimumSize = new Size(360, 240);
+            ClientSize = new Size(620, 560);
+            MinimumSize = new Size(420, 380);
             SuspendLayout();
 
             Label head = new Label();
@@ -7872,64 +8535,161 @@ namespace SnapWheel
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.AutoSize = true;
-            head.Location = new Point(24, 18);
+            head.Location = new Point(24, 16);
             Controls.Add(head);
 
             Label sub = new Label();
             sub.Text = chars > 0
-                ? (copied ? "已复制到剪贴板，直接去粘贴就行（下面也能改）"
-                          : "下面就是识别结果，可以改完再复制（刚才没能写进剪贴板）")
+                ? (copied ? "原文已复制到剪贴板；要用译文点下面的「翻译」"
+                          : "下面就是识别结果，可以改完再复制")
                 : "换一块更清晰、字更大的区域再试试；倾斜或花哨的字体识别率会低一些";
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             sub.AutoSize = true;
-            sub.Location = new Point(27, 50);
+            sub.Location = new Point(27, 46);
             Controls.Add(sub);
 
-            TextBox box = new TextBox();
-            box.Multiline = true;
-            box.ScrollBars = ScrollBars.Both;
-            box.WordWrap = true;
-            box.Font = new Font("Microsoft YaHei UI", 11f);
-            box.BorderStyle = BorderStyle.FixedSingle;
-            box.BackColor = Color.White;
-            box.Location = new Point(24, 76);
-            box.Size = new Size(ClientSize.Width - 48, ClientSize.Height - 76 - 62);
-            box.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-            box.Text = text;
-            Controls.Add(box);
+            Label l1 = new Label();
+            l1.Text = "原文";
+            l1.ForeColor = Color.FromArgb(120, 124, 134);
+            l1.AutoSize = true;
+            l1.Location = new Point(24, 74);
+            Controls.Add(l1);
 
-            RoundButton copy = new RoundButton();
-            copy.Text = "复制并关闭";
-            copy.Size = new Size(126, 36);
-            copy.Fill = Color.FromArgb(0, 122, 204);
-            copy.FillHover = Color.FromArgb(0, 140, 232);
-            copy.TextColor = Color.White;
-            copy.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            copy.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            copy.Location = new Point(ClientSize.Width - 24 - 126, ClientSize.Height - 24 - 36);
-            copy.Click += new EventHandler(delegate(object o, EventArgs e2)
+            _src = new TextBox();
+            _src.Multiline = true;
+            _src.ScrollBars = ScrollBars.Both;
+            _src.WordWrap = true;
+            _src.Font = new Font("Microsoft YaHei UI", 11f);
+            _src.BorderStyle = BorderStyle.FixedSingle;
+            _src.BackColor = Color.White;
+            _src.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _src.Location = new Point(24, 94);
+            _src.Size = new Size(ClientSize.Width - 48, 170);
+            _src.Text = text;
+            Controls.Add(_src);
+
+            // 翻译
+            _tr = new RoundButton();
+            _tr.Text = chars > 0 ? ("翻译成" + Translate.TargetLabel(text)) : "翻译";
+            _tr.Size = new Size(132, 34);
+            _tr.Fill = Color.FromArgb(0, 122, 204);
+            _tr.FillHover = Color.FromArgb(0, 140, 232);
+            _tr.TextColor = Color.White;
+            _tr.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            _tr.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            _tr.Location = new Point(24, 274);
+            _tr.Click += new EventHandler(delegate(object o, EventArgs e2) { DoTranslate(); });
+            Controls.Add(_tr);
+
+            RoundButton copySrc = new RoundButton();
+            copySrc.Text = "复制原文";
+            copySrc.Size = new Size(102, 34);
+            copySrc.Fill = Color.FromArgb(238, 240, 245);
+            copySrc.FillHover = Color.FromArgb(226, 230, 238);
+            copySrc.TextColor = Color.FromArgb(60, 64, 74);
+            copySrc.Font = new Font("Microsoft YaHei UI", 10f);
+            copySrc.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            copySrc.Location = new Point(164, 274);
+            copySrc.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
-                try { Clipboard.SetText(box.Text); } catch { }
-                DialogResult = DialogResult.OK;
-                Close();
+                try { Clipboard.SetText(_src.Text); _trState.Text = "原文已复制"; } catch { }
             });
-            Controls.Add(copy);
-            AcceptButton = copy;
+            Controls.Add(copySrc);
+
+            _trState = new Label();
+            _trState.Text = "译文";
+            _trState.ForeColor = Color.FromArgb(120, 124, 134);
+            _trState.AutoSize = true;
+            _trState.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            _trState.Location = new Point(280, 284);
+            Controls.Add(_trState);
+
+            _dst = new TextBox();
+            _dst.Multiline = true;
+            _dst.ScrollBars = ScrollBars.Both;
+            _dst.WordWrap = true;
+            _dst.ReadOnly = true;
+            _dst.Font = new Font("Microsoft YaHei UI", 11f);
+            _dst.BorderStyle = BorderStyle.FixedSingle;
+            _dst.BackColor = Color.FromArgb(248, 249, 252);
+            _dst.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _dst.Location = new Point(24, 316);
+            _dst.Size = new Size(ClientSize.Width - 48, 170);
+            Controls.Add(_dst);
+
+            RoundButton copyDst = new RoundButton();
+            copyDst.Text = "复制译文";
+            copyDst.Size = new Size(102, 34);
+            copyDst.Fill = Color.FromArgb(238, 240, 245);
+            copyDst.FillHover = Color.FromArgb(226, 230, 238);
+            copyDst.TextColor = Color.FromArgb(60, 64, 74);
+            copyDst.Font = new Font("Microsoft YaHei UI", 10f);
+            copyDst.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            copyDst.Location = new Point(24, ClientSize.Height - 48);
+            copyDst.Click += new EventHandler(delegate(object o, EventArgs e2)
+            {
+                if (_translated.Length == 0) { _trState.Text = "还没翻译呢"; return; }
+                try { Clipboard.SetText(_translated); _trState.Text = "译文已复制"; } catch { }
+            });
+            Controls.Add(copyDst);
 
             RoundButton close = new RoundButton();
             close.Text = "关闭";
-            close.Size = new Size(88, 36);
-            close.Fill = Color.FromArgb(238, 240, 245);
-            close.FillHover = Color.FromArgb(226, 230, 238);
-            close.TextColor = Color.FromArgb(60, 64, 74);
-            close.Font = new Font("Microsoft YaHei UI", 10f);
+            close.Size = new Size(96, 36);
+            close.Fill = Color.FromArgb(0, 122, 204);
+            close.FillHover = Color.FromArgb(0, 140, 232);
+            close.TextColor = Color.White;
+            close.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
             close.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            close.Location = new Point(ClientSize.Width - 24 - 126 - 10 - 88, ClientSize.Height - 24 - 36);
-            close.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
+            close.Location = new Point(ClientSize.Width - 24 - 96, ClientSize.Height - 48);
+            close.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.OK; Close(); });
             Controls.Add(close);
+            AcceptButton = close;
             CancelButton = close;
 
             ResumeLayout();
+        }
+
+        // 翻译丢到后台线程去做：网络慢的时候窗口不能卡死（这就是"别做成鸡肋"的意思）
+        void DoTranslate()
+        {
+            if (_busy) return;
+            string text = _src.Text;
+            if (text.Trim().Length == 0) { _trState.Text = "没有要翻译的文字"; return; }
+            _busy = true;
+            _tr.Enabled = false;
+            _trState.Text = "翻译中…（用 MyMemory 免费接口，要联网）";
+            _dst.Text = "";
+            _translated = "";
+
+            string src = text;
+            Thread th = new Thread(new ThreadStart(delegate()
+            {
+                string err;
+                string result = Translate.Run(src, out err);
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate()
+                    {
+                        _busy = false;
+                        _tr.Enabled = true;
+                        if (result == null)
+                        {
+                            _trState.Text = err ?? "翻译失败";
+                            _dst.Text = "（翻译失败：" + (_trState.Text) + "）";
+                        }
+                        else
+                        {
+                            _translated = result;
+                            _dst.Text = result;
+                            _trState.Text = "译文（已可复制）";
+                        }
+                    }));
+                }
+                catch { }
+            }));
+            th.IsBackground = true;
+            th.Start();
         }
     }
 }
@@ -8013,11 +8773,16 @@ namespace SnapWheel
                 }
                 catch { }
 
+            // 取字（OCR）引擎在后台焐热：第一次真用的时候就不用等引擎激活那几百毫秒
+            Ocr.WarmUpAsync();
+
             if (_settings.ShowWheelOnStart)
             {
-                // 开了收起态：开机就只贴边待着（像贴边小球），点一下才拉出来
-                if (_settings.CollapseMode) _wheel.StartCollapsed();
-                else _wheel.ShowWheelWithIntro();
+                // 开机一律把轮盘**展开**（带开启动画）。
+                // 收起态是"用完自己收起来"的东西，不该让人一开机只看到屏幕边上一小条 ——
+                // 新用户会以为没启动，老用户也得先点一下才看得到内容。
+                // 收起功能没动：点关闭键（或长按它）照样能收成把手，自动隐藏也照旧。
+                _wheel.ShowWheelWithIntro();
             }
             else if (_settings.CollapseMode)
             {
