@@ -870,6 +870,10 @@ namespace SnapWheel
                 Settings.OverridePath = save;
                 if (!loaded.DragOutAsFile) return "老配置没有被迁移回「带文件格式」，拖出去还是放不进去";
                 if (loaded.Rev < 3) return "Rev 没升到 3（下次还会再迁移一遍）";
+                // 迁移必须落到文件里，不能只在内存里生效（只改内存的话，下次启动又按旧值走一遍）
+                string back = File.ReadAllText(p, System.Text.Encoding.UTF8);
+                if (back.IndexOf("DragOutAsFile=1") < 0) return "迁移没落盘：文件里还是 DragOutAsFile=0";
+                if (back.IndexOf("Rev=3") < 0) return "迁移没落盘：文件里还是 Rev=2";
                 return null;
             });
 

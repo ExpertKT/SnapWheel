@@ -146,8 +146,12 @@ namespace SnapWheel
             // 唯一的例外（Rev<3）：v0.4.8 把"拖出也带文件格式"的默认改成了关，而老配置里没这一行，
             // 于是升级后拖到资源管理器/桌面/某些 App 全部放不进去。这不是用户的"选择"，
             // 是默认值改动的副作用，所以这里强制恢复成开。
-            if (s.Rev < 3) s.DragOutAsFile = true;
+            bool migrated = false;
+            if (s.Rev < 3) { s.DragOutAsFile = true; migrated = true; }
             s.Rev = 3;
+            // 迁移必须立刻落盘：不然只改了内存里的值，配置文件还是旧的（下次启动又会"迁移"一遍，
+            // 而且设置界面显示的还是旧值）。用户报的拖拽 bug 就是靠这条迁移修好的。
+            if (migrated) { try { s.Save(); } catch { } }
 
             return s;
         }
@@ -258,7 +262,10 @@ namespace SnapWheel
                 lines.Add("GuideSeenVersion=" + (GuideSeenVersion ?? ""));
                 lines.Add("TextBg=" + (TextBg ? "1" : "0"));
                 lines.Add("KeyActions=" + KeyActions);
-                Rev = 2;                       // 配置格式版本：写了它以后就不再被默认值迁移覆盖
+                // 配置格式版本：写了它以后就不再被默认值迁移覆盖（迁移逻辑见 Load）。
+                // 这里别写死数字 —— 之前写死 2，把 Load 里刚升到 3 的迁移标记又按回去了，
+                // 结果每次启动都重跑一遍迁移（而且"迁移没落盘"这类问题很难看出来）。
+                if (Rev < 3) Rev = 3;
                 lines.Add("Rev=" + Rev);
                 File.WriteAllLines(FilePath(), lines.ToArray());
             }
