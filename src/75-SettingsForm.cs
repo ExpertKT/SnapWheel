@@ -70,7 +70,8 @@ namespace SnapWheel
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
             _root = root;
-            Controls.Add(root);
+            // root 先别挂到窗口上：一挂上去，之后每 Add 一个控件都会触发窗口 AutoSize 重排整棵树
+            // （60 多个控件 = O(n^2) 次重排，这就是"打开设置 700ms"的主因）。最后一次性挂上。
 
             // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
             TableLayoutPanel colL = new TableLayoutPanel();
@@ -569,6 +570,8 @@ namespace SnapWheel
                 MaximumSize = new Size((int)(wa.Width * 0.95), (int)(wa.Height * 0.94));
             }
             catch { }
+            Controls.Add(root);      // 全部建完才挂上去：整棵树只排一次
+            PerformLayout();
         }
 
         static int CornerIndex(string c)
