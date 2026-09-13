@@ -12,7 +12,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 namespace SnapWheel
 {
-    class OverlayForm : Form
+    partial class OverlayForm : Form
     {
         Bitmap _shot;
         Bitmap _dimmed;
@@ -428,7 +428,19 @@ namespace SnapWheel
                     g.FillRectangle(bg2, hx, hy, sz2.Width + 8, sz2.Height + 4);
                     g.DrawString(hint, f2, fg2, hx + 4, hy + 2);
                 }
+
+                // 标注：裁在选区里画（所见即所得），工具条最后画、不受裁剪影响
+                GraphicsState st = g.Save();
+                using (GraphicsPath cp = new GraphicsPath())
+                {
+                    cp.AddPolygon(cs);
+                    g.SetClip(cp, CombineMode.Intersect);
+                    DrawAnnotationShapes(g);
+                }
+                g.Restore(st);
             }
+            PlaceToolbar();
+            PaintToolbar(g, 255);
             DrawChips(g);
         }
 
@@ -437,6 +449,7 @@ namespace SnapWheel
         {
             if (e.Button == MouseButtons.Right) { Cancel(); return; }
             if (e.Button != MouseButtons.Left) return;
+            if (AnnotMouseDown(e)) return;
 
             if (_toggleRect.Contains(e.Location)) { _chipsOpen = !_chipsOpen; _anim.Start(); Invalidate(); return; }
             if (_chipsOpen && _chipsT > 0.5f && _chips != null)
@@ -532,6 +545,7 @@ namespace SnapWheel
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (AnnotMouseMove(e)) return;
             // 关键保护：如果左键其实没按住，立刻清掉所有拖拽状态，
             // 否则“在选区外松开鼠标”后，后续移动会继续缩放/旋转 -> 乱飞
             if ((Control.MouseButtons & MouseButtons.Left) == 0)
@@ -637,6 +651,7 @@ namespace SnapWheel
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (AnnotMouseUp(e)) return;
             bool wasRotating = _rotating;
             _moving = false; _resizeCorner = -1; _rotating = false;
             if (e.Button == MouseButtons.Left && _dragging)
@@ -667,18 +682,23 @@ namespace SnapWheel
 
         protected override void OnMouseDoubleClick(MouseEventArgs e)
         {
+            // 选了标注工具时双击是在画东西（比如连点两下画两个方框），别把它当成"确认"
+            if (_tool != AnnotKind.Select) return;
             if (_hasSel && InsideSel(e.Location)) Confirm();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
+            if (e.KeyCode == Keys.Escape && _textBox != null) { EndText(false); return; }   // 先收掉正在输入的文字
+            if (AnnotKey(e)) return;
             if (e.KeyCode == Keys.Escape) Cancel();
-            else if (e.KeyCode == Keys.Enter && _hasSel) Confirm();
+            else if (e.KeyCode == Keys.Enter && _hasSel) { EndText(true); Confirm(); }
         }
 
         void Confirm()
         {
             if (_shot == null || !_hasSel) { Close(); return; }
+            EndText(true);                       // 还在输入框里的文字也算数
             int w = Math.Max(1, (int)Math.Round(_sz.Width));
             int h = Math.Max(1, (int)Math.Round(_sz.Height));
             Bitmap crop = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
@@ -690,6 +710,8 @@ namespace SnapWheel
                 g.RotateTransform(-_ang * 180f / (float)Math.PI);
                 g.TranslateTransform(-_c.X, -_c.Y);
                 g.DrawImageUnscaled(_shot, 0, 0);
+                // 标注用同一套坐标和同一个变换画进去 —— 屏幕上看到什么，存下来就是什么
+                DrawAnnotationShapes(g);
             }
             Result = crop;
             DialogResult = DialogResult.OK;
@@ -700,6 +722,7 @@ namespace SnapWheel
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            DisposeAnnotationCaches();
             if (_shot != null) { _shot.Dispose(); _shot = null; }
             if (_dimmed != null) { _dimmed.Dispose(); _dimmed = null; }
             base.OnFormClosed(e);

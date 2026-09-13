@@ -117,6 +117,65 @@ namespace SnapWheel
             return null;
         }
 
+        // ---------- 标注测试用的小工具 ----------
+        static void Mouse(object o, string handler, int x, int y)
+        {
+            MethodInfo m = o.GetType().GetMethod(handler, BindingFlags.NonPublic | BindingFlags.Instance);
+            if (m == null) throw new Exception("找不到 " + handler);
+            m.Invoke(o, new object[] { new MouseEventArgs(MouseButtons.Left, 1, x, y, 0) });
+        }
+
+        static object AnnotKindValue(string name)
+        {
+            Type t = typeof(OverlayForm).GetNestedType("AnnotKind", BindingFlags.NonPublic);
+            if (t == null) throw new Exception("找不到 AnnotKind");
+            return Enum.Parse(t, name);
+        }
+
+        static int ShapeCount(object overlay)
+        {
+            return ((System.Collections.ICollection)G(overlay, "_shapes")).Count;
+        }
+
+        static double RegionVariance(Bitmap b, Rectangle r)
+        {
+            double s = 0, s2 = 0; int n = 0;
+            for (int y = r.Top; y < r.Bottom; y++)
+                for (int x = r.Left; x < r.Right; x++)
+                {
+                    if (x < 0 || y < 0 || x >= b.Width || y >= b.Height) continue;
+                    double v = b.GetPixel(x, y).R; s += v; s2 += v * v; n++;
+                }
+            if (n == 0) return 0;
+            double m = s / n;
+            return s2 / n - m * m;
+        }
+
+        static int RedPixels(Bitmap b, Rectangle r)
+        {
+            int n = 0;
+            for (int y = r.Top; y < r.Bottom; y++)
+                for (int x = r.Left; x < r.Right; x++)
+                {
+                    if (x < 0 || y < 0 || x >= b.Width || y >= b.Height) continue;
+                    Color c = b.GetPixel(x, y);
+                    if (c.R > 150 && c.G < 130 && c.B < 130) n++;
+                }
+            return n;
+        }
+
+        // 造一个"选好区、工具已选"的浮层（不显示出来，免得测试时满屏闪一个遮罩）
+        static OverlayForm MakeOverlay(Bitmap shot, string tool)
+        {
+            OverlayForm o = new OverlayForm(new Rectangle(0, 0, 1920, 1080), shot);
+            F(o, "_hasSel", true);
+            F(o, "_c", new PointF(200f, 150f));
+            F(o, "_sz", new SizeF(200f, 100f));
+            F(o, "_ang", 0f);
+            if (tool != null) F(o, "_tool", AnnotKindValue(tool));
+            return o;
+        }
+
         [STAThread]
         public static void Main()
         {
@@ -395,6 +454,91 @@ namespace SnapWheel
                 if (pinned != 1) return "中键没有触发贴图（pinned=" + pinned + "）";
                 if (handed == null) return "没把图传出去";
                 if (handed.Width != 80 || handed.Height != 50) return "传出去的图不对：" + handed.Width + "x" + handed.Height;
+                return null;
+            });
+
+            // ================= 11. 标注：画上去 + 真的合成进图里 =================
+            Run("标注箭头：确认后图里真的有箭头，别的像素没被动", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Arrow");
+                Mouse(o, "OnMouseDown", 120, 120);
+                Mouse(o, "OnMouseMove", 280, 180);
+                Mouse(o, "OnMouseUp", 280, 180);
+                if (ShapeCount(o) != 1) return "没记下这个箭头（shapes=" + ShapeCount(o) + "）";
+
+                Call(o, "Confirm");
+                Bitmap res = o.Result;
+                if (res == null) return "没有产出图片";
+                if (res.Width != 200 || res.Height != 100) return "裁出来的尺寸不对：" + res.Width + "x" + res.Height;
+
+                // 箭头在裁图里是 (20,20)->(180,80)
+                int ink = RedPixels(res, new Rectangle(0, 0, res.Width, res.Height));
+                if (ink < 30) return "图里找不到箭头像素（只有 " + ink + " 个红点）";
+                if (RedPixels(res, new Rectangle(0, 0, 12, 12)) > 0) return "左上角本来该是白的，被画脏了";
+                o.Dispose();
+                return null;
+            });
+
+            Run("标注马赛克：确认后那一块真的糊了（方差大幅下降）", delegate
+            {
+                Bitmap shot = new Bitmap(400, 300, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(shot))
+                    for (int y = 0; y < 300; y += 4)
+                        for (int x = 0; x < 400; x += 4)
+                            using (SolidBrush b = new SolidBrush(((x / 4 + y / 4) % 2 == 0) ? Color.Black : Color.White))
+                                g.FillRectangle(b, x, y, 4, 4);
+
+                OverlayForm o = MakeOverlay(shot, "Mosaic");
+                Mouse(o, "OnMouseDown", 130, 130);
+                Mouse(o, "OnMouseMove", 270, 170);
+                Mouse(o, "OnMouseUp", 270, 170);
+                // 先把"糊之前"量出来：Confirm 之后 _shot 会被浮层释放掉，那时再读就 ArgumentException
+                double before = RegionVariance(shot, new Rectangle(140, 140, 120, 80));
+                Call(o, "Confirm");
+                Bitmap res = o.Result;
+                if (res == null) return "没有产出图片";
+
+                double after = RegionVariance(res, new Rectangle(40, 40, 120, 80));
+                o.Dispose();
+                if (!(after < before * 0.6)) return "没糊：马赛克前 " + before.ToString("0") + " -> 之后 " + after.ToString("0");
+                return null;
+            });
+
+            Run("标注文字：输入框里打的字会落进图里", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Text");
+                Mouse(o, "OnMouseDown", 150, 140);
+
+                TextBox tb = null;
+                foreach (Control c in o.Controls) { TextBox t = c as TextBox; if (t != null) { tb = t; break; } }
+                if (tb == null) return "点了没弹出输入框";
+                tb.Text = "重点";
+                Call(o, "EndText", true);
+                if (ShapeCount(o) != 1) return "文字没被记下来";
+
+                Call(o, "Confirm");
+                Bitmap res = o.Result;
+                if (res == null) return "没有产出图片";
+                int ink = RedPixels(res, new Rectangle(0, 0, res.Width, res.Height));
+                o.Dispose();
+                if (ink < 10) return "图里找不到文字像素（" + ink + " 个）";
+                return null;
+            });
+
+            Run("标注撤销：Ctrl+Z 只撤最后一个", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Rect");
+                Mouse(o, "OnMouseDown", 120, 120); Mouse(o, "OnMouseMove", 180, 160); Mouse(o, "OnMouseUp", 180, 160);
+                Mouse(o, "OnMouseDown", 200, 120); Mouse(o, "OnMouseMove", 280, 190); Mouse(o, "OnMouseUp", 280, 190);
+                if (ShapeCount(o) != 2) { o.Dispose(); return "两个方框没收全（" + ShapeCount(o) + "）"; }
+
+                Call(o, "AnnotKey", new KeyEventArgs(Keys.Control | Keys.Z));
+                int after = ShapeCount(o);
+                o.Dispose();
+                if (after != 1) return "撤销后剩 " + after + " 个（应为 1）";
                 return null;
             });
 
