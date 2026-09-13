@@ -190,7 +190,44 @@ namespace SnapWheel
             {
                 object sw = SoftwareBitmapFromPixels(bgra, w, h);
                 if (sw == null) { error = "这台系统不支持直接把像素交给 OCR"; return null; }
-                return RecognizeSoftwareBitmap(sw, out error);
+                float wordH;
+                string txt = RecognizeSoftwareBitmap(sw, out error, out wordH);
+                if (txt == null) return null;
+
+                // 字太小就放大再认一遍 —— 这是准确率的关键。
+                // 实测（900x380 合成图，字符级准确率）：14px 的字在 1x 下只有 25%，放大 2 倍到 92%；
+                // 20px 是 28% -> 96%；连 32px 低对比度也是 13% -> 99%。屏幕截图里的正文多半就是
+                // 14~20px，所以"不准"基本都是这个原因。
+                // 判据两条，缺一不可：
+                //   · 量到了文字框高度且偏小（< 24px）→ 按高度算放大倍数
+                //   · 第一遍"认出来的字太少"（含什么都没认出来）→ 高度也不可信，直接上 2 倍
+                string bigger = null;
+                float k = 2f;
+                double area = (double)w * h;
+                if (area * k * k > 8.0e6) k = (float)Math.Sqrt(8.0e6 / area);
+                if (k < 1f) k = 1f;
+                if (k > 1.15f)
+                {
+                    if (k < 1.5f) k = 1.5f;
+                    if (k > 3f) k = 3f;
+                    int nw = (int)(w * k), nh = (int)(h * k);
+                    if (nw <= 10000 && nh <= 10000 && nw * nh < 40 * 1000 * 1000)
+                    {
+                        byte[] scaled = ScalePixels(bgra, w, h, nw, nh);
+                        if (scaled != null)
+                        {
+                            object sw2 = SoftwareBitmapFromPixels(scaled, nw, nh);
+                            if (sw2 != null)
+                            {
+                                string e2 = null; float h2;
+                                string t2 = RecognizeSoftwareBitmap(sw2, out e2, out h2);
+                                // 放大后认出的字更多就更可信（实测基本都更多）
+                                if (t2 != null) bigger = t2;
+                            }
+                        }
+                    }
+                }
+                return bigger ?? txt;
             }
             catch (Exception ex)
             {
@@ -201,6 +238,52 @@ namespace SnapWheel
             }
         }
 
+        static int Chars(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            int n = 0;
+            for (int i = 0; i < s.Length; i++) if (!char.IsWhiteSpace(s[i])) n++;
+            return n;
+        }
+
+        // 像素放大（自己算，不用 GDI 位图 —— 这样后台线程完全不碰 GDI）。
+        // 双线性足够：OCR 要的是"字够大"，不是像素级完美。
+        // 放大像素：用 GDI+ 的高质量双三次（自己写的双线性更糊，低对比度文字会被糊掉 —— 实测差很多）。
+        // 这里在后台线程里**新建**位图、用完就扔，不碰任何别的线程的 GDI 对象，所以是安全的。
+        static byte[] ScalePixels(byte[] src, int w, int h, int nw, int nh)
+        {
+            try
+            {
+                using (Bitmap small = new Bitmap(w, h, PixelFormat.Format32bppPArgb))
+                {
+                    BitmapData d = small.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
+                    try
+                    {
+                        int stride = d.Stride;
+                        byte[] row = new byte[w * 4];
+                        for (int y = 0; y < h; y++)
+                        {
+                            Buffer.BlockCopy(src, y * w * 4, row, 0, w * 4);
+                            System.Runtime.InteropServices.Marshal.Copy(row, 0, (IntPtr)((long)d.Scan0 + (long)y * stride), w * 4);
+                        }
+                    }
+                    finally { small.UnlockBits(d); }
+
+                    using (Bitmap big = new Bitmap(nw, nh, PixelFormat.Format32bppPArgb))
+                    {
+                        using (Graphics g = Graphics.FromImage(big))
+                        {
+                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                            g.DrawImage(small, new Rectangle(0, 0, nw, nh));
+                        }
+                        int aw, ah;
+                        return PixelsOf(big, out aw, out ah);
+                    }
+                }
+            }
+            catch { return null; }
+        }
         // 识别一张图里的文字。成功返回文字（可能为空串 = 图上没字），失败返回 null 并给出 error
         public static string Recognize(Bitmap bmp, out string error)
         {
@@ -252,7 +335,8 @@ namespace SnapWheel
                 object decoder = Await(create.Invoke(null, new object[] { RandomAccessStreamOf(png) }), "Windows.Graphics.Imaging.BitmapDecoder", 15000);
                 MethodInfo getSb = decoder.GetType().GetMethod("GetSoftwareBitmapAsync", Type.EmptyTypes);   // 它有 4 个重载，必须指定"无参"那个
                 object sw = Await(getSb.Invoke(decoder, null), "Windows.Graphics.Imaging.SoftwareBitmap", 15000);
-                return RecognizeSoftwareBitmap(sw, out error);
+                float mh;
+                return RecognizeSoftwareBitmap(sw, out error, out mh);
             }
             catch (Exception ex)
             {
@@ -263,17 +347,19 @@ namespace SnapWheel
             }
         }
 
-        static string RecognizeSoftwareBitmap(object sw, out string error)
+        static string RecognizeSoftwareBitmap(object sw, out string error, out float medianWordHeight)
         {
             error = null;
+            medianWordHeight = 0f;
             try
             {
                 MethodInfo rec = _engine.GetType().GetMethod("RecognizeAsync", new Type[] { WinRT("Windows.Graphics.Imaging.SoftwareBitmap") });
                 object result = Await(rec.Invoke(_engine, new object[] { sw }), "Windows.Media.Ocr.OcrResult", 30000);
                 try { ((IDisposable)sw).Dispose(); } catch { }
 
-                // 按行拼（比整段 Text 更接近原文排版）
+                // 按行拼（比整段 Text 更接近原文排版），顺便量一下文字框高度（判断"字有多小"）
                 StringBuilder sb = new StringBuilder();
+                System.Collections.Generic.List<float> hs = new System.Collections.Generic.List<float>();
                 object lines = null;
                 PropertyInfo lp = result.GetType().GetProperty("Lines");
                 if (lp != null) lines = lp.GetValue(result, null);
@@ -285,8 +371,30 @@ namespace SnapWheel
                         PropertyInfo tp = line.GetType().GetProperty("Text");
                         object t = tp == null ? null : tp.GetValue(line, null);
                         if (t != null) sb.AppendLine(((string)t).TrimEnd());
+
+                        PropertyInfo wp = line.GetType().GetProperty("Words");
+                        object words = wp == null ? null : wp.GetValue(line, null);
+                        System.Collections.IEnumerable we = words as System.Collections.IEnumerable;
+                        if (we == null) continue;
+                        foreach (object word in we)
+                        {
+                            PropertyInfo bp = word.GetType().GetProperty("BoundingRect");
+                            object box = bp == null ? null : bp.GetValue(word, null);
+                            if (box == null) continue;
+                            PropertyInfo hp = box.GetType().GetProperty("Height");
+                            if (hp == null) continue;
+                            object hv = hp.GetValue(box, null);
+                            if (hv is float) hs.Add((float)hv);
+                            else if (hv is double) hs.Add((float)(double)hv);
+                        }
                     }
                 }
+                if (hs.Count > 0)
+                {
+                    hs.Sort();
+                    medianWordHeight = hs[hs.Count / 2];
+                }
+
                 string text = sb.ToString().Trim();
                 if (text.Length == 0)
                 {

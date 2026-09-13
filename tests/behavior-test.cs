@@ -968,6 +968,35 @@ namespace SnapWheel
                 return null;
             });
 
+            Run("取字准确率：14px 小字也要认得准（以前只有 25%）", delegate
+            {
+                if (!Ocr.Available) { Console.WriteLine("       （没有 OCR 语言包，跳过）"); return null; }
+                string truth = "本周报告已发出，请查收。交付时间：9月12日18:00。负责同学：小何 13800008821";
+                Bitmap img = new Bitmap(900, 260, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(img))
+                {
+                    g.Clear(Color.White);
+                    using (Font f = new Font("Microsoft YaHei UI", 14f, FontStyle.Regular, GraphicsUnit.Pixel))
+                    using (SolidBrush b = new SolidBrush(Color.Black))
+                    {
+                        g.DrawString("本周报告已发出，请查收。", f, b, 12, 30);
+                        g.DrawString("交付时间：9月12日18:00", f, b, 12, 60);
+                        g.DrawString("负责同学：小何 13800008821", f, b, 12, 90);
+                    }
+                }
+                string err;
+                string txt = Ocr.Recognize(img, out err);
+                img.Dispose();
+                if (txt == null) return "识别失败：" + err;
+                string t = truth.Replace(" ", "");
+                string g2 = txt.Replace(" ", "").Replace("\r", "").Replace("\n", "");
+                int hit = 0, gi = 0;
+                for (int i = 0; i < t.Length; i++) { int k = g2.IndexOf(t[i], gi); if (k >= 0) { hit++; gi = k + 1; } }
+                double acc = (double)hit / t.Length;
+                if (acc < 0.8) return "小字准确率只有 " + (acc * 100).ToString("0") + "%（放大后应该 80%+）：" + txt;
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 
