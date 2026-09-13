@@ -208,14 +208,46 @@ namespace SnapWheel
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.18";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.19";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.4.8";   // 完整版：字不变修复收尾 + 帧耗时统计 + 行为测试   // 完整版：体验与工程优化
+        public const string Version = "0.4.9";   // 完整版：源码拆分 + 管理员拖放引导 + CI
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
         public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
         public const string Repo = "ExpertKT/SnapWheel";  // 自动更新检查用
+    }
+
+    // 是不是以管理员身份在跑。管理员进程收不到（也发不出）普通权限程序的拖拽 —— Windows 的 UIPI 拦的。
+    // 托盘菜单、启动提示、轮盘"拖不动"时的引导都走这一个判断，别再各写一份。
+    static class Elev
+    {
+        static readonly bool _on = Detect();
+
+        // 测试用：强制指定是不是管理员（null = 按真实权限判断）。
+        // 不然"管理员模式下会怎样"这段逻辑永远只能在管理员进程里手测。
+        public static bool? ForceForTest = null;
+
+        public static bool Is { get { return ForceForTest.HasValue ? ForceForTest.Value : _on; } }
+
+        static bool Detect()
+        {
+            try
+            {
+                using (System.Security.Principal.WindowsIdentity id = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    return new System.Security.Principal.WindowsPrincipal(id)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
+        }
+
+        // 用 explorer 拉起自己 → 拿到普通权限（explorer 是 Medium 完整性级别）。
+        // 只管启动，退出当前实例由调用方决定（否则弹框还挂在一个正在退出的进程上）。
+        public static bool RelaunchNormal()
+        {
+            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Application.ExecutablePath + "\""); return true; }
+            catch { return false; }
+        }
     }
 
     static class Native
@@ -2243,6 +2275,7 @@ namespace SnapWheel
         float _nubAppearT = 1f;        // 把手"出现"进度 0..1（启动时不要突然冒出来）
         DateTime _nubAppearAt = DateTime.MinValue;
         float _nubHintT = 0f;                            // 把手"点我展开/收起"提示的淡入进度
+        bool _adminTipShown = false;                     // 管理员"拖不动"的说明每次运行只弹一次
         DateTime _firstRunHintUntil = DateTime.MinValue; // 首次运行自动亮提示的截止时刻
         DateTime _collapsedAt = DateTime.MinValue;       // 收起完成的时刻（之后一小段内不允许再展开）
         DateTime _selfClipboardAt = DateTime.MinValue;   // 我们自己写剪贴板的时间（避免自己抄自己）
@@ -3639,6 +3672,8 @@ namespace SnapWheel
         }
         public event EventHandler CaptureRequested;
         public event EventHandler ExitRequested;      // 长按关闭键 -> 完全退出
+        // 管理员模式下"拖了半天啥也没发生"时抛出去：让 AppCtx 弹说明（要不要换普通权限）
+        public event EventHandler AdminHelpRequested;
 
         // buttons stack up from the corner (kept well above an auto-hiding taskbar)
         Rectangle BtnRect(int order)
@@ -5003,6 +5038,26 @@ namespace SnapWheel
             }
         }
 
+        // 管理员模式下拖出去：Windows 的 UIPI 会拦掉跨权限拖拽，DoDragDrop 只会返回 None，
+        // 用户看到的就是"拖了半天，图又弹回来了"。以前只有一条开机气泡（很多人把气泡关了，
+        // 比如本机设置里 ShowBalloon=0），所以这里在真正拖不动的那一刻直接说清楚：
+        // 先 toast 一句，再弹一次说明（每次运行只弹一次）。
+        void NotifyAdminDragBlocked()
+        {
+            if (!Elev.Is) return;
+            if (_adminTipShown)
+            {
+                ShowToast("管理员模式：拖拽被 Windows 拦着（托盘右键 → 管理员模式说明）");
+                return;
+            }
+            _adminTipShown = true;
+            ShowToast("管理员模式：拖不出去，是 Windows 拦的");
+            // 拖拽结束后再弹：这一刻还在鼠标事件/DoDragDrop 的调用栈里，直接弹模态框容易打架
+            if (AdminHelpRequested != null)
+                try { BeginInvoke(new MethodInvoker(delegate { try { AdminHelpRequested(this, EventArgs.Empty); } catch { } })); }
+                catch { }
+        }
+
         void StartDragOut(int index)
         {
             if (index < 0 || index >= _store.Items.Count) return;
@@ -5036,6 +5091,7 @@ namespace SnapWheel
 
             bool taken = (eff != DragDropEffects.None) && !_returnedToWheel;
             bool returned = _returnedToWheel;
+            if (!taken && !returned) NotifyAdminDragBlocked();
             _returnedToWheel = false;
             _dragOutItem = null;
             _dragOutProg = 0f;
@@ -6072,6 +6128,111 @@ namespace SnapWheel
         }
     }
 
+    // 管理员模式说明框：为什么拖不动 / 怎么换普通权限 / 不换权限现在还能怎么用。
+    // 两个入口：托盘菜单，以及轮盘"拖了半天没反应"的那一刻（见 WheelForm.NotifyAdminDragBlocked）。
+    class AdminForm : Form
+    {
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (Blur.Supported)
+            {
+                BackColor = Color.FromArgb(240, 247, 248, 251);
+                try { Blur.Apply(Handle, 232, 246, 248, 252, true); } catch { }
+            }
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            Gfx.RepaintAll(this);
+        }
+
+        public AdminForm()
+        {
+            Text = AppInfo.Name + " 管理员模式";
+            Icon = Brand.Get();
+            AutoScaleMode = AutoScaleMode.None;
+            Font = new Font("Microsoft YaHei UI", 9.5f);
+            BackColor = Color.FromArgb(252, 252, 254);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(560, 100);           // 先占位，最后按内容重算
+            SuspendLayout();
+
+            Label head = new Label();
+            head.Text = "管理员模式下，拖拽会被 Windows 拦住";
+            head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
+            head.ForeColor = Color.FromArgb(28, 30, 36);
+            head.AutoSize = true;
+            head.Location = new Point(28, 24);
+            Controls.Add(head);
+
+            Label sub = new Label();
+            sub.Text = "不是 SnapWheel 的毛病，是系统的安全限制（UIPI）：管理员进程和普通程序（资源管理器、微信、浏览器）之间不允许互相拖拽。";
+            sub.ForeColor = Color.FromArgb(120, 124, 134);
+            sub.AutoSize = false;
+            sub.Size = new Size(506, 40);
+            sub.Location = new Point(31, 58);
+            Controls.Add(sub);
+
+            int y = 108;
+            AddTip(28, ref y, "想拖拽 → 换普通权限", "点下面那个按钮：SnapWheel 会先退出，再由资源管理器用普通权限重新启动。设置、轮盘、存的图片都不受影响。");
+            AddTip(28, ref y, "不换权限也能用", "托盘右键「导入图片…」能直接选文件收进轮盘；在任何地方「复制」一张图，它也会自动滑进来 —— 这两个都不受权限影响。");
+            AddTip(28, ref y, "什么时候才需要管理员", "只有要截「管理员窗口」（任务管理器、某些安装程序）时才需要；平时用普通权限最省事，拖拽也正常。");
+
+            RoundButton go = new RoundButton();
+            go.Text = "以普通权限重启";
+            go.Size = new Size(150, 38);
+            go.Fill = Color.FromArgb(0, 122, 204);
+            go.FillHover = Color.FromArgb(0, 140, 232);
+            go.TextColor = Color.White;
+            go.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            go.Location = new Point(560 - 28 - 150, y + 12);
+            go.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.OK; Close(); });
+            Controls.Add(go);
+            AcceptButton = go;
+
+            RoundButton no = new RoundButton();
+            no.Text = "知道了";
+            no.Size = new Size(104, 38);
+            no.Fill = Color.FromArgb(238, 240, 245);
+            no.FillHover = Color.FromArgb(226, 230, 238);
+            no.TextColor = Color.FromArgb(60, 64, 74);
+            no.Font = new Font("Microsoft YaHei UI", 10f);
+            no.Location = new Point(560 - 28 - 150 - 12 - 104, y + 12);
+            no.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
+            Controls.Add(no);
+            CancelButton = no;
+
+            ClientSize = new Size(560, y + 12 + 38 + 24);
+            ResumeLayout();
+        }
+
+        void AddTip(int x, ref int y, string title, string body)
+        {
+            Label t = new Label();
+            t.Text = "• " + title;
+            t.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            t.ForeColor = Color.FromArgb(0, 110, 190);
+            t.AutoSize = true;
+            t.Location = new Point(x + 3, y);
+            Controls.Add(t);
+
+            Label b = new Label();
+            b.Text = body;
+            b.ForeColor = Color.FromArgb(70, 74, 84);
+            b.AutoSize = false;
+            b.Size = new Size(506, 20);
+            b.Location = new Point(x + 16, y + 21);
+            Controls.Add(b);
+            y += 51;
+        }
+    }
+
     class HotkeyForm : Form
     {
         public event EventHandler Hotkey;
@@ -6127,6 +6288,7 @@ namespace SnapWheel
             _wheel = new WheelForm(_wheels, _settings);
             _wheel.SettingsRequested += new EventHandler(OnSettings);
             _wheel.CaptureRequested += new EventHandler(OnHotkey);
+            _wheel.AdminHelpRequested += new EventHandler(OnAdminHelp);
             _wheel.ExitRequested += new EventHandler(delegate(object o, EventArgs e2) { Application.Exit(); });
 
             _tray = new NotifyIcon();
@@ -6144,8 +6306,8 @@ namespace SnapWheel
             menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
             menu.Items.Add("新手引导", null, new EventHandler(OnGuide));
             menu.Items.Add("重播开启动画", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
-            if (IsElevated())
-                menu.Items.Add("以普通权限重启（拖拽才有用）", null, new EventHandler(OnRelaunchNormal));
+            if (Elev.Is)
+                menu.Items.Add("管理员模式说明…（拖拽为什么不动）", null, new EventHandler(OnAdminHelp));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
@@ -6167,11 +6329,11 @@ namespace SnapWheel
                 th.Start();
             }
 
-            if (IsElevated() && _settings.ShowBalloon)
+            if (Elev.Is && _settings.ShowBalloon)
                 try
                 {
                     _tray.ShowBalloonTip(6000, "SnapWheel 快照轮环以管理员身份运行",
-                        "Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（右键托盘图标 → 以普通权限重启）。",
+                        "Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（托盘右键 → 管理员模式说明）。",
                         ToolTipIcon.Warning);
                 }
                 catch { }
@@ -6186,6 +6348,11 @@ namespace SnapWheel
             {
                 _wheel.StartCollapsed();     // 就算开机不显示轮盘，也留个贴边把手，否则没法鼠标叫出来
             }
+
+            // 管理员模式下，开机就在轮盘上说一句。气泡（上面那条）很多人是关掉的
+            // （本机设置里 ShowBalloon=0），关了就等于永远不知道自己为什么拖不动。
+            if (Elev.Is)
+                _wheel.ShowToast("管理员模式：拖拽会被 Windows 拦（托盘右键看说明）");
 
             // 第一次打开：先播开启动画，再弹一次新手引导（看过就不再弹）
             if (!_settings.IntroSeen)
@@ -6208,24 +6375,35 @@ namespace SnapWheel
             try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
         }
 
-        // 是不是以管理员身份在跑？管理员进程收不到（也发不出）普通权限程序的拖拽 —— Windows 的 UIPI 拦的
-        static bool IsElevated()
+        // 管理员模式说明框：托盘菜单、"拖不动"的那一刻都走这里。
+        // 点「以普通权限重启」= 让资源管理器拉起自己（拿到 Medium 完整性级别）然后退出当前实例。
+        void OnAdminHelp(object sender, EventArgs e)
         {
+            bool restart = false;
             try
             {
-                using (System.Security.Principal.WindowsIdentity id = System.Security.Principal.WindowsIdentity.GetCurrent())
-                    return new System.Security.Principal.WindowsPrincipal(id)
-                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                using (AdminForm af = new AdminForm())
+                {
+                    bool wasTop = _wheel.TopMost;
+                    _wheel.TopMost = false;              // 轮盘别盖在弹框上面
+                    af.TopMost = true;
+                    restart = (af.ShowDialog() == DialogResult.OK);
+                    _wheel.TopMost = wasTop;
+                }
             }
-            catch { return false; }
-        }
-
-        // 用 explorer 拉起自己 -> 拿到普通权限（explorer 是 Medium）
-        void OnRelaunchNormal(object sender, EventArgs e)
-        {
-            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + Application.ExecutablePath + "\""); }
             catch { }
-            Quit();
+
+            if (!restart) return;
+            if (Elev.RelaunchNormal()) Quit();
+            else
+            {
+                try
+                {
+                    MessageBox.Show("没能自动重启。请关掉 SnapWheel，再右键 SnapWheel.exe →「以普通权限运行」。",
+                        AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+            }
         }
 
         // 托盘「导入图片…」：不想拖的时候也能从任意位置选图加进当前 wheel

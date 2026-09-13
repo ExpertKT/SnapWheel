@@ -300,6 +300,40 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 8. 管理员模式下的拖放引导 =================
+            Run("管理员拖不动：弹一次说明；普通权限不弹", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = new WheelForm(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+
+                int shown = 0;
+                f.AdminHelpRequested += delegate(object o, EventArgs e2) { shown++; };
+
+                // 普通权限：DoDragDrop 返回 None 只是"拖到了不收图的地方"，不该弹管理员说明
+                Elev.ForceForTest = false;
+                Call(f, "NotifyAdminDragBlocked");
+                Application.DoEvents();                    // 说明是 BeginInvoke 抛出来的，要过一遍消息循环
+                if (shown != 0) return "普通权限下也弹了说明";
+
+                // 管理员：第一次拖不动要弹说明（这才是"用户容易懵"的那一刻）
+                Elev.ForceForTest = true;
+                Call(f, "NotifyAdminDragBlocked");
+                Application.DoEvents();
+                if (shown != 1) return "管理员第一次拖不动没弹说明（shown=" + shown + "）";
+
+                // 同一次运行里不再反复弹，改成 toast
+                Call(f, "NotifyAdminDragBlocked");
+                Application.DoEvents();
+                if (shown != 1) return "说明被重复弹了（shown=" + shown + "）";
+
+                Elev.ForceForTest = null;                  // 还原，别影响后面的用例
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 
