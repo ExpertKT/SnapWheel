@@ -18,9 +18,11 @@ namespace SnapWheel
     {
         int _noKeyDown = -1;        // 正被按下的那个按钮（-1 = 没有）
         int _noKeyHover = -1;
-        int _noKeyFrame = -1;
+#if NO_KEY
+        int _noKeyFrame = -1;                 // 这一组按钮的坐标是按帧缓存的（画和点都用同一份）
         int _noKeyRectCount = 0;
         readonly Rectangle[] _noKeyRectCache = new Rectangle[4];
+#endif
 
         const float NoKeyBtnSize = 52f;      // 逻辑像素
         const float NoKeyBtnGap = 10f;
