@@ -23,3 +23,5 @@ docs/_raw/
 *.tmp
 *_dbg.exe
 ~$*
+# 给 AI 看的接手说明（本地，不公开）
+AGENT-NOTES.md

@@ -76,8 +76,18 @@ namespace SnapWheel
         public static void Main()
         {
             Application.EnableVisualStyles();
+            // 测试不许碰用户真实配置：设置文件和轮盘清单都指到临时目录
+            // （以前这里创建 WheelManager 会把 %APPDATA%\SnapWheel\wheels.ini 原样重写一遍）
+            string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapwheel_smoke_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            System.IO.Directory.CreateDirectory(tmp);
+            Settings.OverridePath = System.IO.Path.Combine(tmp, "settings.ini");
+            WheelManager.OverrideMetaPath = System.IO.Path.Combine(tmp, "wheels.ini");
+            Err.OverridePath = System.IO.Path.Combine(tmp, "error.log");
             Settings s = new Settings();
             s.SaveToDisk = false;
+            // 收起态从 v0.4.8 起改成默认关闭（默认展开），这里显式打开，用来测收起相关行为
+            s.CollapseMode = true;
+            s.NubHintDone = true;      // 关掉"首次运行自动亮一次"的把手提示，避免干扰像素采样
             WheelManager mgr = new WheelManager(s);
             Store st = mgr.ActiveStore;
             st.SaveToDisk = false;

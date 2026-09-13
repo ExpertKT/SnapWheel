@@ -5,9 +5,9 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.4.7-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.4.8-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-114%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-143%20KB-lightgrey?style=flat-square)
 
 <p align="center">
   <img src="docs/wheel.png" width="330" alt="SnapWheel">
@@ -61,7 +61,7 @@
 
 ### 该下哪个？两条产品线
 
-同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.7 ↔ v0.2.17）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.8 ↔ v0.2.18）：
 
 | 你想要的 | 下这个 | 区别 |
 |---|---|---|
@@ -87,8 +87,8 @@
 ```
 build\SnapWheel.exe                 完整版（含万能键）
 build\SnapWheel-nokey.exe           无万能键版
-build\SnapWheel-v0.4.6-full.zip     完整版分发包
-build\SnapWheel-v0.2.16-nokey.zip   无万能键版分发包
+build\SnapWheel-v0.4.8-full.zip     完整版分发包
+build\SnapWheel-v0.2.18-nokey.zip   无万能键版分发包
 ```
 
 <details>
@@ -185,10 +185,11 @@ tools/                  构建与发布工具（不想碰命令行，双击里�
   发布新版本.bat          改版本号 + 编译 + 归档到 versions\
   build.ps1             上面那个 .bat 实际调用的脚本
   record-version.ps1    版本归档脚本
-tests/                  8 套可复跑的测试与工具
+tests/                  9 套可复跑的测试与工具
   resize-geometry-test.cs   缩放几何仿真（角度 × 比例 × 四角 × 摆位）
   io-test.cs                图片格式解析 / 导入落盘
   render-smoke.cs           绘制状态矩阵 + 风格组合 + DPI 缩放 + 淡出
+  behavior-test.cs          行为/持久化（删除是否落盘、连点删除、设置后轮盘是否还在、万能键动作是否真执行）
   drop-test.cs              真实 OLE 拖放 + 处理器级校验
   probe-test.cs             窗口命中测试探针
   uipi-drag-test.cs         权限隔离（UIPI）拖放复现
@@ -196,7 +197,7 @@ tests/                  8 套可复跑的测试与工具
   promo-shot.cs             生成宣传图（合成假桌面，不泄露真实屏幕）
 docs/                   README 用的界面截图
 dist/                  给用户的使用说明
-versions/              35 个历史版本快照（源码 + exe + 图标 + 说明）
+versions/              39 个历史版本快照（源码 + exe + 图标 + 说明）
 CHANGELOG.md           完整更新日志（含两条产品线说明）
 ```
 

@@ -20,14 +20,8 @@ namespace SnapWheel
         static readonly object _lock = new object();
         static DateTime _last = DateTime.MinValue;
 
-        // 测试用：把日志指到临时文件（null = 正常的 %APPDATA%\SnapWheel\error.log）。
-        // 否则跑一次 -Test，[Frame]/[KeyLabels] 这些诊断行会混进用户真实日志里，
-        // 以后分析"慢半拍"时分不清哪些是测试造出来的。
-        public static string OverridePath = null;
-
         public static string LogPath()
         {
-            if (OverridePath != null) return OverridePath;
             string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapWheel");
             try { Directory.CreateDirectory(d); } catch { }
             return Path.Combine(d, "error.log");
@@ -63,58 +57,6 @@ namespace SnapWheel
             if ((now - _last).TotalSeconds < 30) return false;
             _last = now;
             return true;
-        }
-    }
-
-    // 帧耗时统计：给"快速点按偶尔慢半拍"用数据定位。
-    // 只记 >25ms 的帧，而且每 10 秒才汇总一行（带最慢那一帧的界面状态），
-    // 不会刷屏、不参与任何逻辑；看 %APPDATA%\SnapWheel\error.log 里的 [Frame] 行。
-    static class FrameStats
-    {
-        public const double SlowMs = 25.0;
-        const int MaxLines = 60;               // 一次运行最多写 60 行，避免日志失控
-
-        static readonly object _lock = new object();
-        static long _frames, _slow;
-        static double _sum, _max;
-        static string _maxState = "";
-        static DateTime _windowStart = DateTime.Now;
-        static int _lines;
-
-        public static void Sample(double ms, string state)
-        {
-            try
-            {
-                lock (_lock)
-                {
-                    _frames++; _sum += ms;
-                    if (ms > SlowMs)
-                    {
-                        _slow++;
-                        if (ms > _max) { _max = ms; _maxState = state; }
-                    }
-                    if ((DateTime.Now - _windowStart).TotalSeconds >= 10) FlushLocked();
-                }
-            }
-            catch { }
-        }
-
-        // 每 10 秒结算一次：这 10 秒内有慢帧才写一行
-        static void FlushLocked()
-        {
-            if (_slow > 0 && _lines < MaxLines)
-            {
-                _lines++;
-                try
-                {
-                    Err.Log("Frame", new Exception(
-                        "最近10秒 " + _frames + " 帧，慢帧(>" + (int)SlowMs + "ms) " + _slow +
-                        " 帧，平均 " + (_frames > 0 ? (_sum / _frames).ToString("0.0") : "0.0") + "ms，最慢 " +
-                        _max.ToString("0.0") + "ms | 最慢帧状态: " + _maxState));
-                }
-                catch { }
-            }
-            _frames = 0; _slow = 0; _sum = 0; _max = 0; _maxState = ""; _windowStart = DateTime.Now;
         }
     }
 
@@ -210,7 +152,7 @@ namespace SnapWheel
 #if NO_KEY
         public const string Version = "0.2.18";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.4.8";   // 完整版：字不变修复收尾 + 帧耗时统计 + 行为测试   // 完整版：体验与工程优化
+        public const string Version = "0.4.8";   // 完整版：体验与工程优化
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
@@ -884,13 +826,8 @@ namespace SnapWheel
         public Store ActiveStore { get { return Wheels[Active].Store; } }
         public Color Accent { get { return Wheels[Active].Accent; } }
 
-        // 测试用：把轮盘清单指到临时路径（null = 正常 %APPDATA%\SnapWheel）。
-        // 测试跑一遍不该把用户真实的轮盘列表/图片目录冲掉。
-        public static string OverrideMetaPath = null;
-
         static string MetaPath()
         {
-            if (OverrideMetaPath != null) return OverrideMetaPath;
             string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapWheel");
             try { Directory.CreateDirectory(d); } catch { }
             return Path.Combine(d, "wheels.ini");
@@ -1095,13 +1032,8 @@ namespace SnapWheel
         public string KeyActions = "new,next,delete,prev";  // 万能键四分区动作：上,右,下,左
         public int Rev = 0;                   // 配置版本号（用于默认值迁移）
 
-        // 测试用：把配置文件指到临时路径（null = 正常的 %APPDATA%\SnapWheel）。
-        // 有了它，测试才能做"存盘 -> 重新读回来"的往返验证，又不会覆盖用户真实的设置。
-        public static string OverridePath = null;
-
         static string FilePath()
         {
-            if (OverridePath != null) return OverridePath;
             string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapWheel");
             try { Directory.CreateDirectory(d); } catch { }
             return Path.Combine(d, "settings.ini");
@@ -1168,9 +1100,10 @@ namespace SnapWheel
             catch { }
 
             // ---- 配置迁移 ----
-            // 只补一个版本标记。默认值（例如"收起态默认关"）只影响「全新安装」，
-            // 绝不覆盖老用户自己的选择 —— 上一版会强制改，把明明开着收起的人给关掉了。
-            s.Rev = 2;
+            // Rev<2 的老配置："收起态"当年的默认是「开」，新版默认改成「展开」。
+            // 绝大多数人从没动过这个开关，所以对没有 Rev 标记的老配置按新默认处理一次；
+            // 之后 Save 会写上 Rev=2，用户自己怎么设就怎么算，不会再被覆盖。
+            if (s.Rev < 2) { s.CollapseMode = false; s.Rev = 2; }
 
             return s;
         }
@@ -1189,7 +1122,7 @@ namespace SnapWheel
         // 顺序 = 分区顺序：0=上 1=右 2=下 3=左（和 SectorAt 一致）
         public static readonly string[] KeyActionIds =
         {
-            "new", "next", "delete", "prev", "shot", "collapse", "folder", "settings", "paste", "clear", "none"
+            "new", "next", "delete", "prev", "shot", "collapse", "folder", "settings", "paste", "none"
         };
 
         public static string KeyActionName(string id)
@@ -1205,7 +1138,6 @@ namespace SnapWheel
                 case "folder": return "打开保存文件夹";
                 case "settings": return "打开设置";
                 case "paste": return "从剪贴板收一张";
-                case "clear": return "清空这一盘（保留轮盘）";
                 default: return "不设置";
             }
         }
@@ -2323,9 +2255,10 @@ namespace SnapWheel
         // 一整趟 0 -> 1 的时间基准（不含速度设置）
         float RingUnitDurBase()
         {
-            // 固定时长。早先是 0.82 + 0.05*图片数 —— 图一多收起就明显更慢，
-            // 但展开/收起本来是一段固定几何过渡，跟盘里存了几张图没关系。
-            return 1.0f;
+            float d = 0.82f + 0.050f * _store.Items.Count;     // 5 张图约 1.1s
+            if (d < 0.75f) d = 0.75f;
+            if (d > 1.65f) d = 1.65f;
+            return d;
         }
 
         // 一趟 0->1 的时长：展开和收起各用各的速度百分比（越大越快）
@@ -2705,18 +2638,21 @@ namespace SnapWheel
             }
             if (_enlarged >= 0 || _peekIndex >= 0) need = true;
 
-            // 删除动画：必须独立判断（原来写成 else if，挂在"放大预览"后面 ——
-            // 放大预览一开着动画就不推进，于是"有动画但没删掉"）
-            if (_deletingItem != null)
+            else if (_deletingItem != null)
             {
                 _deleteProg += 0.055f;                     // ~0.28s collapse
                 need = true;
                 if (_deleteProg >= 1f)
                 {
-                    StoreItem victim = _deletingItem;
+                    _store.Items.Remove(_deletingItem);
+                    _thumbCache.Remove(_deletingItem);
+                    _enterT0.Remove(_deletingItem);
+                    _scales.Clear();
                     _deletingItem = null;
                     _deleteProg = 0f;
-                    RemoveItem(victim, true);
+                    _hover = -1;
+                    if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
+                    if (_offset > _targetOffset) _offset = _targetOffset;
                 }
             }
 
@@ -2828,11 +2764,8 @@ namespace SnapWheel
                 if (_nubHintT > 0.01f) need = true;
             }
 
-            // 后台抓好的玻璃底：在 UI 线程这里换上。
-            // 但动画期间不换（尤其是展开/收起那趟）—— 换底会强制整窗重绘，正好卡在动画中间，看着就"顿"。
-            // 悬停/交互期间也不换：换底会强制整窗重绘，正好把交互那一下顶慢（"慢半拍"）
-            if (!_intro && _hover < 0 && !_closeHover && !_gearHover && !_shootHover && !_keyHover)
-                ApplyPendingBackdrop();
+            // 后台抓好的玻璃底：在 UI 线程这里换上（抓屏+模糊已经不在 UI 线程做了）
+            ApplyPendingBackdrop();
 
             // 背景交叉淡入（换背景时玻璃颜色渐变，不跳）
             if (_backdropOld != null && _backdropFade < 1f)
@@ -2847,7 +2780,7 @@ namespace SnapWheel
             // （窗口已设置 WDA_EXCLUDEFROMCAPTURE，抓屏不会把轮盘自己拍进去，所以显示中也能抓）
             if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro)
             {
-                if ((DateTime.Now - _backdropAt).TotalSeconds > 3.5)
+                if ((DateTime.Now - _backdropAt).TotalSeconds > 1.6)
                 {
                     _backdropAt = DateTime.Now;
                     if (_hover < 0 && !_menuOpen && _enlarged < 0 && !_dropActive && _dragOutItem == null && _deletingItem == null)
@@ -3162,7 +3095,6 @@ namespace SnapWheel
         DateTime _keyDownAt = DateTime.MinValue;
         // 万能键长按多久弹圆盘：从 260ms 收到 140ms（更跟手），仍能区分"点一下"和"长按"
         const int KeyMenuDelayMs = 140;
-        bool _labelLogged = false;      // 诊断用：每次展开圆盘只记一次
         float _menuT = 0f;             // 0..1 radial menu expansion
         bool _menuOpen = false;
         int _sector = -1;              // 0=上 1=右 2=下 3=左（动作可由用户自定义）
@@ -3240,7 +3172,6 @@ namespace SnapWheel
                 _glassBusy = false;
             }));
             th.IsBackground = true;
-            try { th.Priority = System.Threading.ThreadPriority.BelowNormal; } catch { }   // 别和 UI 抢 CPU
             th.Start();
         }
 
@@ -3477,69 +3408,10 @@ namespace SnapWheel
             AfterWheelSwitch();
         }
 
-        // 真正把一张图从轮盘拿走：内存 + 硬盘文件。
-        // 关键：图片列表是靠"扫描保存目录"恢复的，只删内存不删文件，下次启动它又回来了。
-        // 右键单击/双击删除进入点。上一张还在播删除动画就先把它真正删掉：
-        // 连点/来回点时"正在删的那张"只有一个，后来者会覆盖前者，否则两张都删不掉。
-        // （单独抽成方法是为了能直接测这条行为 —— 这正是之前测试漏掉的四个 bug 之一）
-        void BeginDelete(StoreItem it)
-        {
-            if (_deletingItem != null)
-            {
-                StoreItem prev = _deletingItem;
-                _deletingItem = null; _deleteProg = 0f;
-                RemoveItem(prev, true);
-            }
-            _deletingItem = it;        // 这张交给 AnimTick 播完动画再删
-            _deleteProg = 0f;
-        }
-
-        public void RemoveItem(StoreItem it, bool deleteFile)
-        {
-            if (it == null) return;
-            try { _store.Items.Remove(it); } catch { }
-            try { _thumbCache.Remove(it); } catch { }
-            try { _enterT0.Remove(it); } catch { }
-            _scales.Clear();
-            if (deleteFile)
-            {
-                try { if (it.FilePath != null && it.FilePath.Length > 0 && File.Exists(it.FilePath)) File.Delete(it.FilePath); }
-                catch { }
-            }
-            _hover = -1; _enlarged = -1; _peekIndex = -1;
-            if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
-            if (_offset > _targetOffset) _offset = _targetOffset;
-            _rendered = false;
-            Render();
-        }
-
-        // 一键清空当前轮盘里的图片，轮盘本身保留
-        public void ClearCurrentWheel()
-        {
-            int n = _store.Items.Count;
-            try
-            {
-                StoreItem[] all = _store.Items.ToArray();
-                for (int i = 0; i < all.Length; i++)
-                {
-                    try { if (all[i].FilePath != null && File.Exists(all[i].FilePath)) File.Delete(all[i].FilePath); } catch { }
-                }
-                _store.Items.Clear();
-                _thumbCache.Clear();
-                _enterT0.Clear();
-                _scales.Clear();
-                _offset = 0f; _targetOffset = 0f; _hover = -1; _enlarged = -1; _peekIndex = -1;
-                _deletingItem = null; _deleteProg = 0f;
-                _rendered = false;
-                Render();
-                ShowToast(n > 0 ? ("已清空这一盘：" + n + " 张") : "这一盘本来就是空的");
-            }
-            catch (Exception ex) { Err.Log("ClearCurrentWheel", ex); }
-        }
-
         // 万能键圆盘松手时执行对应分区的动作（动作由用户在设置里自定义）
         void DoKeyAction(int sector)
-        {            string a = _settings.KeyActionAt(sector);
+        {
+            string a = _settings.KeyActionAt(sector);
             try
             {
                 switch (a)
@@ -3554,7 +3426,6 @@ namespace SnapWheel
                         try { if (!Directory.Exists(_settings.Dir)) Directory.CreateDirectory(_settings.Dir); System.Diagnostics.Process.Start(_settings.Dir); } catch { }
                         break;
                     case "settings": if (SettingsRequested != null) SettingsRequested(this, EventArgs.Empty); break;
-                    case "clear": ClearCurrentWheel(); break;
                     case "paste":
                         try { IDataObject dob = Clipboard.GetDataObject(); if (dob != null) ImportBitmap(dob); } catch { }
                         break;
@@ -3562,18 +3433,6 @@ namespace SnapWheel
                 }
             }
             catch (Exception ex) { Err.Log("DoKeyAction", ex); }
-        }
-
-        // 设置窗口点了确定之后，界面上要做的收尾。
-        // 抽成方法是为了能写行为测试 —— 以前这里曾混进一句 HideWheel()（收起态关掉时），
-        // 结果每次点确定，轮盘都当场消失，而当时 150 项绘制测试一个都发现不了。
-        public void AfterSettingsApplied()
-        {
-            ApplyTopMost();
-            ApplyLayout();
-            // 收起态被关掉时，别让轮盘卡在"只剩个把手"的状态里
-            if (!_settings.CollapseMode && _collapsed) ExpandWheel();
-            RefreshWheel();            // 强制重绘：万能键上的动作名等设置改完要立刻生效
         }
 
         public void RefreshWheel()
@@ -3694,28 +3553,6 @@ namespace SnapWheel
         void Render()
         {
             if (!IsHandleCreated || !Visible) return;
-            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-            try { RenderCore(); }
-            finally
-            {
-                sw.Stop();
-                FrameStats.Sample(sw.Elapsed.TotalMilliseconds, FrameState());
-            }
-        }
-
-        // 慢帧要能说清"当时界面是什么状态"，否则只知道慢、不知道因为什么慢
-        string FrameState()
-        {
-            return "show=" + _show.ToString("0.00") + " target=" + _targetShow.ToString("0.00") +
-                   " 图=" + _store.Items.Count + " 缩略图缓存=" + _thumbCache.Count +
-                   " offset=" + _offset.ToString("0.0") + "/" + _targetOffset.ToString("0.0") +
-                   " hover=" + _hover + " 放大=" + _enlarged + " peek=" + _peekIndex +
-                   " 菜单=" + _menuOpen + " intro=" + _intro + " 收起中=" + _collapsing + " 已收起=" + _collapsed +
-                   " 删除中=" + (_deletingItem != null) + " 展开动画=" + _showAnimating + " 提示=" + (_toast.Length > 0);
-        }
-
-        void RenderCore()
-        {
             PruneCaches();
             int w = Width, h = Height;
             if (w <= 0 || h <= 0) return;
@@ -3897,13 +3734,6 @@ namespace SnapWheel
                     float lr = rr * 0.60f;
                     using (Font kf = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold))
                     {
-                        // 诊断：圆盘展开时把"画标签时读到的动作"写进日志（用来定位字不变的问题）
-                        if (_menuT > 0.85f && !_labelLogged)
-                        {
-                            _labelLogged = true;
-                            try { Err.Log("KeyLabels", new Exception("KeyActions=" + _settings.KeyActions + " | 四个方向=" + _settings.KeyActionAt(0) + "," + _settings.KeyActionAt(1) + "," + _settings.KeyActionAt(2) + "," + _settings.KeyActionAt(3))); } catch { }
-                        }
-                        if (_menuT < 0.05f) _labelLogged = false;
                         for (int q = 0; q < 4; q++)
                         {
                             string txt = KeyActionShort(_settings.KeyActionAt(q));
@@ -3941,7 +3771,6 @@ namespace SnapWheel
                 case "folder": return "文件夹";
                 case "settings": return "设置";
                 case "paste": return "收一张";
-                case "clear": return "清空";
                 default: return "";
             }
         }
@@ -4963,7 +4792,8 @@ namespace SnapWheel
                 }
                 if (single || dbl)
                 {
-                    BeginDelete(hh >= 0 && hh < _store.Items.Count ? _store.Items[hh] : null);
+                    _deletingItem = _store.Items[hh];      // play the collapse, removal happens in AnimTick
+                    _deleteProg = 0f;
                     _enlarged = -1; _hover = -1;
                     Render();
                 }
@@ -5634,15 +5464,7 @@ namespace SnapWheel
                 int idx = 0;
                 for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur) idx = j;
                 kb.SelectedIndex = idx;
-                try { Err.Log("KeyInit", new Exception("方向" + i + " 初始化用 " + cur + "（来自 KeyActions=" + s.KeyActions + "）")); } catch { }
                 keyBox[i] = kb;
-                // 选中就立刻写进设置：不依赖"确定"按钮里那段保存循环（之前那里没生效）
-                {
-                    int myI = i; ComboBox self = kb;
-                    kb.SelectedIndexChanged += new EventHandler(delegate(object o, EventArgs e2) {
-                        if (self.SelectedIndex >= 0) s.SetKeyAction(myI, Settings.KeyActionIds[self.SelectedIndex]);
-                    });
-                }
                 if (i % 2 == 0)
                 {
                     ComboBox kb2 = null; string dir2 = null;
@@ -5663,12 +5485,6 @@ namespace SnapWheel
                         for (int j = 0; j < Settings.KeyActionIds.Length; j++) if (Settings.KeyActionIds[j] == cur3) idx3 = j;
                         kb3.SelectedIndex = idx3;
                         keyBox[i + 1] = kb3;
-                        {
-                            int myI2 = i + 1; ComboBox self2 = kb3;
-                            kb3.SelectedIndexChanged += new EventHandler(delegate(object o, EventArgs e4) {
-                                if (self2.SelectedIndex >= 0) s.SetKeyAction(myI2, Settings.KeyActionIds[self2.SelectedIndex]);
-                            });
-                        }
                         kb2 = kb3;
                         colR.Controls.Add(Row(l1, kb1, Gap(16), MkLabel(dir2), kb2));
                     }
@@ -5716,22 +5532,12 @@ namespace SnapWheel
                 s.ShowBalloon = chkBalloon.Checked;
                 s.DragOutAsFile = chkDragFile.Checked;
                 s.CheckUpdate = chkUpdate.Checked;
-                // 保存万能键四分区：带日志和异常捕获，一次定位"改了不生效"
-                try
+                for (int ki = 0; ki < 4; ki++)
                 {
-                    string dbg = "";
-                    for (int ki = 0; ki < 4; ki++)
-                    {
-                        if (keyBox[ki] == null) { dbg += ki + ":null "; continue; }
-                        int ksel = keyBox[ki].SelectedIndex;
-                        if (ksel < 0) ksel = 0;
-                        s.SetKeyAction(ki, Settings.KeyActionIds[ksel]);
-                        dbg += ki + ":" + Settings.KeyActionIds[ksel] + " ";
-                    }
-                    s.Save();      // 立刻落盘：否则下次打开设置会从文件读到旧值，一点确定就把改动打回原形
-                    Err.Log("KeySave", new Exception("下拉读到 " + dbg + " | 写入后 KeyActions=" + s.KeyActions + " | 已落盘"));
+                    int ksel = keyBox[ki].SelectedIndex;
+                    if (ksel < 0) ksel = 0;
+                    s.SetKeyAction(ki, Settings.KeyActionIds[ksel]);
                 }
-                catch (Exception kex) { Err.Log("KeySave", kex); }
                 s.IntroAnim = chkIntroAnim.Checked;
                 s.UiStyle = (cmbStyle.SelectedIndex == 1) ? "flat" : (cmbStyle.SelectedIndex == 2 ? "solid" : "neu");
                 s.AccentIndex = cmbAccent.SelectedIndex - 1;
@@ -6350,10 +6156,12 @@ namespace SnapWheel
             if (r == DialogResult.OK)
             {
                 _wheels.ApplySettings();
+                _wheel.ApplyTopMost();
+                _wheel.ApplyLayout();
                 RegisterHotkeyAndNotify();
-                // 界面侧收尾都在这里：以前这句里还夹着一句 HideWheel()，
-                // 结果每次点设置里的确定，轮盘都当场消失（详见 WheelForm.AfterSettingsApplied）
-                _wheel.AfterSettingsApplied();
+                // 收起态被关掉时，别让轮盘卡在"只剩个把手"的状态里
+                if (!_settings.CollapseMode && _wheel.IsCollapsed) { _wheel.ExpandWheel(); }
+                else if (!_settings.CollapseMode) { _wheel.HideWheel(); }
             }
             else
             {

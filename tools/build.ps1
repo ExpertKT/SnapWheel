@@ -16,6 +16,7 @@ param(
     [switch]$Package,
     [switch]$Deploy,
     [switch]$Clean,
+    [switch]$Sign,
     [string]$OutDir = "build"
 )
 
@@ -85,6 +86,34 @@ Info "编译："
 Invoke-Build $null    'SnapWheel.exe'       '完整版'
 Invoke-Build 'NO_KEY' 'SnapWheel-nokey.exe' '无万能键版'
 
+# ---- 顺便编译一键安装器 ----
+$setupSrc = Join-Path $root 'tools\setup\Setup.cs'
+$setupExe = Join-Path $out 'SnapWheelSetup.exe'
+if (Test-Path $setupSrc) {
+    $log = & $csc @('/nologo', '/optimize+', '/target:winexe', "/out:$setupExe", $setupSrc) 2>&1
+    if (Test-Path $setupExe) {
+        Ok ("{0,-14} {1,-24} {2,8:N0} 字节" -f '一键安装器', 'SnapWheelSetup.exe', (Get-Item $setupExe).Length)
+    }
+}
+
+# ---- 数字签名 ----
+# 注意：Set-AuthenticodeSignature 会联网做证书链/吊销校验，本机常常要等几十秒甚至卡住，
+# 所以不放进默认构建。需要签名时加 -Sign，或单独跑 .\tools\签名.ps1
+if ($Sign) {
+    $signScript = Join-Path $root 'tools\签名.ps1'
+    if (Test-Path $signScript) {
+        Info "签名："
+        foreach ($f in @('SnapWheel.exe', 'SnapWheel-nokey.exe', 'SnapWheelSetup.exe')) {
+            $p = Join-Path $out $f
+            if (Test-Path $p) {
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $signScript -Exe $p *> $null
+                $sig = Get-AuthenticodeSignature $p
+                Ok ("{0,-14} 已签名（{1}）" -f $f, $sig.Status)
+            }
+        }
+    }
+}
+
 # ---- 跑测试 ----
 if ($Test) {
     Info ""
@@ -109,6 +138,7 @@ if ($Test) {
     Run-Test '图片格式/导入' 'io-test.cs'               'SnapWheel.IoTest' $null
     Run-Test '绘制/风格/DPI' 'render-smoke.cs'          'SnapWheel.RenderSmoke' $null
     Run-Test '绘制（无万能键）' 'render-smoke.cs'        'SnapWheel.RenderSmoke' 'NO_KEY'
+    Run-Test '行为/持久化'    'behavior-test.cs'         'SnapWheel.BehaviorTest' $null
     Write-Host "  （拖放测试会模拟鼠标真的拖拽，需要时手动跑：见 README）" -ForegroundColor DarkGray
 }
 
