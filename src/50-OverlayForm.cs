@@ -526,7 +526,8 @@ namespace SnapWheel
                 g.Restore(st);
             }
             PlaceToolbar();
-            PaintToolbar(g, 255);
+            UpdateToolAlpha();              // 鼠标不在附近就把工具条变淡（不挡画面）
+            PaintToolbar(g, _toolAlpha);
             PaintShapeSelection(g);
             PaintIntroPanel(g);
             PaintOcrBusy(g);
@@ -642,6 +643,7 @@ namespace SnapWheel
         protected override void OnMouseMove(MouseEventArgs e)
         {
             if (AnnotMouseMove(e)) return;
+            RefreshToolAlpha();          // 靠近/离开工具条时变实/变淡（浮层不常重绘，得主动请求）
             // 关键保护：如果左键其实没按住，立刻清掉所有拖拽状态，
             // 否则“在选区外松开鼠标”后，后续移动会继续缩放/旋转 -> 乱飞
             if ((Control.MouseButtons & MouseButtons.Left) == 0)

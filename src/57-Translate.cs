@@ -13,7 +13,9 @@ namespace SnapWheel
     static class Translate
     {
         const int MaxChunk = 420;      // 免费接口对单次请求长度有限制，长文切段
-        const int TimeoutMs = 9000;
+        // 一次请求的时限。原来 9 秒偏紧：长文要按段顺序发好几次，网络一慢就会看到
+        // "翻译接口连不上：超时"（实测接口本身只要 1.2 秒，是偶发抖动把 9 秒吃掉了）。
+        const int TimeoutMs = 15000;
 
         static bool IsCjk(char c)
         {
@@ -48,12 +50,20 @@ namespace SnapWheel
 
             StringBuilder outp = new StringBuilder();
             string[] chunks = Split(text, MaxChunk);
+            int empty = 0;
             for (int i = 0; i < chunks.Length; i++)
             {
                 string one = One(chunks[i], src, dst, out error);
                 if (one == null) return null;
-                if (outp.Length > 0) outp.Append(LooksChinese(text) ? "\n" : "\n");
-                outp.Append(one.Trim());
+                one = one.Trim();
+                if (one.Length == 0) { empty++; continue; }
+                if (outp.Length > 0) outp.Append('\n');       // 分段译完拼回去，一段一行
+                outp.Append(one);
+            }
+            if (outp.Length == 0)
+            {
+                error = empty > 0 ? "接口没返回译文（多半是被限流了），过一会儿再试" : "没有要翻译的文字";
+                return null;
             }
             return outp.ToString();
         }
@@ -102,10 +112,8 @@ namespace SnapWheel
                 using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
                 {
                     string json = sr.ReadToEnd();
-                    string t = ExtractField(json, "translatedText");
-                    if (t == null) { error = "接口返回的内容看不懂（可能被限流了）"; return null; }
-                    if (t.IndexOf("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) >= 0)
-                    { error = "免费翻译额度用完了（MyMemory 限流），过一会儿再试"; return null; }
+                    string t = ReadResult(json, out error);
+                    if (t == null) return null;
                     return t;
                 }
             }
@@ -115,6 +123,52 @@ namespace SnapWheel
                 return null;
             }
             catch (Exception ex) { error = "翻译失败：" + ex.Message; return null; }
+        }
+
+        // 从接口返回里读出结果：成功=译文（可能为空串，表示这一段没内容）；
+        // 失败=null，并把"人话原因"写进 error。
+        // 几种失败要分开，不然用户看到的永远是同一句"内容看不懂"：
+        //   限流（MYMEMORY WARNING / responseDetails 带 LIMIT）-> 说清楚是被限流了
+        //   别的错误状态 -> 把接口给的原因原样带出来
+        internal static string ReadResult(string json, out string error)
+        {
+            error = null;
+            if (string.IsNullOrEmpty(json)) { error = "接口没有返回内容"; return null; }
+
+            string t = ExtractField(json, "translatedText");
+            string details = ExtractField(json, "responseDetails");
+            string status = ExtractRaw(json, "responseStatus");
+
+            bool limited = (t != null && t.IndexOf("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) >= 0)
+                        || (details != null && (details.IndexOf("LIMIT", StringComparison.OrdinalIgnoreCase) >= 0
+                                             || details.IndexOf("WARNING", StringComparison.OrdinalIgnoreCase) >= 0));
+            if (limited)
+            {
+                error = "免费翻译额度用完了（MyMemory 限流）——过一会儿再试";
+                return null;
+            }
+            if (!string.IsNullOrEmpty(status) && status != "200")
+            {
+                error = "翻译接口报错：" + (string.IsNullOrEmpty(details) ? status : details);
+                return null;
+            }
+            if (t == null) { error = "接口返回的内容看不懂（可能被限流了）"; return null; }
+            return t.Trim();
+        }
+
+        // 读一个"可能是字符串也可能是数字"的字段（MyMemory 的 responseStatus 是不带引号的 200）
+        internal static string ExtractRaw(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int k = json.IndexOf("\"" + key + "\"", StringComparison.Ordinal);
+            if (k < 0) return null;
+            int colon = json.IndexOf(':', k);
+            if (colon < 0) return null;
+            int i = colon + 1;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            int start = i;
+            while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '.' || json[i] == '-')) i++;
+            return i > start ? json.Substring(start, i - start) : null;
         }
 
         // 从 {"responseData":{"translatedText":"..."}} 里把那个字段抠出来（不引 JSON 库，

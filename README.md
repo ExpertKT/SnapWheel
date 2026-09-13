@@ -26,6 +26,7 @@
 | 新功能 | 怎么用 |
 |---|---|
 | **撤销删除（后悔药）** | 删掉 / 一键清空的图不再一去不回：托盘右键 →「**撤销上一次删除**」，最近删掉的那批（一次清空就是整批）立刻放回原盘。**最近 8 次删除**都记得住；第一次删图时轮盘上会当场告诉你这件事 |
+| **标注工具条不再挡住截图** | 工具条按 **下方 → 上方 → 右侧竖排 → 左侧竖排** 依次找位置，任一方向放得下就**绝不压住选区**；拖框选的那会儿它先不显示（省得追着鼠标、正好挡在你要选的地方）。鼠标不靠近时自动变淡 —— 这条以前写了但没接上，现在真的生效 |
 
 刻意**不做"回收站"**：不建目录、不写索引、不加管理窗口。图本来就还在内存里，多留一份引用就能立刻撤回，
 退出程序即清空 —— 不会像回收站那样越堆越大、也不用你定期去清理它。
@@ -267,6 +268,7 @@ tests/                  10 套可复跑的测试与工具（build.ps1 -Test 自�
   probe-test.cs             窗口命中测试探针
   uipi-drag-test.cs         权限隔离（UIPI）拖放复现
   ui-shot.cs                把各状态渲染成 PNG，离线看设计效果
+  toolbar-shot.cs           把截图浮层（含标注工具条）渲染成 PNG，验收"工具条有没有挡住选区"
   promo-shot.cs             生成宣传图（合成假桌面，不泄露真实屏幕）
 docs/                   README 用的界面截图
 dist/                  给用户的使用说明
@@ -304,6 +306,9 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 # 看设计效果（不弹窗、不动鼠标，输出到 %TEMP%\snapwheel_ui）
 & $csc /nologo /target:exe /main:SnapWheel.UiShot /out:$env:TEMP\uishot.exe src\*.cs tests\ui-shot.cs ; & $env:TEMP\uishot.exe
+
+# 看截图浮层的工具条摆哪（输出到 %TEMP%\snapwheel-shot，红线标出工具条位置）
+& $csc /nologo /target:exe /main:SnapWheel.ToolbarShot /out:$env:TEMP\tbshot.exe src\*.cs tests\toolbar-shot.cs ; & $env:TEMP\tbshot.exe
 ```
 
 ## 版本历史

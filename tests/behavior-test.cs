@@ -992,6 +992,38 @@ namespace SnapWheel
                 return null;
             });
 
+            Run("翻译：失败也要给出人话原因（限流 / 接口报错 / 空返回各不一样）", delegate
+            {
+                string err;
+
+                // 正常
+                string ok = Translate.ReadResult("{\"responseData\":{\"translatedText\":\" hello 世界 \"},\"responseStatus\":200}", out err);
+                if (ok != "hello 世界") return "正常返回没解析对：" + (ok == null ? "null/" + err : ok);
+
+                // 限流：MyMemory 把警告塞在 translatedText 里
+                string q = Translate.ReadResult("{\"responseData\":{\"translatedText\":\"MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY\"},\"responseStatus\":429}", out err);
+                if (q != null) return "限流居然当成成功了：" + q;
+                if (err == null || err.IndexOf("额度") < 0) return "限流没给出限流的提示：" + err;
+
+                // 限流：另一种形态（warning 在 responseDetails 里）
+                q = Translate.ReadResult("{\"responseData\":{\"translatedText\":\"\"},\"responseDetails\":\"QUERY LENGTH LIMIT EXCEEDED\",\"responseStatus\":403}", out err);
+                if (q != null || err == null || err.IndexOf("额度") < 0) return "没认出 responseDetails 里的限流：" + err;
+
+                // 别的错误状态：原因原样带出来
+                q = Translate.ReadResult("{\"responseData\":null,\"responseDetails\":\"INVALID LANGUAGE PAIR\",\"responseStatus\":500}", out err);
+                if (q != null) return "报错却返回了内容";
+                if (err == null || err.IndexOf("INVALID LANGUAGE PAIR") < 0) return "把接口给的原因丢了：" + err;
+
+                // 空内容：不算失败，返回空串（上层会当成"这段没内容"跳过）
+                q = Translate.ReadResult("{\"responseData\":{\"translatedText\":\"\"},\"responseStatus\":200}", out err);
+                if (q == null || q.Length != 0) return "空返回没当成空串：" + (q == null ? err : q);
+
+                // 完全不是 JSON
+                q = Translate.ReadResult("<html>502 Bad Gateway</html>", out err);
+                if (q != null || string.IsNullOrEmpty(err)) return "垃圾返回没报错";
+                return null;
+            });
+
             Run("翻译：真的调一次免费接口（连不上就跳过，不算失败）", delegate
             {
                 string err;
@@ -1189,6 +1221,93 @@ namespace SnapWheel
                 return null;
             });
 
+
+            // ================= 38. 工具条绝不压住选区 =================
+            Run("工具条不压截图：优先在选区外，上下没地方就竖排到左右，实在没地方才压住且更透", delegate
+            {
+                Rectangle scr = new Rectangle(0, 0, 1920, 1080);
+                int n = 14, bw = 46, bh = 40, gp = 6;    // 跟真实工具条同量级
+                bool vertical, overlap;
+
+                // (1) 普通选区：应当在选区下方，且完全不接触选区
+                RectangleF sel1 = new RectangleF(400, 300, 600, 300);
+                Rectangle r1 = OverlayForm.ToolbarRect(scr, sel1, n, bw, bh, gp, gp, Rectangle.Empty, out vertical, out overlap);
+                if (r1.IntersectsWith(Rectangle.Round(sel1))) return "普通选区：工具条压在选区上了 " + r1;
+                if (vertical) return "普通选区：下面明明有地方却竖排了";
+                if (overlap) return "普通选区：不该标记成压住";
+                if (r1.Top < sel1.Bottom) return "普通选区：没有摆在选区下方";
+
+                // (2) 贴着屏幕下边的选区：应当翻到选区上方
+                RectangleF sel2 = new RectangleF(400, 700, 600, 380);
+                Rectangle r2 = OverlayForm.ToolbarRect(scr, sel2, n, bw, bh, gp, gp, Rectangle.Empty, out vertical, out overlap);
+                if (r2.IntersectsWith(Rectangle.Round(sel2))) return "贴底选区：工具条压在选区上了 " + r2;
+                if (r2.Bottom > sel2.Top) return "贴底选区：没有翻到选区上方";
+
+                // (3) 竖着截一整条（上下都没地方）：必须竖排贴到选区左右，仍然不接触
+                RectangleF sel3 = new RectangleF(600, 0, 700, 1080);
+                Rectangle r3 = OverlayForm.ToolbarRect(scr, sel3, n, bw, bh, gp, gp, Rectangle.Empty, out vertical, out overlap);
+                if (r3.IntersectsWith(Rectangle.Round(sel3))) return "整条选区：工具条还是压在选区上了 " + r3;
+                if (!vertical) return "整条选区：左右还有地方，应该竖排（横向排在屏幕里塞不下就该换方向）";
+
+                // (4) 选区铺满整屏：没地方也只能压住，但要标记出来（好让它画得更透）并且别出屏
+                RectangleF sel4 = new RectangleF(0, 0, 1920, 1080);
+                Rectangle r4 = OverlayForm.ToolbarRect(scr, sel4, n, bw, bh, gp, gp, Rectangle.Empty, out vertical, out overlap);
+                if (!overlap) return "铺满整屏：应该标记成压住（画的时候要更透）";
+                if (r4.Left < scr.Left || r4.Right > scr.Right || r4.Top < scr.Top || r4.Bottom > scr.Bottom)
+                    return "铺满整屏：工具条跑到屏幕外面了 " + r4;
+
+                // (5) 高 DPI 小屏：按钮尺寸翻倍后竖排会比屏幕还高 —— 收紧间距也得塞进屏幕，且仍不压选区
+                int bw2 = 69, bh2 = 60;                  // 相当于 1080p 开 150%
+                RectangleF sel5 = new RectangleF(200, 0, 900, 1080);
+                Rectangle r5 = OverlayForm.ToolbarRect(scr, sel5, n, bw2, bh2, 3, 3, Rectangle.Empty, out vertical, out overlap);
+                if (r5.Top < scr.Top || r5.Bottom > scr.Bottom) return "紧凑竖排还是比屏幕高：" + r5;
+                if (r5.IntersectsWith(Rectangle.Round(sel5))) return "紧凑竖排压住选区了：" + r5;
+                return null;
+            });
+
+            Run("拖框选的时候工具条先不显示（不然它追着鼠标、正好挡在你要选的地方）", delegate
+            {
+                Bitmap shot = Solid(800, 600, Color.White);
+                OverlayForm o = Track(new OverlayForm(new Rectangle(0, 0, 800, 600), shot));
+                F(o, "_hasSel", true);
+                F(o, "_c", new PointF(400f, 300f));
+                F(o, "_sz", new SizeF(400f, 300f));
+                F(o, "_dragging", false);
+                bool idle = (bool)Call(o, "ToolbarVisible");
+                F(o, "_dragging", true);
+                bool dragging = (bool)Call(o, "ToolbarVisible");
+                o.Dispose();
+                if (!idle) return "没在拖的时候工具条也不见了";
+                if (dragging) return "拖框选的时候工具条还在显示（会挡住正在选的区域）";
+                return null;
+            });
+
+            // ================= 40. 出错日志不会无限长大 =================
+            Run("出错日志超过上限就转存成 error.log.1（挂久了也不会涨成几 MB）", delegate
+            {
+                string d = Path.Combine(tmp, "logrot");
+                Directory.CreateDirectory(d);
+                string p = Path.Combine(d, "error.log");
+                string oldPath = Err.OverridePath;
+                long oldMax = Err.MaxBytes;
+                bool rotated, hasLog;
+                long len;
+                try
+                {
+                    Err.OverridePath = p;
+                    Err.MaxBytes = 400;                 // 人为压低，几条就能撑满
+                    Err.Log("测试日志", new Exception("第一条"));
+                    hasLog = File.Exists(p);
+                    for (int i = 0; i < 8; i++) Err.Log("测试日志", new Exception("第 " + i + " 条，把日志撑大"));
+                    rotated = File.Exists(p + ".1");
+                    len = File.Exists(p) ? new FileInfo(p).Length : 0;
+                }
+                finally { Err.OverridePath = oldPath; Err.MaxBytes = oldMax; }
+                if (!hasLog) return "一条都没写进去";
+                if (!rotated) return "超过上限了却没有转存（日志会一直涨）";
+                if (len > 400 * 3) return "转存之后新日志还是太大：" + len + " 字节";
+                return null;
+            });
 
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
