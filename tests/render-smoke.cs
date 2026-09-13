@@ -448,6 +448,10 @@ namespace SnapWheel
                 if (!keyOver) pass++; else fail++;
 
                 int opaqueCollapsed = 0, opaqueExpanded = 0;
+                // 采样前把"跟着真实光标跑"的状态清掉：测试窗体是显示着的，光标正好停在上面时
+                // hover / 放大预览会多出一堆不透明像素，数字随鼠标位置变 —— 同一份代码换个光标
+                // 位置就从 149/0 变成 148/1，白排查一轮
+                F(f, "_hover", -1); F(f, "_enlarged", -1); F(f, "_peekIndex", -1);
                 using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
                 {
                     using (Graphics g = Graphics.FromImage(b)) dw2.Invoke(f, new object[] { g, f.Width, f.Height });
@@ -455,6 +459,7 @@ namespace SnapWheel
                 }
                 f.ExpandWheel();
                 F(f, "_intro", false); F(f, "_introT", 1f); F(f, "_show", 1f);
+                F(f, "_hover", -1); F(f, "_enlarged", -1); F(f, "_peekIndex", -1);
                 Application.DoEvents();
                 using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
                 {
