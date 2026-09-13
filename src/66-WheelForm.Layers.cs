@@ -79,7 +79,6 @@ namespace SnapWheel
             h = Mix(h, (double)_closeDown); h = Mix(h, (double)_gearDown); h = Mix(h, (double)_shootDown);
             h = Mix(h, (double)_closeHoldP); h = Mix(h, (double)_nubHov);
             h = Mix(h, (double)_nubAppearT); h = Mix(h, (double)_nubHintT);
-            h = Mix(h, CenterHit(Point.Empty));   // 无万能键版：中间按钮组的按下/悬停状态（完整版恒为 -1）
             h = Mix(h, (double)_nubOutDist); h = Mix(h, (double)_nubInDist);
             if (which == 0)
             {

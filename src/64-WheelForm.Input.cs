@@ -160,7 +160,6 @@ namespace SnapWheel
             if (GearButtonRect().Contains(p)) return true;
             if (ShootButtonRect().Contains(p)) return true;
             if (KeyRect().Contains(p)) return true;
-            if (CenterHit(p) >= 0) return true;   // 无万能键版的中间按钮组
             // 名字药丸也要算"内容"，否则点它会直接穿透到桌面（改名点不动的根因）
             RectangleF np = NamePillRect();
             if (!np.IsEmpty)
@@ -406,7 +405,6 @@ namespace SnapWheel
         {
             _lastActive = DateTime.Now;
             e = LogicalArgs(e);
-            CenterMouseMove(e.Location);   // 无万能键版：中间按钮组的悬停反馈（完整版永远不做）
 
             if (_keyDown)
             {
@@ -457,8 +455,6 @@ namespace SnapWheel
         {
             _lastActive = DateTime.Now;
             e = LogicalArgs(e);
-            CenterMouseMove(e.Location);   // 无万能键版：中间按钮组的悬停反馈（完整版永远不做）          // 鼠标物理坐标 -> 逻辑坐标（缩放后命中测试才对得上）
-            if (CenterMouseDown(e.Location)) return;   // 无万能键版：中间按钮组（完整版永远 false）
 
             // 删除确认态：摇杆已分成左右两半，点哪边执行哪边
             if (_delConfirm)
@@ -572,7 +568,6 @@ namespace SnapWheel
         protected override void OnMouseUp(MouseEventArgs e)
         {
             e = LogicalArgs(e);
-            if (CenterMouseUp(e.Location)) return;     // 无万能键版：中间按钮组
             if (_keyDown)
             {
                 _keyDown = false;
