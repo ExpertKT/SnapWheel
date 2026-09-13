@@ -1076,6 +1076,7 @@ namespace SnapWheel
 
             DrawToast(g, a);
 
+            DrawCenterButtons(g, a);   // 无万能键版：中间那组按钮（完整版这里是空实现）
             DrawNubs(g, a);      // 展开状态下也画一个"收起"把手（贴着另一条屏幕边）
         }
         // 计数胶囊「当前 / 总数」：跟着滚动位置变，所以每帧单独画（不进缓存层）
