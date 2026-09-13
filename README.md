@@ -5,9 +5,9 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.4.8-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.5.0-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-143%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-158%20KB-lightgrey?style=flat-square)
 
 <p align="center">
   <img src="docs/wheel.png" width="330" alt="SnapWheel">
@@ -19,7 +19,7 @@
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**单文件 C# 实现，绿色免安装，零第三方依赖** —— 一个 114 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 158 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
 ## 为什么用它
 
@@ -61,7 +61,7 @@
 
 ### 该下哪个？两条产品线
 
-同一份源码用编译开关产出两条线，功能同步推进（当前：v0.4.8 ↔ v0.2.18）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.5.0 ↔ v0.2.20）：
 
 | 你想要的 | 下这个 | 区别 |
 |---|---|---|
@@ -87,8 +87,8 @@
 ```
 build\SnapWheel.exe                 完整版（含万能键）
 build\SnapWheel-nokey.exe           无万能键版
-build\SnapWheel-v0.4.8-full.zip     完整版分发包
-build\SnapWheel-v0.2.18-nokey.zip   无万能键版分发包
+build\SnapWheel-v0.5.0-full.zip     完整版分发包
+build\SnapWheel-v0.2.20-nokey.zip   无万能键版分发包
 ```
 
 <details>
@@ -111,10 +111,12 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 | 操作 | 说明 |
 |---|---|
 | 截图 | `Ctrl+Shift+S` 拖框选；四角缩放、旋转键转角、双击/回车确认 |
+| **截图标注** | 浮层上有工具条：**箭头 / 方框 / 马赛克 / 文字**，四色可选、Ctrl+Z 撤销；确认时标注合成进图片 |
 | 存到轮盘 | 截完自动滑入，成为环上的一张缩略图 |
 | 看大图 | 缩略图上**按住不动**约 0.3 秒放大预览 |
 | 拖出来用 | 从缩略图往外拖到微信 / 文件夹 / 任何地方 |
 | 拖回去 | 从桌面或任何地方把图片拖到**环带上**松手 |
+| **贴到屏幕上** | 缩略图上**中键**单击 → 钉在屏幕上对照看；滚轮缩放、拖动移动、双击/Esc 关掉 |
 | 翻页 | 鼠标放在环上滚滚轮 |
 | 换 Wheel | 长按**万能键**（环内侧圆盘）→ 上下左右四个分区 |
 | 改名字 | 鼠标停在名字药丸上点一下（最多 12 字） |
