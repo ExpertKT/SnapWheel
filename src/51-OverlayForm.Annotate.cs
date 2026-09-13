@@ -20,7 +20,7 @@ namespace SnapWheel
     //   选中一个图元后：拖动 = 移动，滚轮 = 改字号（文字）/ 粗细（其它），Del = 删除
     partial class OverlayForm
     {
-        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4 }
+        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4, Ocr = 5 }
 
         class Shape
         {
@@ -57,12 +57,11 @@ namespace SnapWheel
         const int BtnW = 34;                 // 都会被 _k 缩放
         const int BtnH = 30;
         const int Gap = 6;
-        const int IdxBg = 5 + 4;             // 颜色点占 5..8
+        const int IdxBg = 6 + 4;             // 工具 6 个（选择/箭头/方框/马赛克/文字/取字），颜色点占 6..9
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
-        const int IdxOcr = IdxBg + 3;        // 取字（OCR）
-        const int IdxUndo = IdxBg + 4;
-        const int BtnCount = IdxBg + 5;
+        const int IdxUndo = IdxBg + 3;
+        const int BtnCount = IdxBg + 4;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -219,6 +218,17 @@ namespace SnapWheel
                         g.DrawImageUnscaled(s.Cache, r.Left, r.Top);
                         break;
                     }
+                case AnnotKind.Ocr:
+                    {
+                        // 取字时拖出来的框：只是"要认哪一块"的示意，不会画进图里
+                        RectangleF r = RectOf(s.A, s.B);
+                        using (Pen p = new Pen(Color.FromArgb(245, 166, 35), 1.8f * _k))
+                        {
+                            p.DashStyle = DashStyle.Dash;
+                            g.DrawRectangle(p, r.X, r.Y, r.Width, r.Height);
+                        }
+                        break;
+                    }
                 case AnnotKind.Text:
                     {
                         if (string.IsNullOrEmpty(s.Text)) break;
@@ -310,7 +320,7 @@ namespace SnapWheel
             for (int i = 0; i < _toolBtns.Length; i++)
             {
                 Rectangle r = _toolBtns[i];
-                bool isTool = i < 5;
+                bool isTool = i < 6;
                 bool sel = isTool && ((AnnotKind)i == _tool);
                 if (sel || i == _toolHover)
                 {
@@ -320,10 +330,10 @@ namespace SnapWheel
                 }
 
                 Color ic = Color.White;
-                if (i >= 5 && i < 5 + AnnotColors.Length)
+                if (i >= 6 && i < 6 + AnnotColors.Length)
                 {
                     // 颜色点：当前色描粗白边；其余也描一圈细边 —— 黑点在深色工具条上不然看不见
-                    int ci = i - 5;
+                    int ci = i - 6;
                     bool cur = (_annotColor.ToArgb() == AnnotColors[ci].ToArgb());
                     int d = (int)(15 * _k);
                     Rectangle cr = new Rectangle(r.X + (r.Width - d) / 2, r.Y + (r.Height - d) / 2, d, d);
@@ -416,7 +426,7 @@ namespace SnapWheel
                             }
                             break;
                         }
-                    case IdxOcr:        // 取字：一个"字"比任何图标都好认
+                    case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
                         {
@@ -505,7 +515,8 @@ namespace SnapWheel
                 "②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T",
                 "      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销",
                 "      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉",
-                "③  工具条上的「字」= 取字（OCR）：把框里的文字认出来并复制",
+                "③  选「字」工具（或按 O）拖一个框圈住文字 = 取字，框越小越准；",
+                "      取字窗口里还能一键翻译成中文/英文",
                 "④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
             };
             int ly = y + pad + (int)(34 * _k);
@@ -548,12 +559,12 @@ namespace SnapWheel
                 for (int i = 0; i < _toolBtns.Length; i++)
                 {
                     if (!_toolBtns[i].Contains(e.Location)) continue;
-                    if (i < 5) { EndText(true); _tool = (AnnotKind)i; }
-                    else if (i < 5 + AnnotColors.Length) { _annotColor = AnnotColors[i - 5]; }
+                    if (i < 6) { EndText(true); _tool = (AnnotKind)i; }
+                    else if (i < 6 + AnnotColors.Length) { _annotColor = AnnotColors[i - 6]; }
                     else if (i == IdxBg) { _textBg = !_textBg; SaveTextBg(); }
                     else if (i == IdxSizeDown) { if (_sel != null) ResizeShape(_sel, -1f); else SetNextTextSize(_textSize - 2f); }
                     else if (i == IdxSizeUp) { if (_sel != null) ResizeShape(_sel, 1f); else SetNextTextSize(_textSize + 2f); }
-                    else if (i == IdxOcr) { DoOcr(); return true; }
+
                     else Undo();
                     Invalidate();
                     return true;
@@ -597,6 +608,18 @@ namespace SnapWheel
 
             if (_tool == AnnotKind.Text) { BeginText(e.Location); return true; }
 
+            if (_tool == AnnotKind.Ocr)
+            {
+                // 取字工具：拖一个框圈住要认的文字（框小=只是想认整块选区）
+                _drawing = new Shape();
+                _drawing.Kind = AnnotKind.Ocr;
+                _drawing.A = e.Location;
+                _drawing.B = e.Location;
+                SelectShape(null);
+                Invalidate();
+                return true;
+            }
+
             _drawing = new Shape();
             _drawing.Kind = _tool;
             _drawing.A = e.Location;
@@ -635,6 +658,14 @@ namespace SnapWheel
             if (_drawing == null) return false;
             Shape s = _drawing;
             _drawing = null;
+            if (s.Kind == AnnotKind.Ocr)
+            {
+                // 取字：不去动 _shapes（它不是标注，不该被画进成品图）
+                RectangleF rc = RectOf(s.A, s.B);
+                Invalidate();
+                DoOcrRegion(rc);
+                return true;
+            }
             RectangleF r = RectOf(s.A, s.B);
             bool ok = (s.Kind == AnnotKind.Arrow) || (r.Width >= 4 && r.Height >= 4);
             if (ok) { _shapes.Add(s); _annotHint = false; }
@@ -666,6 +697,7 @@ namespace SnapWheel
                 case Keys.R: _tool = AnnotKind.Rect; break;
                 case Keys.M: _tool = AnnotKind.Mosaic; break;
                 case Keys.T: _tool = AnnotKind.Text; break;
+                case Keys.O: _tool = AnnotKind.Ocr; break;      // O = 取字（OCR）
                 case Keys.B: _textBg = !_textBg; SaveTextBg(); break;
                 case Keys.OemOpenBrackets: ResizeShape(_sel, -1f); return true;
                 case Keys.OemCloseBrackets: ResizeShape(_sel, 1f); return true;
@@ -699,8 +731,8 @@ namespace SnapWheel
             try { _set.TextBg = _textBg; _set.Save(); } catch { }
         }
 
-        // 取字（OCR）：识别选区里的文字，弹结果框（自动复制到剪贴板）。
-        // 用**不做标注**的原图去识别 —— 箭头方框反而会干扰识别。
+        // 取字（OCR）：识别整块选区里的文字。
+        // 更准的用法是选「字」工具拖一个框（DoOcrRegion）—— 框小一点、只圈文字，识别率明显更好。
         internal void DoOcr()
         {
             if (!_hasSel || _shot == null || _sz.Width < 4 || _sz.Height < 4) return;
@@ -714,7 +746,37 @@ namespace SnapWheel
             }
             catch (Exception ex) { err = ex.Message; }
             finally { try { Cursor = prev; } catch { } }
+            ShowOcrResult(txt, err);
+        }
 
+        // 拖出来的框里取字：从**原图**（不带标注）裁这一块去认，框越贴合文字越准
+        internal void DoOcrRegion(RectangleF rect)
+        {
+            if (!_hasSel || _shot == null) return;
+            Rectangle rc = ToRect(rect);
+            if (rc.Width < 10 || rc.Height < 10) { DoOcr(); return; }      // 只是点了一下：认整块选区
+            rc = Rectangle.Intersect(rc, new Rectangle(0, 0, _shot.Width, _shot.Height));
+            if (rc.Width < 4 || rc.Height < 4) return;
+            EndText(true);
+
+            string err = null, txt = null;
+            Cursor prev = null;
+            try { prev = Cursor; Cursor = Cursors.WaitCursor; } catch { }
+            try
+            {
+                using (Bitmap crop = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(crop)) g.DrawImageUnscaled(_shot, -rc.Left, -rc.Top);
+                    txt = Ocr.Recognize(crop, out err);
+                }
+            }
+            catch (Exception ex) { err = ex.Message; }
+            finally { try { Cursor = prev; } catch { } }
+            ShowOcrResult(txt, err);
+        }
+
+        void ShowOcrResult(string txt, string err)
+        {
             if (txt == null)
             {
                 try

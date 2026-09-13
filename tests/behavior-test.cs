@@ -709,7 +709,7 @@ namespace SnapWheel
                 Call(o, "PlaceToolbar");
                 Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
                 if (btns.Length < 12) { o.Dispose(); return "工具条按钮数不对：" + btns.Length; }
-                Rectangle plus = btns[11];                    // A+（0-4 工具、5-8 颜色、9 文字底、10 A-、11 A+、12 撤销）
+                Rectangle plus = btns[12];                    // A+（0-5 工具、6-9 颜色、10 文字底、11 A-、12 A+、13 撤销）
                 Mouse(o, "OnMouseDown", plus.X + plus.Width / 2, plus.Y + plus.Height / 2);
                 float s2 = (float)Field2(sel, "Size");
                 o.Dispose();
@@ -874,6 +874,75 @@ namespace SnapWheel
                 string back = File.ReadAllText(p, System.Text.Encoding.UTF8);
                 if (back.IndexOf("DragOutAsFile=1") < 0) return "迁移没落盘：文件里还是 DragOutAsFile=0";
                 if (back.IndexOf("Rev=3") < 0) return "迁移没落盘：文件里还是 Rev=2";
+                return null;
+            });
+
+            // ================= 26. 信息面板不能跑到副屏（陈年老 bug）=================
+            Run("信息面板贴在「当前这块屏幕」的右上角，不会跑到副屏", delegate
+            {
+                int w = 400, h = 40;
+                // 副屏在右边：虚拟屏幕 (0,0)-(3840,1080)，正在用的是主屏 (0,0)-(1920,1080)
+                Rectangle vs = new Rectangle(0, 0, 3840, 1080);
+                Rectangle scr = new Rectangle(0, 0, 1920, 1080);
+                Rectangle r = OverlayForm.InfoPanelRect(vs, scr, w, h);
+                int sx = vs.Left + r.Left, sy = vs.Top + r.Top;
+                if (sx + w > scr.Right) return "面板跑到副屏去了：屏幕坐标 x=" + sx + "（主屏右边界 " + scr.Right + "）";
+                if (sx < scr.Left) return "面板跑到主屏左外边了：x=" + sx;
+                if (sy < scr.Top || sy + h > scr.Bottom) return "面板纵向超出主屏：y=" + sy;
+
+                // 副屏在左边：虚拟屏幕 (-1920,0)-(1920,1080)
+                Rectangle vs2 = new Rectangle(-1920, 0, 3840, 1080);
+                Rectangle r2 = OverlayForm.InfoPanelRect(vs2, scr, w, h);
+                int sx2 = vs2.Left + r2.Left;
+                if (sx2 < scr.Left || sx2 + w > scr.Right) return "副屏在左边时也算错了：x=" + sx2 + "（主屏 " + scr.Left + ".." + scr.Right + "）";
+                return null;
+            });
+
+            // ================= 27. 取字工具 + 翻译 =================
+            Run("取字是个工具：能选中、拖框只画示意框（不会变成标注进图）", delegate
+            {
+                Bitmap shot = Solid(400, 300, Color.White);
+                OverlayForm o = MakeOverlay(shot, "Select");
+                // 快捷键 O 选中取字工具
+                Call(o, "AnnotKey", new KeyEventArgs(Keys.O));
+                if (!G(o, "_tool").ToString().Equals("Ocr")) { o.Dispose(); return "按 O 没选中取字工具：" + G(o, "_tool"); }
+                Call(o, "PlaceToolbar");
+                Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
+                if (btns.Length != 14) { o.Dispose(); return "工具条按钮数不对：" + btns.Length; }
+
+                Mouse(o, "OnMouseDown", 130, 130);
+                object drawing = G(o, "_drawing");
+                if (drawing == null) { o.Dispose(); return "拖框没起来"; }
+                string kind = Field2(drawing, "Kind").ToString();
+                if (kind != "Ocr") { o.Dispose(); return "拖出来的不是取字框，而是 " + kind; }
+                F(o, "_drawing", null);        // 不触发 mouse up（那会真的去识别并弹窗）
+                o.Dispose();
+                return null;
+            });
+
+            Run("翻译：方向判定 + 接口返回解析（不联网也能测的部分）", delegate
+            {
+                if (!Translate.LooksChinese("本周报告已发出，请查收。")) return "中文没认出来";
+                if (Translate.LooksChinese("Deadline is Friday 5pm.")) return "英文被当成中文了";
+                if (Translate.TargetLabel("你好") != "英文") return "中文该翻成英文";
+                if (Translate.TargetLabel("hello") != "中文") return "英文该翻成中文";
+                // 抠字段 + 反转义（\u 中文、\" 引号、\n 换行）
+                string json = "{\"responseData\":{\"translatedText\":\"\\u4f60\\u597d\\\"世界\\\"\\n第二行\"}}";
+                string got = Translate.ExtractField(json, "translatedText");
+                if (got != "你好\"世界\"\n第二行") return "解析不对：" + (got == null ? "(null)" : got.Replace("\n", "\\n"));
+                return null;
+            });
+
+            Run("翻译：真的调一次免费接口（连不上就跳过，不算失败）", delegate
+            {
+                string err;
+                string r = Translate.Run("hello world", out err);
+                if (r == null)
+                {
+                    Console.WriteLine("       （跳过：{0}）", err);
+                    return null;
+                }
+                if (r.IndexOf("世界") < 0) return "返回的译文不像中文：" + r;
                 return null;
             });
 
