@@ -807,7 +807,7 @@ namespace SnapWheel
                 // 长按时：底色由玻璃色渐变到红色（用 _closeHoldP 过渡，不是突然变），
                 // 外边再画一圈红色进度环 —— 按下去就知道还差多久松手
                 float hp = _closeHoldP;
-                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 252 : 166) * ab0 / 255f)));
+                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? UiFeel.SurfaceHover : (_closeDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab0 / 255f)));
                 Color redSurf = Gfx.A(Color.FromArgb(236, 74, 62), (int)(238 * ab0 / 255f));
                 Color closeSurf = hp > 0.001f
                     ? Color.FromArgb(
@@ -846,7 +846,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
-                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 252 : 166) * ab1 / 255f))),
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
@@ -1009,7 +1009,7 @@ namespace SnapWheel
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
                 using (GraphicsPath sbp2 = new GraphicsPath()) { sbp2.AddEllipse(sbr); BackdropClip(g, sbp2, ab2); sbp2.Dispose(); }
-                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? 240 : 190) * ab2 / 255f), 0, 122, 204)))
+                using (SolidBrush sbbs = new SolidBrush(Color.FromArgb((int)((_shootHover ? UiFeel.SolidHover : UiFeel.SolidIdle) * ab2 / 255f), 0, 122, 204)))
                     g.FillEllipse(sbbs, sbr);
                 using (Pen sp = new Pen(Color.FromArgb((int)(245 * ab2 / 255f), 255, 255, 255), 1.8f))
                 {
