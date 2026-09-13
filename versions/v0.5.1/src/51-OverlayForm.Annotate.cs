@@ -139,65 +139,148 @@ namespace SnapWheel
         }
 
         // ---------- 工具条布局 ----------
-        // 原则：**优先放在选区外面**，别压住用户正要截的内容。
-        // 以前只有"下面放不下就翻到上面"，再放不下就被夹到边距里 —— 选区一大就压在截图上了。
+        // 一条硬规则：**工具条绝不压住选区**（压住就是在挡你要截的内容）。
+        // 四个方向依次试，全试不到才允许压一点：
+        //   1 选区下方  2 选区上方  3 选区右侧（竖排）  4 选区左侧（竖排）
+        // 以前只试上下两个方向，选区一高（比如竖着截一整条）就只能压在截图上 ——
+        // 结果就是"工具栏挡住了截图区域"。
         int _toolAlpha = 255;        // 鼠标不在附近时自动变淡（不挡内容），靠近就完全不透明
+        bool _toolVertical = false;  // 贴在选区左右两侧时改成竖排
+        bool _toolOverlap = false;   // 实在没地方、只能压住选区（这时画得更透）
 
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
             int n = BtnCount;
-            int total = n * bw + (n - 1) * gp + gp * 2;
-            int h = bh + gp * 2;
             RectangleF sb = SelBounds();
 
             // 按"当前这块屏幕"来算（多屏时别摆到别的屏去）
             Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
-            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;
-            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
+            Rectangle scrLocal = new Rectangle(scr.Left - _vs.Left, scr.Top - _vs.Top, scr.Width, scr.Height);
 
-            int x = (int)Math.Max(cl + 8, sb.Left);
-            if (x + total > cr - 8) x = Math.Max(cl + 8, cr - 8 - total);
-
-            int below = (int)sb.Bottom + 12;          // 选区下方（外面）
-            int above = (int)sb.Top - h - 12;         // 选区上方（外面）
-            int y;
-            if (below + h <= cb - 8) y = below;
-            else if (above >= ct + 8) y = above;
-            else
-            {
-                // 上下都放不下（选区几乎占满屏幕）：挑"外面空一点"的那一侧，
-                // 实在没地方才允许压一点，并且配合下面的自动变淡，不至于挡住看不清
-                int roomAbove = (int)sb.Top - ct - 8;
-                int roomBelow = cb - 8 - (int)sb.Bottom;
-                y = (roomBelow >= roomAbove) ? (cb - 8 - h) : (ct + 8);
-            }
-            if (y < ct + 8) y = ct + 8;
-            if (y + h > cb - 8) y = cb - 8 - h;
-
-            // 别压住左下角那个「比例」按钮（选区别在左下角时正好会撞上）
+            // 左下角那个「比例」按钮（以及展开后的面板）别被压住
             Rectangle avoid = _toggleRect;
             if (_chipsOpen && _chips != null && _chips.Length > 0) avoid = Rectangle.Union(avoid, _chips[0].Rect);
-            if (new Rectangle(x, y, total, h).IntersectsWith(avoid))
+
+            bool vertical, overlap;
+            Rectangle me = ToolbarRect(scrLocal, sb, n, bw, bh, gp, gp, avoid, out vertical, out overlap);
+
+            // 高 DPI 小屏（比如 1080p 开 150%）：竖排长度可能比屏幕还高 —— 那就把按钮间距压紧再试一次，
+            // 宁可排得挤一点，也别去压住用户要截的地方。
+            int gapUse = gp;
+            if (vertical && me.Height > scrLocal.Height - 16 && gp > 3)
             {
-                int up = avoid.Top - h - 6;
-                y = (up >= ct + 8) ? up : Math.Min(cb - 8 - h, avoid.Bottom + 6);
-                if (y < ct + 8) y = ct + 8;
+                int cg = Math.Max(2, gp / 3);
+                bool v2, o2;
+                Rectangle m2 = ToolbarRect(scrLocal, sb, n, bw, bh, cg, cg, avoid, out v2, out o2);
+                if (v2 && m2.Height <= scrLocal.Height - 16) { me = m2; vertical = v2; overlap = o2; gapUse = cg; }
             }
 
-            _toolRect = new Rectangle(x, y, total, h);
+            _toolVertical = vertical;
+            _toolOverlap = overlap;
+            _toolRect = me;
             _toolBtns = new Rectangle[n];
-            int cx = x + gp, cy = y + gp;
-            for (int i = 0; i < n; i++) { _toolBtns[i] = new Rectangle(cx, cy, bw, bh); cx += bw + gp; }
+            int cx = me.X + gapUse, cy = me.Y + gapUse;
+            for (int i = 0; i < n; i++)
+            {
+                _toolBtns[i] = new Rectangle(cx, cy, bw, bh);
+                if (vertical) cy += bh + gapUse; else cx += bw + gapUse;
+            }
         }
 
-        bool ToolbarVisible() { return _hasSel && _sz.Width > 20 && _sz.Height > 20; }
+        // 工具条到底摆哪（纯计算，离线可测）：**绝不压住选区**是硬规则。
+        // 四个方向依次试，全试不到才允许压一点：
+        //   1 选区下方  2 选区上方  3 选区右侧（竖排）  4 选区左侧（竖排）
+        // 以前只试上下两个方向，选区一高（比如竖着截一整条）就只能压在截图上 ——
+        // 用户看到的就是"工具栏挡住了截图区域"。
+        internal static Rectangle ToolbarRect(Rectangle screen, RectangleF sel, int n, int bw, int bh, int gapBetween, int outer,
+                                              Rectangle avoid, out bool vertical, out bool overlap)
+        {
+            vertical = false; overlap = false;
+            int rowLen = n * bw + (n - 1) * gapBetween + outer * 2;   // 排成一排/一列时的总长
+            int thick = bh + outer * 2;                               // 另一边的厚度
+            int cl = screen.Left + 8, ct = screen.Top + 8, cr = screen.Right - 8, cb = screen.Bottom - 8;
+
+            const int gap = 12;
+            int sx0 = (int)sel.Left, sy0 = (int)sel.Top;
+            int sx1 = (int)Math.Ceiling(sel.Right), sy1 = (int)Math.Ceiling(sel.Bottom);
+            int rightX = sx1 + gap, leftX = sx0 - thick - gap;
+            int belowY = sy1 + gap, aboveY = sy0 - thick - gap;
+
+            int x = 0, y = 0;
+
+            int hx = (int)sel.Left;                        // 横排：跟选区左对齐，再夹进屏幕
+            if (hx + rowLen > cr) hx = cr - rowLen;
+            if (hx < cl) hx = cl;
+
+            int vy = (int)sel.Top;                         // 竖排：跟选区上对齐，再夹进屏幕
+            if (vy + rowLen > cb) vy = cb - rowLen;
+            if (vy < ct) vy = ct;
+
+            if (belowY + thick <= cb) { x = hx; y = belowY; }                                    // 1 下方
+            else if (aboveY >= ct) { x = hx; y = aboveY; }                                       // 2 上方
+            else if (rowLen <= cb - ct && rightX + thick <= cr) { vertical = true; x = rightX; y = vy; }   // 3 右侧竖排
+            else if (rowLen <= cb - ct && leftX >= cl) { vertical = true; x = leftX; y = vy; }             // 4 左侧竖排
+            else
+            {
+                // 5 四处都没空（选区几乎铺满整屏）：压到"外面更空"的那一侧，并标记"压住了"——
+                //   画的时候会压得更透（配合"鼠标不在附近就变淡"），至少不糊住看不清
+                overlap = true;
+                int roomAbove = sy0 - ct, roomBelow = cb - sy1;
+                x = hx;
+                y = (roomBelow >= roomAbove) ? Math.Min(cb - thick, belowY) : Math.Max(ct, aboveY);
+                if (y < ct) y = ct;
+                if (y + thick > cb) y = cb - thick;
+            }
+            if (x < cl) x = cl;
+
+            int w = vertical ? thick : rowLen;
+            int h = vertical ? rowLen : thick;
+            Rectangle me = new Rectangle(x, y, w, h);
+
+            if (me.IntersectsWith(avoid))
+            {
+                // 先试试横着躲开，再试竖着躲开；只有两样都不行才认命（并且更透）
+                int altY = (y <= avoid.Top) ? avoid.Bottom + 6 : avoid.Top - h - 6;
+                int altX = (x <= avoid.Left) ? avoid.Right + 6 : avoid.Left - w - 6;
+                Rectangle candX = new Rectangle(altX, y, w, h);
+                Rectangle candY = new Rectangle(x, altY, w, h);
+                if (altX >= cl && altX + w <= cr && !candX.IntersectsWith(avoid) && !HitsSel(candX, sel))
+                    me = candX;
+                else if (altY >= ct && altY + h <= cb && !candY.IntersectsWith(avoid) && !HitsSel(candY, sel))
+                    me = candY;
+                else
+                {
+                    if (altY >= ct && altY + h <= cb) me = candY;
+                    if (me.Y < ct) me.Y = ct;
+                    if (me.Y + h > cb) me.Y = cb - h;
+                    if (me.X < cl) me.X = cl;
+                    overlap = true;
+                }
+            }
+            return me;
+        }
+
+        static bool HitsSel(Rectangle r, RectangleF sb)
+        {
+            return r.IntersectsWith(Rectangle.Round(sb));
+        }
+
+        bool ToolbarVisible()
+        {
+            // 拖框选的过程中先不显示：那会儿工具条会追着鼠标、正好压在你要选的地方
+            if (_dragging) return false;
+            return _hasSel && _sz.Width > 20 && _sz.Height > 20;
+        }
 
         // 鼠标离工具条远就变淡（不挡截图），靠近就恢复不透明。
         // 只做"远/近"两档、阈值给足余量，不做连续渐变 —— 免得看着晃。
-        void UpdateToolAlpha()
+        // 压住选区时（_toolOverlap）基础透明度更低，尽量别挡住底下那张图。
+        // 返回"透明度变了没有"：浮层不是每帧重绘，变了得主动请求重绘，否则永远看不到变化。
+        bool UpdateToolAlpha()
         {
-            if (_toolRect.Width == 0) { _toolAlpha = 255; return; }
+            if (_toolRect.Width == 0) { _toolAlpha = 255; return false; }
+            int want;
             try
             {
                 Point cp = PointToClient(Cursor.Position);
@@ -207,10 +290,19 @@ namespace SnapWheel
                 if (cp.Y < _toolRect.Top) dy = _toolRect.Top - cp.Y;
                 else if (cp.Y > _toolRect.Bottom) dy = cp.Y - _toolRect.Bottom;
                 int d = (int)Math.Sqrt(dx * dx + dy * dy);
-                int want = (d < 90) ? 255 : 165;
-                if (want != _toolAlpha) _toolAlpha = want;
+                int idle = _toolOverlap ? 108 : 165;
+                want = (d < 90) ? 255 : idle;
             }
-            catch { _toolAlpha = 255; }
+            catch { want = 255; }
+            if (want == _toolAlpha) return false;
+            _toolAlpha = want;
+            return true;
+        }
+
+        // 鼠标一动就调一次：只有真的需要变淡/变实才重绘
+        void RefreshToolAlpha()
+        {
+            if (UpdateToolAlpha()) Invalidate();
         }
 
         // ---------- 画标注内容（预览与合成共用） ----------
@@ -360,6 +452,7 @@ namespace SnapWheel
                     g.DrawPath(p, bgp);
             }
 
+            int a = Math.Max(0, Math.Min(255, alpha));
             for (int i = 0; i < _toolBtns.Length; i++)
             {
                 Rectangle r = _toolBtns[i];
@@ -368,11 +461,12 @@ namespace SnapWheel
                 if (sel || i == _toolHover)
                 {
                     using (GraphicsPath bp = Gfx.Round(r, 7f * _k))
-                    using (SolidBrush b = new SolidBrush(sel ? Color.FromArgb(235, 0, 122, 204) : Color.FromArgb(90, 255, 255, 255)))
+                    using (SolidBrush b = new SolidBrush(sel ? Color.FromArgb((int)(235 * a / 255f), 0, 122, 204)
+                                                              : Color.FromArgb((int)(90 * a / 255f), 255, 255, 255)))
                         g.FillPath(b, bp);
                 }
 
-                Color ic = Color.White;
+                Color ic = Color.FromArgb(a, 255, 255, 255);   // 图标跟着一起淡，不然底淡了图标还刺眼
                 if (i >= 6 && i < 6 + AnnotColors.Length)
                 {
                     // 颜色点：当前色描粗白边；其余也描一圈细边 —— 黑点在深色工具条上不然看不见
@@ -381,7 +475,7 @@ namespace SnapWheel
                     int d = (int)(15 * _k);
                     Rectangle cr = new Rectangle(r.X + (r.Width - d) / 2, r.Y + (r.Height - d) / 2, d, d);
                     using (SolidBrush b = new SolidBrush(AnnotColors[ci])) g.FillEllipse(b, cr);
-                    using (Pen ring = new Pen(Color.FromArgb(cur ? 255 : 140, 255, 255, 255), cur ? 2.2f : 1.2f))
+                    using (Pen ring = new Pen(Color.FromArgb((int)((cur ? 255 : 140) * a / 255f), 255, 255, 255), cur ? 2.2f : 1.2f))
                         g.DrawEllipse(ring, cr);
                     continue;
                 }
@@ -443,10 +537,10 @@ namespace SnapWheel
                         {
                             RectangleF sq = new RectangleF(d2.Left, d2.Top + d2.Height * 0.12f, d2.Width, d2.Height * 0.88f);
                             if (_textBg)
-                                using (SolidBrush b = new SolidBrush(Color.White)) g.FillRectangle(b, sq);
-                            using (Pen p = new Pen(Color.White, 1.4f * _k)) g.DrawRectangle(p, sq.X, sq.Y, sq.Width, sq.Height);
+                                using (SolidBrush b = new SolidBrush(ic)) g.FillRectangle(b, sq);
+                            using (Pen p = new Pen(ic, 1.4f * _k)) g.DrawRectangle(p, sq.X, sq.Y, sq.Width, sq.Height);
                             using (Font f = new Font("Microsoft YaHei UI", 8.5f * _k, FontStyle.Bold))
-                            using (SolidBrush b = new SolidBrush(_textBg ? Color.FromArgb(22, 24, 28) : Color.White))
+                            using (SolidBrush b = new SolidBrush(_textBg ? Color.FromArgb(a, 22, 24, 28) : ic))
                             {
                                 StringFormat sf = new StringFormat();
                                 sf.Alignment = StringAlignment.Center;
@@ -471,7 +565,7 @@ namespace SnapWheel
                         }
                     case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
-                        using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
+                        using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb((int)(120 * a / 255f), 255, 255, 255)))
                         {
                             StringFormat sf = new StringFormat();
                             sf.Alignment = StringAlignment.Center;
@@ -480,7 +574,7 @@ namespace SnapWheel
                         }
                         break;
                     default:     // 撤销
-                        using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb(110, 255, 255, 255), 2f * _k))
+                        using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255), 2f * _k))
                         {
                             g.DrawArc(p, d2.Left, d2.Top + d2.Height * 0.15f, d2.Width, d2.Height * 0.9f, 30, 250);
                             g.DrawLine(p, d2.Left + d2.Width * 0.02f, d2.Top + d2.Height * 0.42f, d2.Left + d2.Width * 0.28f, d2.Top + d2.Height * 0.10f);
@@ -676,6 +770,7 @@ namespace SnapWheel
 
         bool AnnotMouseMove(MouseEventArgs e)
         {
+            RefreshToolAlpha();          // 靠近/离开工具条时变实/变淡
             if (_dragShape != null)
             {
                 MoveShape(_dragShape, e.Location.X - _dragFromShape.X, e.Location.Y - _dragFromShape.Y);

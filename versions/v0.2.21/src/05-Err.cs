@@ -17,6 +17,11 @@ namespace SnapWheel
         static readonly object _lock = new object();
         static DateTime _last = DateTime.MinValue;
 
+        // 日志上限：超了就转存成 error.log.1（只留一代，上一代直接删）。
+        // 之前是只增不减 —— [Frame] 慢帧诊断每 10 秒就可能写一行，挂久了日志能涨到几 MB，
+        // 真出问题时反而不好翻。512KB 足够装下最近几百条，翻的时候一眼看到头。
+        public static long MaxBytes = 512 * 1024;
+
         // 测试用：把日志指到临时文件（null = 正常的 %APPDATA%\SnapWheel\error.log）。
         // 否则跑一次 -Test，[Frame] 这些诊断行会混进用户真实日志里，
         // 以后分析"慢半拍"时分不清哪些是测试造出来的。
@@ -30,6 +35,21 @@ namespace SnapWheel
             return Path.Combine(d, "error.log");
         }
 
+        // 超过上限就把当前日志挪成 .1（新的一代从空文件重新开始）
+        static void RotateIfNeeded(string path)
+        {
+            try
+            {
+                if (MaxBytes <= 0) return;
+                FileInfo fi = new FileInfo(path);
+                if (!fi.Exists || fi.Length < MaxBytes) return;
+                string old = path + ".1";
+                try { if (File.Exists(old)) File.Delete(old); } catch { }
+                File.Move(path, old);
+            }
+            catch { }
+        }
+
         public static void Log(string where, Exception ex)
         {
             try
@@ -39,7 +59,9 @@ namespace SnapWheel
                     string s = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  [" + where + "]  " +
                                (ex == null ? "(null)" : ex.GetType().Name + ": " + ex.Message) + "\r\n" +
                                (ex == null ? "" : ex.StackTrace) + "\r\n\r\n";
-                    File.AppendAllText(LogPath(), s, Encoding.UTF8);
+                    string p = LogPath();
+                    RotateIfNeeded(p);
+                    File.AppendAllText(p, s, Encoding.UTF8);
                 }
             }
             catch { }

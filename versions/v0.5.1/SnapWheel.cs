@@ -66,6 +66,11 @@ namespace SnapWheel
         static readonly object _lock = new object();
         static DateTime _last = DateTime.MinValue;
 
+        // 日志上限：超了就转存成 error.log.1（只留一代，上一代直接删）。
+        // 之前是只增不减 —— [Frame] 慢帧诊断每 10 秒就可能写一行，挂久了日志能涨到几 MB，
+        // 真出问题时反而不好翻。512KB 足够装下最近几百条，翻的时候一眼看到头。
+        public static long MaxBytes = 512 * 1024;
+
         // 测试用：把日志指到临时文件（null = 正常的 %APPDATA%\SnapWheel\error.log）。
         // 否则跑一次 -Test，[Frame] 这些诊断行会混进用户真实日志里，
         // 以后分析"慢半拍"时分不清哪些是测试造出来的。
@@ -79,6 +84,21 @@ namespace SnapWheel
             return Path.Combine(d, "error.log");
         }
 
+        // 超过上限就把当前日志挪成 .1（新的一代从空文件重新开始）
+        static void RotateIfNeeded(string path)
+        {
+            try
+            {
+                if (MaxBytes <= 0) return;
+                FileInfo fi = new FileInfo(path);
+                if (!fi.Exists || fi.Length < MaxBytes) return;
+                string old = path + ".1";
+                try { if (File.Exists(old)) File.Delete(old); } catch { }
+                File.Move(path, old);
+            }
+            catch { }
+        }
+
         public static void Log(string where, Exception ex)
         {
             try
@@ -88,7 +108,9 @@ namespace SnapWheel
                     string s = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  [" + where + "]  " +
                                (ex == null ? "(null)" : ex.GetType().Name + ": " + ex.Message) + "\r\n" +
                                (ex == null ? "" : ex.StackTrace) + "\r\n\r\n";
-                    File.AppendAllText(LogPath(), s, Encoding.UTF8);
+                    string p = LogPath();
+                    RotateIfNeeded(p);
+                    File.AppendAllText(p, s, Encoding.UTF8);
                 }
             }
             catch { }
@@ -2091,7 +2113,8 @@ namespace SnapWheel
                 g.Restore(st);
             }
             PlaceToolbar();
-            PaintToolbar(g, 255);
+            UpdateToolAlpha();              // 鼠标不在附近就把工具条变淡（不挡画面）
+            PaintToolbar(g, _toolAlpha);
             PaintShapeSelection(g);
             PaintIntroPanel(g);
             PaintOcrBusy(g);
@@ -2207,6 +2230,7 @@ namespace SnapWheel
         protected override void OnMouseMove(MouseEventArgs e)
         {
             if (AnnotMouseMove(e)) return;
+            RefreshToolAlpha();          // 靠近/离开工具条时变实/变淡（浮层不常重绘，得主动请求）
             // 关键保护：如果左键其实没按住，立刻清掉所有拖拽状态，
             // 否则“在选区外松开鼠标”后，后续移动会继续缩放/旋转 -> 乱飞
             if ((Control.MouseButtons & MouseButtons.Left) == 0)
@@ -2616,65 +2640,148 @@ namespace SnapWheel
         }
 
         // ---------- 工具条布局 ----------
-        // 原则：**优先放在选区外面**，别压住用户正要截的内容。
-        // 以前只有"下面放不下就翻到上面"，再放不下就被夹到边距里 —— 选区一大就压在截图上了。
+        // 一条硬规则：**工具条绝不压住选区**（压住就是在挡你要截的内容）。
+        // 四个方向依次试，全试不到才允许压一点：
+        //   1 选区下方  2 选区上方  3 选区右侧（竖排）  4 选区左侧（竖排）
+        // 以前只试上下两个方向，选区一高（比如竖着截一整条）就只能压在截图上 ——
+        // 结果就是"工具栏挡住了截图区域"。
         int _toolAlpha = 255;        // 鼠标不在附近时自动变淡（不挡内容），靠近就完全不透明
+        bool _toolVertical = false;  // 贴在选区左右两侧时改成竖排
+        bool _toolOverlap = false;   // 实在没地方、只能压住选区（这时画得更透）
 
         void PlaceToolbar()
         {
             int bw = (int)(BtnW * _k), bh = (int)(BtnH * _k), gp = (int)(Gap * _k);
             int n = BtnCount;
-            int total = n * bw + (n - 1) * gp + gp * 2;
-            int h = bh + gp * 2;
             RectangleF sb = SelBounds();
 
             // 按"当前这块屏幕"来算（多屏时别摆到别的屏去）
             Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
-            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;
-            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
+            Rectangle scrLocal = new Rectangle(scr.Left - _vs.Left, scr.Top - _vs.Top, scr.Width, scr.Height);
 
-            int x = (int)Math.Max(cl + 8, sb.Left);
-            if (x + total > cr - 8) x = Math.Max(cl + 8, cr - 8 - total);
-
-            int below = (int)sb.Bottom + 12;          // 选区下方（外面）
-            int above = (int)sb.Top - h - 12;         // 选区上方（外面）
-            int y;
-            if (below + h <= cb - 8) y = below;
-            else if (above >= ct + 8) y = above;
-            else
-            {
-                // 上下都放不下（选区几乎占满屏幕）：挑"外面空一点"的那一侧，
-                // 实在没地方才允许压一点，并且配合下面的自动变淡，不至于挡住看不清
-                int roomAbove = (int)sb.Top - ct - 8;
-                int roomBelow = cb - 8 - (int)sb.Bottom;
-                y = (roomBelow >= roomAbove) ? (cb - 8 - h) : (ct + 8);
-            }
-            if (y < ct + 8) y = ct + 8;
-            if (y + h > cb - 8) y = cb - 8 - h;
-
-            // 别压住左下角那个「比例」按钮（选区别在左下角时正好会撞上）
+            // 左下角那个「比例」按钮（以及展开后的面板）别被压住
             Rectangle avoid = _toggleRect;
             if (_chipsOpen && _chips != null && _chips.Length > 0) avoid = Rectangle.Union(avoid, _chips[0].Rect);
-            if (new Rectangle(x, y, total, h).IntersectsWith(avoid))
+
+            bool vertical, overlap;
+            Rectangle me = ToolbarRect(scrLocal, sb, n, bw, bh, gp, gp, avoid, out vertical, out overlap);
+
+            // 高 DPI 小屏（比如 1080p 开 150%）：竖排长度可能比屏幕还高 —— 那就把按钮间距压紧再试一次，
+            // 宁可排得挤一点，也别去压住用户要截的地方。
+            int gapUse = gp;
+            if (vertical && me.Height > scrLocal.Height - 16 && gp > 3)
             {
-                int up = avoid.Top - h - 6;
-                y = (up >= ct + 8) ? up : Math.Min(cb - 8 - h, avoid.Bottom + 6);
-                if (y < ct + 8) y = ct + 8;
+                int cg = Math.Max(2, gp / 3);
+                bool v2, o2;
+                Rectangle m2 = ToolbarRect(scrLocal, sb, n, bw, bh, cg, cg, avoid, out v2, out o2);
+                if (v2 && m2.Height <= scrLocal.Height - 16) { me = m2; vertical = v2; overlap = o2; gapUse = cg; }
             }
 
-            _toolRect = new Rectangle(x, y, total, h);
+            _toolVertical = vertical;
+            _toolOverlap = overlap;
+            _toolRect = me;
             _toolBtns = new Rectangle[n];
-            int cx = x + gp, cy = y + gp;
-            for (int i = 0; i < n; i++) { _toolBtns[i] = new Rectangle(cx, cy, bw, bh); cx += bw + gp; }
+            int cx = me.X + gapUse, cy = me.Y + gapUse;
+            for (int i = 0; i < n; i++)
+            {
+                _toolBtns[i] = new Rectangle(cx, cy, bw, bh);
+                if (vertical) cy += bh + gapUse; else cx += bw + gapUse;
+            }
         }
 
-        bool ToolbarVisible() { return _hasSel && _sz.Width > 20 && _sz.Height > 20; }
+        // 工具条到底摆哪（纯计算，离线可测）：**绝不压住选区**是硬规则。
+        // 四个方向依次试，全试不到才允许压一点：
+        //   1 选区下方  2 选区上方  3 选区右侧（竖排）  4 选区左侧（竖排）
+        // 以前只试上下两个方向，选区一高（比如竖着截一整条）就只能压在截图上 ——
+        // 用户看到的就是"工具栏挡住了截图区域"。
+        internal static Rectangle ToolbarRect(Rectangle screen, RectangleF sel, int n, int bw, int bh, int gapBetween, int outer,
+                                              Rectangle avoid, out bool vertical, out bool overlap)
+        {
+            vertical = false; overlap = false;
+            int rowLen = n * bw + (n - 1) * gapBetween + outer * 2;   // 排成一排/一列时的总长
+            int thick = bh + outer * 2;                               // 另一边的厚度
+            int cl = screen.Left + 8, ct = screen.Top + 8, cr = screen.Right - 8, cb = screen.Bottom - 8;
+
+            const int gap = 12;
+            int sx0 = (int)sel.Left, sy0 = (int)sel.Top;
+            int sx1 = (int)Math.Ceiling(sel.Right), sy1 = (int)Math.Ceiling(sel.Bottom);
+            int rightX = sx1 + gap, leftX = sx0 - thick - gap;
+            int belowY = sy1 + gap, aboveY = sy0 - thick - gap;
+
+            int x = 0, y = 0;
+
+            int hx = (int)sel.Left;                        // 横排：跟选区左对齐，再夹进屏幕
+            if (hx + rowLen > cr) hx = cr - rowLen;
+            if (hx < cl) hx = cl;
+
+            int vy = (int)sel.Top;                         // 竖排：跟选区上对齐，再夹进屏幕
+            if (vy + rowLen > cb) vy = cb - rowLen;
+            if (vy < ct) vy = ct;
+
+            if (belowY + thick <= cb) { x = hx; y = belowY; }                                    // 1 下方
+            else if (aboveY >= ct) { x = hx; y = aboveY; }                                       // 2 上方
+            else if (rowLen <= cb - ct && rightX + thick <= cr) { vertical = true; x = rightX; y = vy; }   // 3 右侧竖排
+            else if (rowLen <= cb - ct && leftX >= cl) { vertical = true; x = leftX; y = vy; }             // 4 左侧竖排
+            else
+            {
+                // 5 四处都没空（选区几乎铺满整屏）：压到"外面更空"的那一侧，并标记"压住了"——
+                //   画的时候会压得更透（配合"鼠标不在附近就变淡"），至少不糊住看不清
+                overlap = true;
+                int roomAbove = sy0 - ct, roomBelow = cb - sy1;
+                x = hx;
+                y = (roomBelow >= roomAbove) ? Math.Min(cb - thick, belowY) : Math.Max(ct, aboveY);
+                if (y < ct) y = ct;
+                if (y + thick > cb) y = cb - thick;
+            }
+            if (x < cl) x = cl;
+
+            int w = vertical ? thick : rowLen;
+            int h = vertical ? rowLen : thick;
+            Rectangle me = new Rectangle(x, y, w, h);
+
+            if (me.IntersectsWith(avoid))
+            {
+                // 先试试横着躲开，再试竖着躲开；只有两样都不行才认命（并且更透）
+                int altY = (y <= avoid.Top) ? avoid.Bottom + 6 : avoid.Top - h - 6;
+                int altX = (x <= avoid.Left) ? avoid.Right + 6 : avoid.Left - w - 6;
+                Rectangle candX = new Rectangle(altX, y, w, h);
+                Rectangle candY = new Rectangle(x, altY, w, h);
+                if (altX >= cl && altX + w <= cr && !candX.IntersectsWith(avoid) && !HitsSel(candX, sel))
+                    me = candX;
+                else if (altY >= ct && altY + h <= cb && !candY.IntersectsWith(avoid) && !HitsSel(candY, sel))
+                    me = candY;
+                else
+                {
+                    if (altY >= ct && altY + h <= cb) me = candY;
+                    if (me.Y < ct) me.Y = ct;
+                    if (me.Y + h > cb) me.Y = cb - h;
+                    if (me.X < cl) me.X = cl;
+                    overlap = true;
+                }
+            }
+            return me;
+        }
+
+        static bool HitsSel(Rectangle r, RectangleF sb)
+        {
+            return r.IntersectsWith(Rectangle.Round(sb));
+        }
+
+        bool ToolbarVisible()
+        {
+            // 拖框选的过程中先不显示：那会儿工具条会追着鼠标、正好压在你要选的地方
+            if (_dragging) return false;
+            return _hasSel && _sz.Width > 20 && _sz.Height > 20;
+        }
 
         // 鼠标离工具条远就变淡（不挡截图），靠近就恢复不透明。
         // 只做"远/近"两档、阈值给足余量，不做连续渐变 —— 免得看着晃。
-        void UpdateToolAlpha()
+        // 压住选区时（_toolOverlap）基础透明度更低，尽量别挡住底下那张图。
+        // 返回"透明度变了没有"：浮层不是每帧重绘，变了得主动请求重绘，否则永远看不到变化。
+        bool UpdateToolAlpha()
         {
-            if (_toolRect.Width == 0) { _toolAlpha = 255; return; }
+            if (_toolRect.Width == 0) { _toolAlpha = 255; return false; }
+            int want;
             try
             {
                 Point cp = PointToClient(Cursor.Position);
@@ -2684,10 +2791,19 @@ namespace SnapWheel
                 if (cp.Y < _toolRect.Top) dy = _toolRect.Top - cp.Y;
                 else if (cp.Y > _toolRect.Bottom) dy = cp.Y - _toolRect.Bottom;
                 int d = (int)Math.Sqrt(dx * dx + dy * dy);
-                int want = (d < 90) ? 255 : 165;
-                if (want != _toolAlpha) _toolAlpha = want;
+                int idle = _toolOverlap ? 108 : 165;
+                want = (d < 90) ? 255 : idle;
             }
-            catch { _toolAlpha = 255; }
+            catch { want = 255; }
+            if (want == _toolAlpha) return false;
+            _toolAlpha = want;
+            return true;
+        }
+
+        // 鼠标一动就调一次：只有真的需要变淡/变实才重绘
+        void RefreshToolAlpha()
+        {
+            if (UpdateToolAlpha()) Invalidate();
         }
 
         // ---------- 画标注内容（预览与合成共用） ----------
@@ -2837,6 +2953,7 @@ namespace SnapWheel
                     g.DrawPath(p, bgp);
             }
 
+            int a = Math.Max(0, Math.Min(255, alpha));
             for (int i = 0; i < _toolBtns.Length; i++)
             {
                 Rectangle r = _toolBtns[i];
@@ -2845,11 +2962,12 @@ namespace SnapWheel
                 if (sel || i == _toolHover)
                 {
                     using (GraphicsPath bp = Gfx.Round(r, 7f * _k))
-                    using (SolidBrush b = new SolidBrush(sel ? Color.FromArgb(235, 0, 122, 204) : Color.FromArgb(90, 255, 255, 255)))
+                    using (SolidBrush b = new SolidBrush(sel ? Color.FromArgb((int)(235 * a / 255f), 0, 122, 204)
+                                                              : Color.FromArgb((int)(90 * a / 255f), 255, 255, 255)))
                         g.FillPath(b, bp);
                 }
 
-                Color ic = Color.White;
+                Color ic = Color.FromArgb(a, 255, 255, 255);   // 图标跟着一起淡，不然底淡了图标还刺眼
                 if (i >= 6 && i < 6 + AnnotColors.Length)
                 {
                     // 颜色点：当前色描粗白边；其余也描一圈细边 —— 黑点在深色工具条上不然看不见
@@ -2858,7 +2976,7 @@ namespace SnapWheel
                     int d = (int)(15 * _k);
                     Rectangle cr = new Rectangle(r.X + (r.Width - d) / 2, r.Y + (r.Height - d) / 2, d, d);
                     using (SolidBrush b = new SolidBrush(AnnotColors[ci])) g.FillEllipse(b, cr);
-                    using (Pen ring = new Pen(Color.FromArgb(cur ? 255 : 140, 255, 255, 255), cur ? 2.2f : 1.2f))
+                    using (Pen ring = new Pen(Color.FromArgb((int)((cur ? 255 : 140) * a / 255f), 255, 255, 255), cur ? 2.2f : 1.2f))
                         g.DrawEllipse(ring, cr);
                     continue;
                 }
@@ -2920,10 +3038,10 @@ namespace SnapWheel
                         {
                             RectangleF sq = new RectangleF(d2.Left, d2.Top + d2.Height * 0.12f, d2.Width, d2.Height * 0.88f);
                             if (_textBg)
-                                using (SolidBrush b = new SolidBrush(Color.White)) g.FillRectangle(b, sq);
-                            using (Pen p = new Pen(Color.White, 1.4f * _k)) g.DrawRectangle(p, sq.X, sq.Y, sq.Width, sq.Height);
+                                using (SolidBrush b = new SolidBrush(ic)) g.FillRectangle(b, sq);
+                            using (Pen p = new Pen(ic, 1.4f * _k)) g.DrawRectangle(p, sq.X, sq.Y, sq.Width, sq.Height);
                             using (Font f = new Font("Microsoft YaHei UI", 8.5f * _k, FontStyle.Bold))
-                            using (SolidBrush b = new SolidBrush(_textBg ? Color.FromArgb(22, 24, 28) : Color.White))
+                            using (SolidBrush b = new SolidBrush(_textBg ? Color.FromArgb(a, 22, 24, 28) : ic))
                             {
                                 StringFormat sf = new StringFormat();
                                 sf.Alignment = StringAlignment.Center;
@@ -2948,7 +3066,7 @@ namespace SnapWheel
                         }
                     case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
-                        using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb(120, 255, 255, 255)))
+                        using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb((int)(120 * a / 255f), 255, 255, 255)))
                         {
                             StringFormat sf = new StringFormat();
                             sf.Alignment = StringAlignment.Center;
@@ -2957,7 +3075,7 @@ namespace SnapWheel
                         }
                         break;
                     default:     // 撤销
-                        using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb(110, 255, 255, 255), 2f * _k))
+                        using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255), 2f * _k))
                         {
                             g.DrawArc(p, d2.Left, d2.Top + d2.Height * 0.15f, d2.Width, d2.Height * 0.9f, 30, 250);
                             g.DrawLine(p, d2.Left + d2.Width * 0.02f, d2.Top + d2.Height * 0.42f, d2.Left + d2.Width * 0.28f, d2.Top + d2.Height * 0.10f);
@@ -3153,6 +3271,7 @@ namespace SnapWheel
 
         bool AnnotMouseMove(MouseEventArgs e)
         {
+            RefreshToolAlpha();          // 靠近/离开工具条时变实/变淡
             if (_dragShape != null)
             {
                 MoveShape(_dragShape, e.Location.X - _dragFromShape.X, e.Location.Y - _dragFromShape.Y);
@@ -4092,7 +4211,9 @@ namespace SnapWheel
     static class Translate
     {
         const int MaxChunk = 420;      // 免费接口对单次请求长度有限制，长文切段
-        const int TimeoutMs = 9000;
+        // 一次请求的时限。原来 9 秒偏紧：长文要按段顺序发好几次，网络一慢就会看到
+        // "翻译接口连不上：超时"（实测接口本身只要 1.2 秒，是偶发抖动把 9 秒吃掉了）。
+        const int TimeoutMs = 15000;
 
         static bool IsCjk(char c)
         {
@@ -4127,12 +4248,20 @@ namespace SnapWheel
 
             StringBuilder outp = new StringBuilder();
             string[] chunks = Split(text, MaxChunk);
+            int empty = 0;
             for (int i = 0; i < chunks.Length; i++)
             {
                 string one = One(chunks[i], src, dst, out error);
                 if (one == null) return null;
-                if (outp.Length > 0) outp.Append(LooksChinese(text) ? "\n" : "\n");
-                outp.Append(one.Trim());
+                one = one.Trim();
+                if (one.Length == 0) { empty++; continue; }
+                if (outp.Length > 0) outp.Append('\n');       // 分段译完拼回去，一段一行
+                outp.Append(one);
+            }
+            if (outp.Length == 0)
+            {
+                error = empty > 0 ? "接口没返回译文（多半是被限流了），过一会儿再试" : "没有要翻译的文字";
+                return null;
             }
             return outp.ToString();
         }
@@ -4181,10 +4310,8 @@ namespace SnapWheel
                 using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
                 {
                     string json = sr.ReadToEnd();
-                    string t = ExtractField(json, "translatedText");
-                    if (t == null) { error = "接口返回的内容看不懂（可能被限流了）"; return null; }
-                    if (t.IndexOf("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) >= 0)
-                    { error = "免费翻译额度用完了（MyMemory 限流），过一会儿再试"; return null; }
+                    string t = ReadResult(json, out error);
+                    if (t == null) return null;
                     return t;
                 }
             }
@@ -4194,6 +4321,52 @@ namespace SnapWheel
                 return null;
             }
             catch (Exception ex) { error = "翻译失败：" + ex.Message; return null; }
+        }
+
+        // 从接口返回里读出结果：成功=译文（可能为空串，表示这一段没内容）；
+        // 失败=null，并把"人话原因"写进 error。
+        // 几种失败要分开，不然用户看到的永远是同一句"内容看不懂"：
+        //   限流（MYMEMORY WARNING / responseDetails 带 LIMIT）-> 说清楚是被限流了
+        //   别的错误状态 -> 把接口给的原因原样带出来
+        internal static string ReadResult(string json, out string error)
+        {
+            error = null;
+            if (string.IsNullOrEmpty(json)) { error = "接口没有返回内容"; return null; }
+
+            string t = ExtractField(json, "translatedText");
+            string details = ExtractField(json, "responseDetails");
+            string status = ExtractRaw(json, "responseStatus");
+
+            bool limited = (t != null && t.IndexOf("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) >= 0)
+                        || (details != null && (details.IndexOf("LIMIT", StringComparison.OrdinalIgnoreCase) >= 0
+                                             || details.IndexOf("WARNING", StringComparison.OrdinalIgnoreCase) >= 0));
+            if (limited)
+            {
+                error = "免费翻译额度用完了（MyMemory 限流）——过一会儿再试";
+                return null;
+            }
+            if (!string.IsNullOrEmpty(status) && status != "200")
+            {
+                error = "翻译接口报错：" + (string.IsNullOrEmpty(details) ? status : details);
+                return null;
+            }
+            if (t == null) { error = "接口返回的内容看不懂（可能被限流了）"; return null; }
+            return t.Trim();
+        }
+
+        // 读一个"可能是字符串也可能是数字"的字段（MyMemory 的 responseStatus 是不带引号的 200）
+        internal static string ExtractRaw(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            int k = json.IndexOf("\"" + key + "\"", StringComparison.Ordinal);
+            if (k < 0) return null;
+            int colon = json.IndexOf(':', k);
+            if (colon < 0) return null;
+            int i = colon + 1;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            int start = i;
+            while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '.' || json[i] == '-')) i++;
+            return i > start ? json.Substring(start, i - start) : null;
         }
 
         // 从 {"responseData":{"translatedText":"..."}} 里把那个字段抠出来（不引 JSON 库，
