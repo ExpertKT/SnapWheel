@@ -5,7 +5,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.5.1-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.5.2-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-191%20KB-lightgrey?style=flat-square)
 
@@ -21,7 +21,21 @@
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 191 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
-## 这次更新（v0.5.1）：删错了能找回来
+## 这次更新（v0.5.2）：把一个 12.7ms 的帧拆开，找出真凶
+
+先把"一帧花在哪"量出来（新增分段计时，平时零开销）：清屏 0.2 / 接住区 0.8 / 环 0.5 / **缩略图 6.0** / **控件 5.5** / **推屏 0.4ms**
+—— 慢的不是推屏，是"一笔一笔重画矢量图形"。按这个结论做了四件事：
+
+| 优化 | 效果（他真实屏幕 125%、三次取最优） |
+|---|---|
+| **分层缓存**：环和控件在稳态下整块缓存成位图，每帧只贴一张（签名一变就重画，画面完全一致） | 控件 5.5ms → 贴图 |
+| **1:1 贴图绕开重采样**：画布开着高质量插值时，连 1:1 贴图 GDI+ 都在做双三次 | 每张贴图 **0.5ms → 0.05ms** |
+| **缩略图不再每帧从原图重缩** + 卡片阴影/玻璃底/描边做成贴片 | 放大预览 15.9ms → **14.5** |
+| **换底交叉淡入整帧只混一次**、隔帧重建 | 玻璃换底 20.3ms → **16.3** |
+
+结果：开启动画 7.9ms / 收起 15.6 / 滚动 10.0 / 悬停放大 14.5 / 玻璃换底 16.3 / 切盘闪光 9.4 —— **全部每帧 ≤20ms，没有一帧超过 40ms**。
+
+### 上一个版本 v0.5.1：删错了能找回来
 
 | 新功能 | 怎么用 |
 |---|---|
@@ -100,7 +114,7 @@
 
 ### 该下哪个？两条产品线
 
-同一份源码用编译开关产出两条线，功能同步推进（当前：v0.5.1 ↔ v0.2.21）：
+同一份源码用编译开关产出两条线，功能同步推进（当前：v0.5.2 ↔ v0.2.22；**0.2 线（无万能键）到 v0.2.22 为止，之后不再更新**）：
 
 | 你想要的 | 下这个 | 区别 |
 |---|---|---|
@@ -126,8 +140,8 @@
 ```
 build\SnapWheel.exe                 完整版（含万能键）
 build\SnapWheel-nokey.exe           无万能键版
-build\SnapWheel-v0.5.1-full.zip     完整版分发包
-build\SnapWheel-v0.2.21-nokey.zip   无万能键版分发包
+build\SnapWheel-v0.5.2-full.zip     完整版分发包
+build\SnapWheel-v0.2.22-nokey.zip   无万能键版分发包
 ```
 
 <details>
