@@ -141,7 +141,9 @@ namespace SnapWheel
                     if (which == 0) DrawRing(lg, a); else DrawControls(lg, a);
                 }
                 if (which == 0) _layerBackSig = LayerSig(0); else _layerFrontSig = LayerSig(1);
-                BlitLayer(g, bmp);          // 本帧也要看到（否则会慢一帧）
+                // 注意：**不要再贴一次**。调用方在 store 之前已经直接画过一遍了，
+                // 再贴一层等于半透明元素叠两遍 —— 用户看到的就是"一放万能键所有 UI 一起闪"。
+                // 缓存从下一帧开始生效，那一帧省下的时间才是我们要的。
             }
             catch { /* 缓存失败就当没缓存：外面已经照常画过了 */ }
         }

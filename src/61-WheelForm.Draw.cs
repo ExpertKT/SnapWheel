@@ -260,6 +260,9 @@ namespace SnapWheel
         // 范围 = 环带（含一点余量）+ 摇杆键，也就是“看上去是轮盘”的那一片。
         void DrawDropCatcher(Graphics g)
         {
+            // 收起态不许画接住区：轮盘已经收成一个小把手，但这一片"看不见的 alpha=1 区域"
+            // 仍然会让窗口吃住鼠标和拖放 —— 用户原话是"收起来了却好像还在这，挡着我点别的东西"。
+            if (_collapsed) return;
             PointF c = Center();
             float R = EffR();
             float outer = R + _thumb * 1.15f;
@@ -804,7 +807,7 @@ namespace SnapWheel
                 // 长按时：底色由玻璃色渐变到红色（用 _closeHoldP 过渡，不是突然变），
                 // 外边再画一圈红色进度环 —— 按下去就知道还差多久松手
                 float hp = _closeHoldP;
-                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 206 : 172) * ab0 / 255f)));
+                Color glassSurf = Gfx.A(GlassBase(), GlassA((int)((_closeHover ? 252 : 166) * ab0 / 255f)));
                 Color redSurf = Gfx.A(Color.FromArgb(236, 74, 62), (int)(238 * ab0 / 255f));
                 Color closeSurf = hp > 0.001f
                     ? Color.FromArgb(
@@ -843,7 +846,7 @@ namespace SnapWheel
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
-                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 206 : 172) * ab1 / 255f))),
+                Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? 252 : 166) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
                     (int)((StyleNeu() ? 60 : 24) * ab1 / 255f), (int)((StyleNeu() ? 60 : 0) * ab1 / 255f));
                 float gcx = gbr.X + gbr.Width / 2f, gcy = gbr.Y + gbr.Height / 2f;
