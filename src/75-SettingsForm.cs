@@ -63,27 +63,25 @@ namespace SnapWheel
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             Padding = new Padding(20, 14, 20, 12);
 
+            // ⚠️ 这个窗口的布局一律"坐标明确"：每张 TableLayoutPanel 都写死 RowCount/ColumnCount，
+            // 每个控件都用 Add(控件, 列, 行) 指明格子。**绝不靠添加顺序排行** ——
+            // v0.5.2 提速时就是因为挪了添加顺序，标题跑到最底下、按钮跑到最上面。
             TableLayoutPanel root = new TableLayoutPanel();
             root.ColumnCount = 2;
+            root.RowCount = 4;
             root.AutoSize = true;
             root.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // 0 标题
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // 1 两栏内容
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // 2 按钮行（右下）
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // 3 版本行
             _root = root;
             // root 先别挂到窗口上：一挂上去，之后每 Add 一个控件都会触发窗口 AutoSize 重排整棵树
             // （60 多个控件 = O(n^2) 次重排，这就是"打开设置 700ms"的主因）。最后一次性挂上。
-
-            // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
-            TableLayoutPanel colL = new TableLayoutPanel();
-            colL.ColumnCount = 1;
-            colL.AutoSize = true;
-            colL.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            colL.Margin = new Padding(0, 0, 34, 0);
-            TableLayoutPanel colR = new TableLayoutPanel();
-            colR.ColumnCount = 1;
-            colR.AutoSize = true;
-            colR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            colR.Margin = new Padding(0);
 
             Label head = new Label();
             head.AutoSize = true;
@@ -91,8 +89,27 @@ namespace SnapWheel
             head.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(32, 34, 38);
             head.Margin = new Padding(0, 0, 0, 10);
-            root.Controls.Add(head);
+            root.Controls.Add(head, 0, 0);
             root.SetColumnSpan(head, 2);
+
+            // 左右两栏：内容多也不会把窗口顶出屏幕（原来一列排下来 970px 高）
+            TableLayoutPanel colL = new TableLayoutPanel();
+            colL.ColumnCount = 1;
+            colL.RowCount = 20;
+            colL.AutoSize = true;
+            colL.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            colL.Margin = new Padding(0, 0, 34, 0);
+            colL.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i = 0; i < colL.RowCount; i++) colL.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            TableLayoutPanel colR = new TableLayoutPanel();
+            colR.ColumnCount = 1;
+            colR.RowCount = 10;
+            colR.AutoSize = true;
+            colR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            colR.Margin = new Padding(0);
+            colR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i = 0; i < colR.RowCount; i++) colR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             root.Controls.Add(colL, 0, 1);
             root.Controls.Add(colR, 1, 1);
 
@@ -101,15 +118,15 @@ namespace SnapWheel
             chkDisk.Text = "保存到硬盘（否则只存内存，退出即清）";
             chkDisk.Checked = s.SaveToDisk;
             chkDisk.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(Section("行为"));
-            colL.Controls.Add(chkDisk);
+            colL.Controls.Add(Section("行为"), 0, 0);
+            colL.Controls.Add(chkDisk, 0, 1);
 
             CheckBox chkAutoStart = new CheckBox();
             chkAutoStart.AutoSize = true;
             chkAutoStart.Text = "开机自动启动（登录后自动在后台运行）";
             chkAutoStart.Checked = AutoRun.IsEnabled();
             chkAutoStart.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(chkAutoStart);
+            colL.Controls.Add(chkAutoStart, 0, 2);
 
             TextBox txtDir = new TextBox();
             txtDir.Text = s.Dir;
@@ -124,17 +141,17 @@ namespace SnapWheel
                 FolderBrowserDialog d = new FolderBrowserDialog();
                 if (d.ShowDialog() == DialogResult.OK) txtDir.Text = d.SelectedPath;
             });
-            colL.Controls.Add(Row(MkLabel("保存目录"), txtDir, browse));
+            colL.Controls.Add(Row(MkLabel("保存目录"), txtDir, browse), 0, 3);
 
-            colL.Controls.Add(Section("外观"));
+            colL.Controls.Add(Section("外观"), 0, 4);
             NumericUpDown numMax = Num(1, 999, s.MaxCount);
             NumericUpDown numThumb = Num(40, 260, s.ThumbSize);
-            colL.Controls.Add(Row(MkLabel("最多保留张数"), numMax, Gap(24), MkLabel("缩略图大小"), numThumb));
+            colL.Controls.Add(Row(MkLabel("最多保留张数"), numMax, Gap(24), MkLabel("缩略图大小"), numThumb), 0, 5);
 
             NumericUpDown numRad = Num(120, 700, s.Radius);
             NumericUpDown numSlots = Num(2, 12, s.Slots);
             NumericUpDown numLabel = Num(9, 40, s.LabelSize);
-            colL.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel));
+            colL.Controls.Add(Row(MkLabel("环半径"), numRad, Gap(24), MkLabel("弧上张数"), numSlots, Gap(24), MkLabel("序号字号"), numLabel), 0, 6);
 
             // 分辨率 / DPI 适配
             ComboBox cmbScale = new ComboBox();
@@ -152,7 +169,7 @@ namespace SnapWheel
             hint.Text = "（整块轮盘等比放大，含文字和图标）";
             hint.ForeColor = Color.FromArgb(150, 152, 160);
             hint.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("界面缩放"), cmbScale, Gap(12), hint));
+            colL.Controls.Add(Row(MkLabel("界面缩放"), cmbScale, Gap(12), hint), 0, 7);
 
             NumericUpDown numPeek = Num(120, 500, s.PeekPercent);
 
@@ -161,7 +178,7 @@ namespace SnapWheel
             chkCollapse.AutoSize = true;
             chkCollapse.Text = "收起状态：缩到屏幕边上留个小把手";
             chkCollapse.Checked = s.CollapseMode;
-            colL.Controls.Add(Row(chkCollapse));
+            colL.Controls.Add(Row(chkCollapse), 0, 8);
 
             // 收起 / 展开的动画速度（独立于上面的"动画速度"）
             ComboBox cmbRing = new ComboBox();
@@ -179,7 +196,7 @@ namespace SnapWheel
             hintRing.Text = "（只管收起 / 展开；百分比越大越快）";
             hintRing.ForeColor = Color.FromArgb(150, 152, 160);
             hintRing.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("展开速度"), cmbRing, Gap(10), hintRing));
+            colL.Controls.Add(Row(MkLabel("展开速度"), cmbRing, Gap(10), hintRing), 0, 9);
 
             ComboBox cmbRing2 = new ComboBox();
             cmbRing2.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -194,19 +211,19 @@ namespace SnapWheel
             hintRing2.Text = "（默认比展开快一档，收起要干脆）";
             hintRing2.ForeColor = Color.FromArgb(150, 152, 160);
             hintRing2.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("收起速度"), cmbRing2, Gap(10), hintRing2));
+            colL.Controls.Add(Row(MkLabel("收起速度"), cmbRing2, Gap(10), hintRing2), 0, 10);
 
             CheckBox chkSingle = new CheckBox();
             chkSingle.AutoSize = true;
             chkSingle.Text = "只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）";
             chkSingle.Checked = s.NubSingle;
-            colL.Controls.Add(Row(chkSingle));
+            colL.Controls.Add(Row(chkSingle), 0, 11);
 
             CheckBox chkBalloon = new CheckBox();
             chkBalloon.AutoSize = true;
             chkBalloon.Text = "显示托盘气泡提示（关掉就不再弹右下角通知）";
             chkBalloon.Checked = s.ShowBalloon;
-            colL.Controls.Add(Row(chkBalloon));
+            colL.Controls.Add(Row(chkBalloon), 0, 12);
 
             // 剪贴板自动收纳 + 玻璃底定时刷新
             CheckBox chkClip = new CheckBox();
@@ -217,30 +234,40 @@ namespace SnapWheel
             chkGlassRefresh.AutoSize = true;
             chkGlassRefresh.Text = "毛玻璃定时刷新（轮盘挂久了背景也是新的）";
             chkGlassRefresh.Checked = s.GlassRefresh;
-            colL.Controls.Add(Row(chkClip));
-            colL.Controls.Add(Row(chkGlassRefresh));
+            colL.Controls.Add(Row(chkClip), 0, 13);
+            colL.Controls.Add(Row(chkGlassRefresh), 0, 14);
 
             CheckBox chkDragFile = new CheckBox();
             chkDragFile.AutoSize = true;
             chkDragFile.Text = "拖出时同时带上\"文件\"（拖到桌面/文件夹会落地成文件）";
             chkDragFile.Checked = s.DragOutAsFile;
-            colL.Controls.Add(Row(chkDragFile));
+            colL.Controls.Add(Row(chkDragFile), 0, 15);
 
             CheckBox chkUpdate = new CheckBox();
             chkUpdate.AutoSize = true;
             chkUpdate.Text = "启动时检查有没有新版本（只提示，不自动安装）";
             chkUpdate.Checked = s.CheckUpdate;
-            colL.Controls.Add(Row(chkUpdate));
+            colL.Controls.Add(Row(chkUpdate), 0, 16);
             CheckBox chkIntroAnim = new CheckBox();
             chkIntroAnim.AutoSize = true;
             chkIntroAnim.Text = "启动时播放开启动画";
             chkIntroAnim.Checked = s.IntroAnim;
             chkIntroAnim.Margin = new Padding(0, 10, 0, 0);
-            colL.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim));
+            colL.Controls.Add(Row(MkLabel("长按放大(%)"), numPeek, Gap(24), chkIntroAnim), 0, 17);
 
             // ---------------- 风格（新拟态 + 扁平化 + 毛玻璃）----------------
-            int advFrom = colR.Controls.Count;      // 从这里开始是"高级（外观微调）"，稍后整体折叠
-            colR.Controls.Add(Section("风格"));
+            // 这几行默认折叠（外观微调对大多数人是噪音）。容器先建好，行直接建进容器里，
+            // 不再"先加进 colR 再按索引搬走"——索引搬运在坐标明确的布局里必然留下窟窿。
+            TableLayoutPanel advR = new TableLayoutPanel();
+            advR.ColumnCount = 1;
+            advR.RowCount = 4;
+            advR.AutoSize = true;
+            advR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            advR.Margin = new Padding(0);
+            advR.Visible = false;
+            advR.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            for (int i = 0; i < advR.RowCount; i++) advR.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            advR.Controls.Add(Section("风格"), 0, 0);
 
             ComboBox cmbStyle = new ComboBox();
             cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -258,13 +285,13 @@ namespace SnapWheel
             cmbAccent.Items.Add("跟随 Wheel 颜色");
             for (int i = 0; i < Palette.Names.Length; i++) cmbAccent.Items.Add("统一：" + Palette.Names[i]);
             cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
-            colR.Controls.Add(Row(MkLabel("界面风格"), cmbStyle, Gap(24), MkLabel("主题色"), cmbAccent));
+            advR.Controls.Add(Row(MkLabel("界面风格"), cmbStyle, Gap(24), MkLabel("主题色"), cmbAccent), 0, 1);
 
             NumericUpDown numGlass = Num(20, 100, s.GlassPercent);
             NumericUpDown numRadius = Num(0, 30, s.CardRadius);
             NumericUpDown numShadow = Num(0, 100, s.ShadowPercent);
-            colR.Controls.Add(Row(MkLabel("玻璃不透明度"), numGlass, Gap(16), MkLabel("圆角(%)"), numRadius,
-                                  Gap(16), MkLabel("阴影强度"), numShadow));
+            advR.Controls.Add(Row(MkLabel("玻璃不透明度"), numGlass, Gap(16), MkLabel("圆角(%)"), numRadius,
+                                  Gap(16), MkLabel("阴影强度"), numShadow), 0, 2);
 
             ComboBox cmbAnim = new ComboBox();
             cmbAnim.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -284,22 +311,12 @@ namespace SnapWheel
             chkCount.Text = "显示计数标签";
             chkCount.Checked = s.ShowCountLabel;
             chkCount.Margin = new Padding(20, 10, 0, 0);
-            colR.Controls.Add(Row(MkLabel("动画速度"), cmbAnim, Gap(24), chkName, chkCount));
+            advR.Controls.Add(Row(MkLabel("动画速度"), cmbAnim, Gap(24), chkName, chkCount), 0, 3);
 
             // ---------- 把「风格」这几行收进一个默认折叠的高级区 ----------
             // 外观微调项对大多数人是噪音，默认藏起来（第一次用不懂该选什么），需要时勾一下即可。
             {
-                int advTo = colR.Controls.Count;
-                TableLayoutPanel advR = new TableLayoutPanel();
-                advR.ColumnCount = 1;
-                advR.AutoSize = true;
-                advR.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-                advR.Margin = new Padding(0);
-                advR.Visible = false;
-                System.Collections.Generic.List<Control> move = new System.Collections.Generic.List<Control>();
-                for (int i = advFrom; i < advTo; i++) move.Add(colR.Controls[i]);
-                for (int i = 0; i < move.Count; i++) { colR.Controls.Remove(move[i]); advR.Controls.Add(move[i]); }
-                colR.Controls.Add(advR);
+                colR.Controls.Add(advR, 0, 0);
                 CheckBox chkAdv = new CheckBox();
                 chkAdv.AutoSize = true;
                 chkAdv.Text = "显示高级选项（外观微调 / 动画细节）";
@@ -309,7 +326,7 @@ namespace SnapWheel
                     advR.PerformLayout();
                     PerformLayout();
                 });
-                colR.Controls.Add(chkAdv);
+                colR.Controls.Add(chkAdv, 0, 1);
             }
 
             CheckBox chkAuto = new CheckBox();
@@ -318,14 +335,14 @@ namespace SnapWheel
             chkAuto.Checked = s.AutoHide;
             chkAuto.Margin = new Padding(0, 4, 0, 4);
             NumericUpDown numSec = Num(2, 600, s.AutoHideSeconds);
-            colL.Controls.Add(Row(chkAuto, Gap(16), MkLabel("空闲秒数"), numSec));
+            colL.Controls.Add(Row(chkAuto, Gap(16), MkLabel("空闲秒数"), numSec), 0, 18);
 
             CheckBox chkTop = new CheckBox();
             chkTop.AutoSize = true;
             chkTop.Text = "总在最前（始终置顶显示）";
             chkTop.Checked = s.AlwaysOnTop;
             chkTop.Margin = new Padding(0, 4, 0, 4);
-            colL.Controls.Add(chkTop);
+            colL.Controls.Add(chkTop, 0, 19);
 
             ComboBox cmb = new ComboBox();
             cmb.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -334,7 +351,7 @@ namespace SnapWheel
             cmb.Items.AddRange(HotkeyUtil.Names);
             cmb.SelectedItem = s.Hotkey;
             if (cmb.SelectedIndex < 0) cmb.SelectedIndex = 0;
-            colR.Controls.Add(Row(MkLabel("截图热键"), cmb));
+            colR.Controls.Add(Row(MkLabel("截图热键"), cmb), 0, 2);
 
             ComboBox cmbCorner = new ComboBox();
             cmbCorner.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -342,7 +359,7 @@ namespace SnapWheel
             cmbCorner.Margin = new Padding(0, 6, 0, 0);
             cmbCorner.Items.AddRange(new object[] { "左下角", "右下角", "左上角", "右上角" });
             cmbCorner.SelectedIndex = CornerIndex(s.Corner);
-            colR.Controls.Add(Row(MkLabel("圆环位置"), cmbCorner));
+            colR.Controls.Add(Row(MkLabel("圆环位置"), cmbCorner), 0, 3);
 
             ComboBox cmbDel = new ComboBox();
             cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -350,7 +367,7 @@ namespace SnapWheel
             cmbDel.Margin = new Padding(0, 6, 0, 0);
             cmbDel.Items.AddRange(new object[] { "双击右键删除", "单击右键删除" });
             cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
-            colR.Controls.Add(Row(MkLabel("删除方式"), cmbDel));
+            colR.Controls.Add(Row(MkLabel("删除方式"), cmbDel), 0, 4);
 
             ComboBox cmbSwitch = new ComboBox();
             cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -358,10 +375,10 @@ namespace SnapWheel
             cmbSwitch.Margin = new Padding(0, 6, 0, 0);
             cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
             cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
-            colR.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch));
+            colR.Controls.Add(Row(MkLabel("Wheel 切换"), cmbSwitch), 0, 5);
 
             // ---------- 万能键：四个分区各绑一个动作（以前是写死的） ----------
-            colR.Controls.Add(Section("万能键"));
+            colR.Controls.Add(Section("万能键"), 0, 6);
             ComboBox[] keyBox = new ComboBox[4];
             string[] keyDir = { "上", "右", "下", "左" };
             for (int i = 0; i < 4; i++)
@@ -411,17 +428,17 @@ namespace SnapWheel
                             });
                         }
                         kb2 = kb3;
-                        colR.Controls.Add(Row(l1, kb1, Gap(16), MkLabel(dir2), kb2));
+                        colR.Controls.Add(Row(l1, kb1, Gap(16), MkLabel(dir2), kb2), 0, 7 + i / 2);
                     }
                     else
                     {
-                        colR.Controls.Add(Row(l1, kb));
+                        colR.Controls.Add(Row(l1, kb), 0, 7 + i / 2);
                     }
                 }
             }
             Label keyHint = MkLabel("按住万能键弹出圆盘，往哪个方向松手就执行哪个动作");
             keyHint.ForeColor = Color.FromArgb(140, 146, 158);
-            colR.Controls.Add(keyHint);
+            colR.Controls.Add(keyHint, 0, 9);
 
             RoundButton ok = new RoundButton();
             ok.Text = "确定";
@@ -553,7 +570,7 @@ namespace SnapWheel
             btnRow.AutoSize = false;
             btnRow.Height = 42;
             btnRow.Dock = DockStyle.Fill;
-            root.Controls.Add(btnRow);
+            root.Controls.Add(btnRow, 0, 2);
             root.SetColumnSpan(btnRow, 2);
 
             Label about = new Label();
@@ -561,7 +578,8 @@ namespace SnapWheel
             about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
             about.ForeColor = Color.FromArgb(150, 150, 160);
             about.Margin = new Padding(0, 16, 0, 0);
-            root.Controls.Add(about);
+            root.Controls.Add(about, 0, 3);
+            root.SetColumnSpan(about, 2);
 
             // 屏幕矮的时候别把窗口顶出屏幕（两栏布局后一般用不到，保险起见留个上限）
             try
