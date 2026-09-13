@@ -334,6 +334,70 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 9. 贴图（图钉）本身 =================
+            Run("贴图窗口：尺寸跟图走、缩放夹在 10%~400%、不跑出屏幕、能关掉", delegate
+            {
+                Bitmap img = Solid(120, 60, Color.SteelBlue);
+                PinForm p = new PinForm(img, new Point(240, 200));
+                p.Show();
+                Application.DoEvents();
+
+                if (p.Width != 122 || p.Height != 62) return "初始尺寸不对：" + p.Width + "x" + p.Height + "（应为 122x62 = 120x60 + 1px 描边）";
+                if (p.Zoom != 1f) return "初始缩放不是 1：" + p.Zoom;
+                if (!p.TopMost) return "没有置顶（贴图必须压在最上面才有意义）";
+
+                p.SetZoom(2f);
+                if (p.Width != 242 || p.Height != 122) return "放大 2 倍后尺寸不对：" + p.Width + "x" + p.Height;
+                p.SetZoom(100f);
+                if (p.Zoom != PinForm.MaxZoom) return "没夹住最大缩放：" + p.Zoom;
+                p.SetZoom(0.001f);
+                if (p.Zoom != PinForm.MinZoom) return "没夹住最小缩放：" + p.Zoom;
+
+                // 拖到屏幕外再缩放一次，必须被夹回可见范围
+                p.Location = new Point(-99999, -99999);
+                p.SetZoom(1.5f);
+                Rectangle vs = SystemInformation.VirtualScreen;
+                if (p.Left < vs.Left || p.Top < vs.Top || p.Right > vs.Right || p.Bottom > vs.Bottom)
+                    return "缩放后跑到屏幕外了：" + p.Left + "," + p.Top;
+
+                p.Close();
+                if (!p.IsDisposed) return "关不掉";
+                return null;
+            });
+
+            // ================= 10. 中键 -> 贴图 的整条链路 =================
+            Run("中键点缩略图：真的把这张图交给贴图", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                WheelManager mgr = new WheelManager(s);
+                Store st = mgr.ActiveStore;
+                st.SaveToDisk = false;
+                st.Add(Solid(80, 50, Color.Orange));
+                WheelForm f = new WheelForm(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+
+                float k = Convert.ToSingle(G(f, "UiK"));
+                MethodInfo hit = typeof(WheelForm).GetMethod("HitTest", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (hit == null) return "找不到 HitTest";
+                Point card = Point.Empty; bool found = false;
+                for (int y = 0; y < f.Height && !found; y += 4)
+                    for (int x = 0; x < f.Width; x += 4)
+                        if ((int)hit.Invoke(f, new object[] { new Point((int)(x / k), (int)(y / k)) }) >= 0) { card = new Point(x, y); found = true; break; }
+                if (!found) return "找不到卡片在窗口里的位置（前置条件不成立）";
+
+                int pinned = 0; Bitmap handed = null;
+                f.PinRequested += delegate(Bitmap b, Point at) { pinned++; handed = b; };
+                MethodInfo md = typeof(WheelForm).GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+                md.Invoke(f, new object[] { new MouseEventArgs(MouseButtons.Middle, 1, card.X, card.Y, 0) });
+
+                if (pinned != 1) return "中键没有触发贴图（pinned=" + pinned + "）";
+                if (handed == null) return "没把图传出去";
+                if (handed.Width != 80 || handed.Height != 50) return "传出去的图不对：" + handed.Width + "x" + handed.Height;
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
 

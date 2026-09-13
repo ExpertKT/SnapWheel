@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: 取源码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 编译两条线 + 跑全部测试
         shell: pwsh

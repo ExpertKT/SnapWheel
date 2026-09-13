@@ -677,6 +677,9 @@ namespace SnapWheel
         // 管理员模式下"拖了半天啥也没发生"时抛出去：让 AppCtx 弹说明（要不要换普通权限）
         public event EventHandler AdminHelpRequested;
 
+        // 中键点缩略图：把这张图贴（钉）到屏幕上；at = 想钉的位置（屏幕坐标，图片以它为中心）
+        public event Action<Bitmap, Point> PinRequested;
+
 
         IntPtr _memDc = IntPtr.Zero, _dib = IntPtr.Zero, _oldBmp = IntPtr.Zero, _bits = IntPtr.Zero;
 

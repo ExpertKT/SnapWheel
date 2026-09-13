@@ -20,6 +20,8 @@ namespace SnapWheel
         NotifyIcon _tray;
         HotkeyForm _hotkey;
         WheelForm _wheel;
+        // 贴在屏幕上的那些图钉（中键点缩略图产生），退出时一起收掉
+        readonly System.Collections.Generic.List<PinForm> _pins = new System.Collections.Generic.List<PinForm>();
 
         public AppCtx()
         {
@@ -35,6 +37,7 @@ namespace SnapWheel
             _wheel.SettingsRequested += new EventHandler(OnSettings);
             _wheel.CaptureRequested += new EventHandler(OnHotkey);
             _wheel.AdminHelpRequested += new EventHandler(OnAdminHelp);
+            _wheel.PinRequested += new Action<Bitmap, Point>(OnPin);
             _wheel.ExitRequested += new EventHandler(delegate(object o, EventArgs e2) { Application.Exit(); });
 
             _tray = new NotifyIcon();
@@ -55,6 +58,7 @@ namespace SnapWheel
             if (Elev.Is)
                 menu.Items.Add("管理员模式说明…（拖拽为什么不动）", null, new EventHandler(OnAdminHelp));
             menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
+            menu.Items.Add("关掉所有贴图", null, new EventHandler(delegate(object o, EventArgs e) { CloseAllPins(); }));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
             menu.Items.Add("打开项目主页", null, new EventHandler(delegate(object o, EventArgs e) {
@@ -119,6 +123,32 @@ namespace SnapWheel
         void OnGuide(object sender, EventArgs e)
         {
             try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
+        }
+
+        // 贴图（图钉）：轮盘中键点了一张缩略图 -> 在这儿开一个 PinForm 钉在屏幕上。
+        // at 是鼠标的屏幕坐标，PinForm 自己会以它为中心摆好、并夹进屏幕范围。
+        void OnPin(Bitmap img, Point at)
+        {
+            try
+            {
+                PinForm p = new PinForm(img, at);
+                p.FormClosed += new FormClosedEventHandler(delegate(object o, FormClosedEventArgs e2)
+                {
+                    try { _pins.Remove(p); } catch { }
+                });
+                _pins.Add(p);
+                p.Show();
+                p.BringToFront();
+            }
+            catch (Exception ex) { Err.Log("Pin", ex); }
+        }
+
+        void CloseAllPins()
+        {
+            // 复制一份再遍历：FormClosed 里会从 _pins 里移除
+            PinForm[] arr = _pins.ToArray();
+            for (int i = 0; i < arr.Length; i++) { try { arr[i].Close(); } catch { } }
+            _pins.Clear();
         }
 
         // 管理员模式说明框：托盘菜单、"拖不动"的那一刻都走这里。
@@ -330,6 +360,7 @@ namespace SnapWheel
 
         void Quit()
         {
+            try { CloseAllPins(); } catch { }     // 贴图不是主窗口，不留着它们挡住桌面
             try { _tray.Visible = false; } catch { }
             if (_wheel != null && _wheel.Visible)
             {

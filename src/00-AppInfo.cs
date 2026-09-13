@@ -15,9 +15,9 @@ namespace SnapWheel
     static class AppInfo
     {
 #if NO_KEY
-        public const string Version = "0.2.19";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
+        public const string Version = "0.2.20";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）
 #else
-        public const string Version = "0.4.9";   // 完整版：源码拆分 + 管理员拖放引导 + CI
+        public const string Version = "0.5.0";   // 完整版：贴图到屏幕 + 截图标注
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";

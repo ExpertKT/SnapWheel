@@ -542,6 +542,17 @@ namespace SnapWheel
                     Render();
                 }
             }
+            else if (e.Button == MouseButtons.Middle && hh >= 0 && hh < _store.Items.Count)
+            {
+                // 中键：把这张图贴（钉）到屏幕上。左键已经用来拖出去、右键用来删、双击用来复制，
+                // 中键是唯一还空着的"点一下立刻做点什么"。
+                StoreItem it = _store.Items[hh];
+                if (it != null && it.Image != null && PinRequested != null)
+                {
+                    try { PinRequested(it.Image, PointToScreen(e.Location)); ShowToast("已贴到屏幕上（双击它或按 Esc 关掉）"); }
+                    catch (Exception ex) { Err.Log("PinRequested", ex); }
+                }
+            }
         }
 
 
