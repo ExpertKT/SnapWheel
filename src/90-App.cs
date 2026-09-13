@@ -91,9 +91,11 @@ namespace SnapWheel
 
             if (_settings.ShowWheelOnStart)
             {
-                // 开了收起态：开机就只贴边待着（像贴边小球），点一下才拉出来
-                if (_settings.CollapseMode) _wheel.StartCollapsed();
-                else _wheel.ShowWheelWithIntro();
+                // 开机一律把轮盘**展开**（带开启动画）。
+                // 收起态是"用完自己收起来"的东西，不该让人一开机只看到屏幕边上一小条 ——
+                // 新用户会以为没启动，老用户也得先点一下才看得到内容。
+                // 收起功能没动：点关闭键（或长按它）照样能收成把手，自动隐藏也照旧。
+                _wheel.ShowWheelWithIntro();
             }
             else if (_settings.CollapseMode)
             {
