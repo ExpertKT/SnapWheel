@@ -33,6 +33,11 @@ namespace SnapWheel
         bool _err = false;
         bool _busy = false;
         int _shots = 0;
+        IntPtr _target = IntPtr.Zero;         // 选区下面那个窗口（滚轮消息发给它）
+        byte[] _prevGray;                     // 上一帧的灰度采样（判断画面有没有在动）
+        int _tick = 0, _stalls = 0;
+        const int ScrollSteps = 3;            // 每次自动滚几格
+        const double StillTol = 3.0;          // 判定画面没动的灰度差阈值
 
         public LongShotForm(Rectangle region)
         {
@@ -72,6 +77,11 @@ namespace SnapWheel
             // Esc/Enter 用应用级消息过滤来收：提示条是无边框置顶窗口，焦点很容易被下面的
             // 目标程序抢走（用户反馈 Esc 按了没用，只能用鼠标点提示条退出）。
             Application.AddMessageFilter(this);
+
+            // 选区正中心下面是谁？滚轮消息就发给他（自动滚动，不用用户自己滚）
+            try { _target = Native.WindowFromPoint(new Native.POINT(_region.Left + _region.Width / 2, _region.Top + _region.Height / 2)); }
+            catch { _target = IntPtr.Zero; }
+            _prevGray = (first == null) ? null : LongShot.Sample(first);
 
             _t = new Timer();
             _t.Interval = 300;      // 300ms 抓一帧：200ms 太密，会把目标程序的滚动拖得不平滑（用户反馈）
@@ -118,26 +128,64 @@ namespace SnapWheel
                 Bitmap frame = Grab();
                 if (frame == null) { _msg = "抓屏失败（可能被安全软件拦了）"; _err = true; Invalidate(); return; }
 
+                byte[] g2 = LongShot.Sample(frame);
+                _tick++;
+
+                if (_tick == 1) { _prevGray = g2; ScrollNext(); _msg = "开始自动滚动…"; Invalidate(); return; }
+
+                double diff = Diff(_prevGray, g2);
+                _prevGray = g2;
+
+                if (diff < StillTol)
+                {
+                    // 画面几乎没动：到底了，或者目标窗口不吃合成的滚轮消息
+                    _stalls++;
+                    if (_stalls >= 2) { _msg = "到底了，正在出图"; Invalidate(); Finish(); return; }
+                    _msg = "画面没动（" + _stalls + "/2），再试一次";
+                    Invalidate();
+                    ScrollNext();
+                    return;
+                }
+
+                _stalls = 0;
                 int added = 0;
-                bool ok = _ls.Push(frame, out added);
-                if (ok)
-                {
-                    _shots++;
-                    _err = false;
-                    _msg = "刚接上 " + added + " 行";
-                }
-                else
-                {
-                    _err = true;
-                    _msg = (_ls.LastWhy == null ? "这一屏没对上，再滚一下" : _ls.LastWhy);
-                }
+                if (_ls.Push(frame, out added)) { _shots++; _err = false; _msg = "已接 " + added + " 行"; }
+                else { _err = true; _msg = (_ls.LastWhy == null ? "这一屏没对上" : _ls.LastWhy); }
                 Invalidate();
+                ScrollNext();
             }
             catch (Exception ex)
             {
                 try { Err.Log("LongShot", ex); } catch { }
             }
             finally { _busy = false; }
+        }
+
+        // 给选区正中心下面那个窗口发一个合成的滚轮消息（往下滚几格）。
+        // 这是**产品功能**（用户要求：滚动交给他自己太不可控，速度不重要、可用性优先），
+        // 与验证时不许模拟真实输入那条纪律是两件事。
+        void ScrollNext()
+        {
+            if (_target == IntPtr.Zero) return;
+            try
+            {
+                int delta = -120 * ScrollSteps;                 // 负数 = 向下滚
+                int wp = (delta << 16);
+                int lx = _region.Left + _region.Width / 2;
+                int ly = _region.Top + _region.Height / 2;
+                int lp = (lx & 0xFFFF) | ((ly & 0xFFFF) << 16);
+                Native.PostMessage(_target, Native.WM_MOUSEWHEEL, (IntPtr)wp, (IntPtr)lp);
+            }
+            catch { }
+        }
+
+        // 两帧灰度采样之间变化有多大（抽样算平均差）
+        static double Diff(byte[] a, byte[] b)
+        {
+            if (a == null || b == null || a.Length != b.Length) return 999;
+            long s = 0; int n = 0;
+            for (int i = 0; i < a.Length; i += 37) { int d = a[i] - b[i]; s += d < 0 ? -d : d; n++; }
+            return n == 0 ? 999 : (double)s / n;
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -199,10 +247,10 @@ namespace SnapWheel
 
             int x = icon.Right + Ui.S(12);
             int top = Ui.S(10);
-            TextRenderer.DrawText(g, "滚动长截图：把鼠标放到刚才框选的区域里，往下滚", Font, new Point(x, top),
+            TextRenderer.DrawText(g, "滚动长截图：自动滚动中，不用你操作", Font, new Point(x, top),
                 Color.FromArgb(236, 238, 244), TextFormatFlags.NoPadding);
             using (Font fs = new Font("Microsoft YaHei UI", 8.5f))
-                TextRenderer.DrawText(g, "一次别滚太多 · Enter 结束出图 · Esc 取消", fs, new Point(x, top + Ui.S(20)),
+                TextRenderer.DrawText(g, "到底会自动停 · Enter 提前出图 · Esc 取消", fs, new Point(x, top + Ui.S(20)),
                     Color.FromArgb(150, 154, 164), TextFormatFlags.NoPadding);
 
             string line;

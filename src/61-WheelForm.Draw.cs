@@ -1134,9 +1134,9 @@ namespace SnapWheel
                     float ip = sz.Height * 0.72f;                    // 前置的小圆点
                     float h3 = sz.Height + 12f;
                     float r3 = EffR() + 78f;                       // 回到 45° 对角线外侧那一档（原来的位置）
-                    float mid3 = (_phiMin + _phiMax) / 2f;         // 45° 对角线方向（用户要求靠 45° 角，别再往下偏）
+                    float mid3 = (_phiMin + _phiMax) / 2f;         // 45° 对角线方向
                     // 弧长按内容算：圆点 + 间隔 + 文字 + 两端留白 —— 这样数字绝不会被胶囊边缘切到
-                    float needLen = ip + 8f + sz.Width + 12f;
+                    float needLen = ip + 10f + sz.Width * 1.04f + 16f;   // 给圆点和两端留够，字号不再被挤
                     float half3 = needLen / 2f / r3;
                     using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, mid3 - half3, mid3 + half3))
                     {
@@ -1158,7 +1158,7 @@ namespace SnapWheel
                     // 数字也沿弧排（用户要求跟胶囊同一条弧）：弧长按内容算足了，整串都在胶囊里
                     {
                     float step3 = (sz.Width * 1.04f / Math.Max(1, idx.Length)) / r3;   // 每字一个角：按实测字宽，紧凑
-                    float textMid = mid3 - dotAng / 2f;               // 文字往另一侧让半个圆点，避开它
+                    float textMid = mid3 + dotAng * 0.12f;           // 文字**居中**：只极轻微避开圆点（原来整段往 phi 小侧让，视觉上就偏下）
                         ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, textMid, step3, 0.45f);
                     }
                     }

@@ -20,6 +20,9 @@ namespace SnapWheel
         [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern int GetDpiForSystem();
         [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
+        // 0.6.0 滚动长截图：给目标窗口发合成的滚轮消息（这是产品功能，不是测试里的模拟输入）
+        [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+        public const uint WM_MOUSEWHEEL = 0x020A;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
         [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
