@@ -1132,7 +1132,11 @@ namespace SnapWheel
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
                         g.FillEllipse(db, dp3.X - ip / 2f, dp3.Y - ip / 2f, ip, ip);
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
-                        ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, mid3, st3);
+                        // 文字**水平**放在胶囊正中（用户反馈：斜着排读不出来，像"显示 bug"）。
+                        // 弧线感交给胶囊本体，计数这种短文字保持正立 —— 好读优先。
+                        PointF tp3 = ArcUi.Polar(cc2, sx3, sy3, mid3, r3);
+                        SizeF isz = g.MeasureString(idx, f);
+                        g.DrawString(idx, f, br, tp3.X - isz.Width / 2f + ip * 0.55f, tp3.Y - isz.Height / 2f);
                 }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
