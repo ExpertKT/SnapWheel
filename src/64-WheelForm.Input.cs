@@ -402,6 +402,7 @@ namespace SnapWheel
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            _forceDraw = true;      // 省电模式下，鼠标动这一下也要立刻重绘
             _lastActive = DateTime.Now;
             e = LogicalArgs(e);
 
@@ -452,6 +453,7 @@ namespace SnapWheel
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
+            _forceDraw = true;      // 按下要立刻有反馈
             _lastActive = DateTime.Now;
             e = LogicalArgs(e);
 
@@ -566,6 +568,7 @@ namespace SnapWheel
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            _forceDraw = true;
             e = LogicalArgs(e);
             if (_keyDown)
             {
@@ -711,6 +714,7 @@ namespace SnapWheel
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
+            _forceDraw = true;      // 滚轮翻图要立刻动，别等下一 tick
             _lastActive = DateTime.Now;
             _targetOffset -= e.Delta / 120;
             if (_targetOffset < MinOffset()) _targetOffset = MinOffset();

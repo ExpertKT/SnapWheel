@@ -135,6 +135,7 @@ namespace SnapWheel
         void Render()
         {
             if (!IsHandleCreated || !Visible) return;
+            RenderCountForTest++;               // 测试用（省电验收要数「到底画了几帧」）
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             try { RenderCore(); }
             finally

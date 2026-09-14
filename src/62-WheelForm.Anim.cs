@@ -267,12 +267,13 @@ namespace SnapWheel
                 bool sH = ShootButtonRect().Contains(cp);
                 bool kh = KeyRect().Width > 8 && KeyRect().Contains(cp);
                 bool nh = NamePillRect().Contains(cp);
-                if (hh != _hover) { _hover = hh; need = true; }
-                if (gh != _gearHover) { _gearHover = gh; need = true; }
-                if (ch != _closeHover) { _closeHover = ch; need = true; }
-                if (sH != _shootHover) { _shootHover = sH; need = true; }
-                if (kh != _keyHover) { _keyHover = kh; need = true; }
-                if (nh != _nameHover) { _nameHover = nh; need = true; }
+                // 悬停变化这一帧**必须画**（省电模式下也不许延到下一 tick）：置 _forceDraw
+                if (hh != _hover) { _hover = hh; need = true; _forceDraw = true; }
+                if (gh != _gearHover) { _gearHover = gh; need = true; _forceDraw = true; }
+                if (ch != _closeHover) { _closeHover = ch; need = true; _forceDraw = true; }
+                if (sH != _shootHover) { _shootHover = sH; need = true; _forceDraw = true; }
+                if (kh != _keyHover) { _keyHover = kh; need = true; _forceDraw = true; }
+                if (nh != _nameHover) { _nameHover = nh; need = true; _forceDraw = true; }
             }
 
 
@@ -445,7 +446,9 @@ namespace SnapWheel
 
             // 玻璃底定时重抓：轮盘一直挂着也不会"糊的是半小时前的桌面"
             // （窗口已设置 WDA_EXCLUDEFROMCAPTURE，抓屏不会把轮盘自己拍进去，所以显示中也能抓）
-            if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro)
+            // 省电模式（电池上）：**只**停"每 3.5 秒的定时重抓"这一档 —— 轮盘刚显示 / 切盘 / 拖放 / 隐藏时
+            // 那几处 RequestBackdropAsync() 照旧（否则玻璃底色会缺）。见 12-Power.cs。
+            if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro && !PowerSaveOn())
             {
                 if ((DateTime.Now - _backdropAt).TotalSeconds > 3.5)
                 {
@@ -532,7 +535,30 @@ namespace SnapWheel
                 if (Visible) { Hide(); RequestBackdropAsync(); }   // 隐藏后再抓一次，下次显示时玻璃底是新的（后台抓，别卡 UI）
                 return;
             }
-            if (need || !_rendered) Render();   // render ONLY when something changed (smooth + cheap)
+            // 省电模式（电池上）：**隔一帧才画一次**，但三条硬约束不许破 ——
+            //   ① 定时器间隔绝不动（15ms 那个节奏是动画的时基：_deleteProg += 0.055f、_chipsT 平滑都按帧推进，
+            //      改间隔它们就整体变慢）；这里只决定"这一帧要不要真去 Render"。
+            //   ② **绝不连续两帧不画**：上一帧跳过了，这一帧无论如何都画（_powerSkipped）。
+            //   ③ **输入那一帧必画**：悬停/按下/滚轮改变的那一下要立刻看见（_forceDraw），不许延到下一 tick。
+            if (PowerSaveOn() && !_powerSkipped && !_forceDraw)
+            {
+                _powerSkipped = true;                 // 这一帧省掉
+                SkipCountForTest++;
+            }
+            else
+            {
+                _powerSkipped = false;
+                if (need || !_rendered) Render();     // render ONLY when something changed (smooth + cheap)
+            }
+            _forceDraw = false;
+        }
+
+
+        // 现在是不是"省电生效"：设置开着 **且** 在电池上（Power.OnBattery 内部缓存 5 秒，不会每帧问系统）
+        bool PowerSaveOn()
+        {
+            try { return _settings != null && _settings.PowerSave && Power.OnBattery(); }
+            catch { return false; }
         }
 
 

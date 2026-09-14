@@ -65,6 +65,8 @@ namespace SnapWheel
         public bool ResetScrollOnCapture = true;
         // 设置窗口的客户区尺寸（像素）。0 = 没设过 → 按"内容首选尺寸 × DPI"算默认值。
         // 用户拖过窗口之后在关闭时写回这里，下次打开就用他拖出来的大小（会夹进 [最小, 最大]）。
+        // 省电模式（默认开）：**只在电池供电时**暂停毛玻璃定时刷新 + 重绘隔帧一次（见 12-Power.cs）。
+        public bool PowerSave = true;
         public int WinW = 0;
         public int WinH = 0;
         // 拖出时要不要同时给"文件"格式。
@@ -145,6 +147,7 @@ namespace SnapWheel
                         else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) { s.ExpandSpeed = n; s.CollapseSpeed = n; } }   // 兼容旧配置
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
                         else if (k == "ResetScrollOnCapture") s.ResetScrollOnCapture = (v == "1");
+                        else if (k == "PowerSave") s.PowerSave = (v == "1");
                         else if (k == "WinW") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinW = n; }
                         else if (k == "WinH") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinH = n; }
                         else if (k == "DragOutAsFile") s.DragOutAsFile = (v == "1");
@@ -279,6 +282,7 @@ namespace SnapWheel
                 lines.Add("CollapseSpeed=" + CollapseSpeed);
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 lines.Add("ResetScrollOnCapture=" + (ResetScrollOnCapture ? "1" : "0"));
+                lines.Add("PowerSave=" + (PowerSave ? "1" : "0"));
                 lines.Add("WinW=" + WinW);
                 lines.Add("WinH=" + WinH);
                 lines.Add("DragOutAsFile=" + (DragOutAsFile ? "1" : "0"));

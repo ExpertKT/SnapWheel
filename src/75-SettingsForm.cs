@@ -50,6 +50,7 @@ namespace SnapWheel
         readonly ComboBox[] _keyBox = new ComboBox[4];
         NumericUpDown _numGlass, _numRadius, _numShadow;
         TableLayoutPanel _advR;
+        CheckBox _chkPower;                  // 省电模式（0.5.3）：只在电池供电时生效，见 12-Power.cs
 
         // 窗口出厂尺寸 = 允许缩到的最小尺寸（**逻辑像素**，实际会乘 DPI 系数 K）。
         // 这个数不能随手改小：四页内容是按 720px 宽（760 - 40 边距）排的。
@@ -791,7 +792,7 @@ namespace SnapWheel
         void BuildPage4()
         {
             TableLayoutPanel g = _pages[3];
-            SetupRows(g, 7);
+            SetupRows(g, 8);
             Settings s = _s;
 
             g.Controls.Add(Section("万能键"), 0, 0);
@@ -859,7 +860,18 @@ namespace SnapWheel
                 PerformLayout();
             });
             g.Controls.Add(chkAdv, 0, 5);
-            g.Controls.Add(_advR, 0, 6);
+
+            // 省电模式（0.5.3）：归在"高级"这组里 —— 它是电源相关的行为开关，不是外观微调。
+            // 排在 _advR **之前**：展开"高级选项"时往下顶的是这一行，微调行仍紧贴它自己的开关。
+            // 第 4 页由此从 7 行变 8 行（和其余页持平）；万一它成了最高的一页，
+            // EnsureFit 会在翻到它时把窗口补够（只长大不裁切），不会切掉这一行。
+            _chkPower = new CheckBox();
+            _chkPower.AutoSize = true;
+            _chkPower.Text = "省电模式：用电池时停掉定时毛玻璃刷新、重绘减半（插电自动恢复）";
+            _chkPower.Margin = new Padding(0, 10, 0, 0);
+            _chkPower.Checked = s.PowerSave;
+            g.Controls.Add(_chkPower, 0, 6);
+            g.Controls.Add(_advR, 0, 7);
         }
 
         // ============================ 翻页 ============================
@@ -1106,6 +1118,7 @@ namespace SnapWheel
                 s.GlassPercent = (int)_numGlass.Value;
                 s.CardRadius = (int)_numRadius.Value;
                 s.ShadowPercent = (int)_numShadow.Value;
+                s.PowerSave = _chkPower.Checked;     // 0.5.3：省电模式（电池上才实际生效，见 12-Power.cs）
                 // 保存万能键四分区。这里必须立刻 s.Save() 落盘：
                 // 否则下次打开设置窗口会从文件里读到旧值，一点确定就把刚改的打回原形
                 // （"圆盘上的动作名改完不变"的根因）。这条行为现在由 tests\behavior-test.cs 守着。
