@@ -63,6 +63,10 @@ namespace SnapWheel
         // 收进新图（截图 / 剪贴板 / 导入）之后要不要把滚动位置重置到最新那张。
         // 开（默认）：视口跟到最新那张 —— 滑入动画看得见；关：完全不碰用户的滚动位置。
         public bool ResetScrollOnCapture = true;
+        // 设置窗口的客户区尺寸（像素）。0 = 没设过 → 按"内容首选尺寸 × DPI"算默认值。
+        // 用户拖过窗口之后在关闭时写回这里，下次打开就用他拖出来的大小（会夹进 [最小, 最大]）。
+        public int WinW = 0;
+        public int WinH = 0;
         // 拖出时要不要同时给"文件"格式。
         // v0.4.8 曾把这里默认改成关，结果老用户拖到资源管理器 / 只吃文件的程序直接放不进去
         // （"缩略图拖出去放不了"就是这么来的）—— 现在默认开，Rev<3 的老配置会被迁移回开。
@@ -141,6 +145,8 @@ namespace SnapWheel
                         else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) { s.ExpandSpeed = n; s.CollapseSpeed = n; } }   // 兼容旧配置
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
                         else if (k == "ResetScrollOnCapture") s.ResetScrollOnCapture = (v == "1");
+                        else if (k == "WinW") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinW = n; }
+                        else if (k == "WinH") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinH = n; }
                         else if (k == "DragOutAsFile") s.DragOutAsFile = (v == "1");
                         else if (k == "CheckUpdate") s.CheckUpdate = (v == "1");
                         else if (k == "NubHintDone") s.NubHintDone = (v == "1");
@@ -273,6 +279,8 @@ namespace SnapWheel
                 lines.Add("CollapseSpeed=" + CollapseSpeed);
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 lines.Add("ResetScrollOnCapture=" + (ResetScrollOnCapture ? "1" : "0"));
+                lines.Add("WinW=" + WinW);
+                lines.Add("WinH=" + WinH);
                 lines.Add("DragOutAsFile=" + (DragOutAsFile ? "1" : "0"));
                 lines.Add("CheckUpdate=" + (CheckUpdate ? "1" : "0"));
                 lines.Add("NubHintDone=" + (NubHintDone ? "1" : "0"));

@@ -29,6 +29,8 @@ namespace SnapWheel
         readonly Action[] _builders = new Action[4];
         readonly bool[] _built = new bool[4];
         int _cur = -1;
+        int _openW, _openH;                  // 打开时的客户区尺寸（关闭时对比，用户拖过才写回设置）
+        public Size ContentNeed;             // 四页里最大的"内容首选尺寸"（工具/测试看用）
         Settings _s;
         bool _filterAdded;
 
@@ -391,6 +393,98 @@ namespace SnapWheel
             ShowPage(0);             // 只建第 1 页
             Controls.Add(root);      // 全部建完才挂上去：整棵树只排一次
             PerformLayout();
+            SizeToContent();         // 再按"内容首选尺寸 × DPI"定默认尺寸 / 最小尺寸（见方法里的说明）
+        }
+
+        // ============================ 默认尺寸 / 记住用户拖过的尺寸 ============================
+        // 用户报"一打开显示不全、还得自己拖"：所以默认尺寸不再写死，改成**按内容反推**：
+        //     需要的最小客户区 = max(出厂尺寸, 那一页的"内容首选尺寸" + 固定行高 + 内边距)
+        // 全部都是**物理像素**（页面里的字号已经按真实 DPI 渲染，所以量出来的首选尺寸天然含 DPI 系数，
+        // 不需要再乘一次 K —— 和"长度乘 K、字体点数不乘"是同一条规矩）。
+        //   · 量哪一页？**先量马上要显示的那一页**（第 1 页，构造时就建好了），其余各页等第一次翻到时
+        //     在 BuildPage 里量（EnsureFit）。这样打开不比原来慢多少（"每页懒建"的初衷保住了：
+        //     实测四页全量要 +130ms），但**任何一页被显示出来时都已经按内容补足过尺寸**，不会裁。
+        //   · MinimumSize 用同一个值（"最小尺寸不小于内容"），上限仍是屏幕工作区 92%。
+        //   · 用户拖过之后在关闭时写回 settings（WinW/WinH），下次打开就用他的尺寸；
+        //     存下来的值一律夹进 [最小, 最大]（换到别的缩放比屏幕上也绝不会小于内容）。
+        void SizeToContent()
+        {
+            // 出厂下限先当最小尺寸（量出来的只会比它大）
+            MinimumSize = SizeFromClientSize(new Size(S(MinClientW), S(MinClientH)));
+            ApplyMaxSize();
+            ClientSize = new Size(S(MinClientW), S(MinClientH));
+            if (_s != null && _s.WinW > 0 && _s.WinH > 0) { ClientSize = new Size(_s.WinW, _s.WinH); ClampClient(); }
+            EnsureFit(0);                                   // 第 1 页按内容（不够就把窗口长大）
+            ClampClient();
+            _openW = ClientSize.Width; _openH = ClientSize.Height;
+        }
+
+        void ApplyMaxSize()
+        {
+            try
+            {
+                Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+                if (wa.Width > 100 && wa.Height > 100)
+                    MaximumSize = new Size(Math.Max(MinimumSize.Width, (int)(wa.Width * 0.92f)),
+                                           Math.Max(MinimumSize.Height, (int)(wa.Height * 0.92f)));
+            }
+            catch { }
+        }
+
+        // 把第 i 页量一次；不够就把 MinimumSize 和窗口一起长大（只长大不缩小 —— 用户拖过的尺寸不会被某一页打回）
+        void EnsureFit(int i)
+        {
+            if (i < 0 || i >= _pages.Length) return;
+            try
+            {
+                Size pref = _pages[i].GetPreferredSize(new Size(Math.Max(1, S(MinClientW) - Padding.Horizontal), 0));
+                if (pref.Width > ContentNeed.Width || pref.Height > ContentNeed.Height)
+                    ContentNeed = new Size(Math.Max(ContentNeed.Width, pref.Width), Math.Max(ContentNeed.Height, pref.Height));
+                int w = Math.Max(S(MinClientW), ContentNeed.Width + Padding.Horizontal);
+                int h = Math.Max(S(MinClientH), ContentNeed.Height + S(28) + S(96) + S(40) + S(32) + Padding.Vertical);
+                MinimumSize = SizeFromClientSize(new Size(w, h));
+                ApplyMaxSize();
+                if (ClientSize.Width < w || ClientSize.Height < h)
+                {
+                    ClientSize = new Size(Math.Max(ClientSize.Width, w), Math.Max(ClientSize.Height, h));
+                    ClampClient();
+                }
+            }
+            catch (Exception ex) { Err.Log("SettingsEnsureFit", ex); }
+        }
+
+        // 客户区夹进 [最小, 最大]（范围是以"窗口外框"记的，所以换算出客户区的边界再比）
+        void ClampClient()
+        {
+            try
+            {
+                int minW = MinimumSize.Width - (Width - ClientSize.Width);
+                int minH = MinimumSize.Height - (Height - ClientSize.Height);
+                int maxW = MaximumSize.Width - (Width - ClientSize.Width);
+                int maxH = MaximumSize.Height - (Height - ClientSize.Height);
+                int w = ClientSize.Width, h = ClientSize.Height;
+                if (w < minW) w = minW; if (h < minH) h = minH;
+                if (maxW > 0 && w > maxW) w = maxW;
+                if (maxH > 0 && h > maxH) h = maxH;
+                if (w != ClientSize.Width || h != ClientSize.Height) ClientSize = new Size(w, h);
+            }
+            catch { }
+        }
+
+        // 关窗口时把用户拖出来的尺寸记进设置（和打开时不一样才写，免得每次都动配置文件）
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            try
+            {
+                ClampClient();
+                if (_s != null && (ClientSize.Width != _openW || ClientSize.Height != _openH))
+                {
+                    _s.WinW = ClientSize.Width; _s.WinH = ClientSize.Height;
+                    _s.Save();
+                }
+            }
+            catch (Exception ex) { Err.Log("SettingsWinSize", ex); }
         }
 
         // ============================ 四页的内容 ============================
@@ -865,6 +959,8 @@ namespace SnapWheel
             _pages[i].SuspendLayout();
             _builders[i]();
             _pages[i].ResumeLayout(true);
+            _pages[i].PerformLayout();
+            EnsureFit(i);        // 建完就量：这一页的内容要是不够放，窗口当场长大（翻到哪页都不会裁）
         }
 
         // 精确落位：Dock=Fill 由布局引擎给出整格矩形，动画结束绝不留下 1px 偏移
