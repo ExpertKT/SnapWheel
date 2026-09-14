@@ -17,7 +17,7 @@ namespace SnapWheel
 #if NO_KEY
         public const string Version = "0.2.22";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）★ 0.2 线最终版
 #else
-        public const string Version = "0.5.2";   // 完整版：动画性能大优化 + 撤销删除 + 工具条摆放
+        public const string Version = "0.5.3";   // 完整版：设置界面可有限度缩放 + 打赏（收款码）
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";

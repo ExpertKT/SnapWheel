@@ -49,6 +49,9 @@ namespace SnapWheel
         NumericUpDown _numGlass, _numRadius, _numShadow;
         TableLayoutPanel _advR;
 
+        // 窗口出厂尺寸 = 允许缩到的最小尺寸。这个数不能随手改小：四页内容是按 720px 宽（760 - 40 边距）排的。
+        const int MinClientW = 760, MinClientH = 574;
+
         static readonly int[] scVals = { 0, 80, 90, 100, 110, 125, 150, 175, 200, 250 };
         static readonly int[] ringVals = { 220, 150, 100, 80, 60, 45 };
         static readonly string[] ringNames = { "极快", "快", "标准", "慢", "很慢", "最慢" };
@@ -149,6 +152,18 @@ namespace SnapWheel
         }
 
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            // 拖边框改大小：翻页滑动用的两张位图是按旧尺寸拍的，先精确收尾（不然会贴一张旧尺寸的图）；
+            // 再把当前页按新尺寸重新排一次。页面是 Dock=Fill + 行高 AutoSize，
+            // 所以"多出来的高度"自然全给了 root 第 2 行（当前页那格 Percent(100)），
+            // 标题（第 0 行）、分页器（第 1 行）、按钮行（第 3 行）、页脚（第 4 行）都是固定高，不会跟着错位。
+            if (_body == null || _cur < 0) return;      // 构造函数里设 ClientSize 时还没有页面
+            if (Animating) FinishNow();
+            SnapTo(_cur);
+        }
+
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
@@ -163,13 +178,27 @@ namespace SnapWheel
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
             BackColor = Color.FromArgb(250, 250, 252);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false; MinimizeBox = false;
+            // 有限度地自由调整大小（用户报"有些选项的字显示不全"）：可以拖边框放大 / 缩小，
+            //   下限 = 出厂尺寸（760×574，四页内容在这个尺寸下都排得下）
+            //   上限 = 屏幕工作区的 92%（再大就没意义，也不该长到屏幕外面去）
+            // 只动窗口大小：**四页的布局一个字没动**（坐标明确 + 每页懒建 + 保存只写建过的页）。
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = false;                  // 上限已经被 MaximumSize 夹住了，最大化键没有意义
+            MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterScreen;
-            AutoSize = false;                     // 固定大小：翻页代替滚动，窗口不再随内容长高长胖
+            AutoSize = false;                     // 不随内容长高长胖：大小由用户拖（翻页仍然代替滚动）
             DoubleBuffered = true;                // 滑动时整窗不闪（配合 CreateParams 里的 WS_EX_COMPOSITED）
-            ClientSize = new Size(760, 574);
+            ClientSize = new Size(MinClientW, MinClientH);
+            MinimumSize = SizeFromClientSize(new Size(MinClientW, MinClientH));
+            try
+            {
+                Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+                if (wa.Width > 100 && wa.Height > 100)
+                    MaximumSize = new Size(Math.Max(MinimumSize.Width, (int)(wa.Width * 0.92f)),
+                                           Math.Max(MinimumSize.Height, (int)(wa.Height * 0.92f)));
+            }
+            catch { }
             // 底部原来只留 12px：页脚 "by exper7" 那行的真实文字格比字体行高高，末几行像素会被窗口底边切掉
             Padding = new Padding(20, 14, 20, 18);
 
@@ -290,13 +319,29 @@ namespace SnapWheel
                 Close();
             });
 
-            // 按钮行：用五列表格把确定/取消靠右对齐（引导/还原在左）。
+            // 打赏：收款码弹窗（刻意不写进说明、不显眼，见 84-Reward.cs）
+            RoundButton tip = new RoundButton();
+            tip.Text = "打赏";
+            tip.Size = new Size(104, 36);
+            tip.Fill = Color.FromArgb(252, 246, 234);
+            tip.FillHover = Color.FromArgb(248, 236, 216);
+            tip.TextColor = Color.FromArgb(160, 116, 30);
+            tip.Font = new Font("Microsoft YaHei UI", 10f);
+            tip.Margin = new Padding(10, 2, 0, 0);
+            tip.Click += new EventHandler(delegate(object o, EventArgs e2)
+            {
+                try { using (RewardForm rf = new RewardForm()) rf.ShowDialog(this); }
+                catch (Exception rex) { Err.Log("RewardForm", rex); }
+            });
+
+            // 按钮行：用六列表格把确定/取消靠右对齐（引导/还原/打赏在左）。
             TableLayoutPanel btnRow = new TableLayoutPanel();
-            btnRow.ColumnCount = 5;
+            btnRow.ColumnCount = 6;
             btnRow.RowCount = 1;
             btnRow.AutoSize = false;
             btnRow.Dock = DockStyle.Fill;
             btnRow.Margin = new Padding(0);
+            btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             btnRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -305,14 +350,15 @@ namespace SnapWheel
             btnRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             btnRow.Controls.Add(guide, 0, 0);
             btnRow.Controls.Add(reset, 1, 0);
+            btnRow.Controls.Add(tip, 2, 0);           // 「还原默认」右边，样式和其它按钮一致
             // 中间只放个"撑宽"的空位（把确定/取消推到右边）。这里必须给它一个小尺寸：
             // Panel 的默认尺寸是 200×100，放进 40px 高的按钮行里会顶出行高、被裁（渲染工具会报"被裁"）。
             Panel btnSpacer = new Panel();
             btnSpacer.Size = new Size(1, 1);
             btnSpacer.Margin = new Padding(0);
-            btnRow.Controls.Add(btnSpacer, 2, 0);
-            btnRow.Controls.Add(ok, 3, 0);
-            btnRow.Controls.Add(cancel, 4, 0);
+            btnRow.Controls.Add(btnSpacer, 3, 0);
+            btnRow.Controls.Add(ok, 4, 0);
+            btnRow.Controls.Add(cancel, 5, 0);
             root.Controls.Add(btnRow, 0, 3);
 
             Label about = new Label();
