@@ -1,11 +1,7 @@
-// 演示动图生成器：把"截图 → 图滑进角落的轮环 → 拖进聊天窗口"渲染成 GIF。
-//
-// 全部离线渲染：假桌面是画出来的，**不截真实屏幕**；光标是画出来的假光标，
-// **不模拟任何真实鼠标/键盘输入**（铁律）。轮盘部分复用 ui-shot.cs 的做法：
-// 反射调 WheelForm.DrawWheel 把轮盘画进位图，于是可以按任意动画进度出帧。
-//
-// 用法：csc /target:exe /main:SnapWheel.DemoGif /out:demogif.exe src\*.cs tests\demo-gif.cs
-//       demogif.exe            -> 写 docs\demo.gif
+// 演示动图生成器 v2：把"截图 → 图飞进角落的轮环 → 从环上拖进聊天窗口"渲染成 GIF。
+// v1 的问题（用户反馈）：只有 22 帧 × 80ms ≈ 1.7 秒，太快、闪几下就没了，而且"图进环"没画出来。
+// v2：带停顿的时间轴（关键姿势多停、动作段 110~120ms 一帧），并显式画出两段位移。
+// 全部离线渲染：假桌面是画的、光标是画的 —— 不截真实屏幕、不模拟真实输入。
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -19,36 +15,27 @@ namespace SnapWheel
 {
     static class DemoGif
     {
-        const int W = 720, H = 430;      // 画布（GIF 尺寸）
-        const int DelayMs = 80;          // 每帧 80ms ≈ 12fps
+        const int W = 720, H = 430;
 
         static void F(object o, string n, object v)
         {
             FieldInfo fi = o.GetType().GetField(n, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-            if (fi == null) throw new Exception("找不到字段 " + n);
+            if (fi == null) throw new Exception("no field " + n);
             fi.SetValue(o, v);
-        }
-        static object G(object o, string n)
-        {
-            FieldInfo fi = o.GetType().GetField(n, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-            return fi == null ? null : fi.GetValue(o);
         }
         static object Call(object o, string n, params object[] a)
         {
             MethodInfo[] all = o.GetType().GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             for (int i = 0; i < all.Length; i++)
                 if (all[i].Name == n && all[i].GetParameters().Length == a.Length) return all[i].Invoke(o, a);
-            throw new Exception("找不到方法 " + n);
+            throw new Exception("no method " + n);
         }
+        static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+        static float Ease(float t) { return 1f - (1f - t) * (1f - t); }
 
-        static Bitmap Solid(int w, int h, Color c)
-        {
-            Bitmap b = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
-            using (Graphics g = Graphics.FromImage(b)) g.Clear(c);
-            return b;
-        }
+        static Rectangle ChatRect() { return new Rectangle(W - 300, 60, 270, 230); }
+        static Rectangle SelRect() { return new Rectangle(96, 74, 430, 265); }
 
-        // ---- 假桌面：不泄露真实屏幕。一块渐变背景 + 顶部条 + 两个假窗口 ----
         static Bitmap FakeDesktop()
         {
             Bitmap b = new Bitmap(W, H, PixelFormat.Format32bppPArgb);
@@ -56,58 +43,48 @@ namespace SnapWheel
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 using (LinearGradientBrush br = new LinearGradientBrush(new Rectangle(0, 0, W, H),
-                    Color.FromArgb(38, 52, 78), Color.FromArgb(16, 20, 30), 55f))
+                    Color.FromArgb(40, 54, 80), Color.FromArgb(18, 22, 32), 55f))
                     g.FillRectangle(br, 0, 0, W, H);
-                // 顶部任务条
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(14, 16, 22)))
-                    g.FillRectangle(sb, 0, 0, W, 26);
+                using (SolidBrush sb = new SolidBrush(Color.FromArgb(14, 16, 22))) g.FillRectangle(sb, 0, 0, W, 24);
                 using (Font f = new Font("Microsoft YaHei UI", 9f))
-                using (SolidBrush fb = new SolidBrush(Color.FromArgb(150, 220, 228, 240)))
-                    g.DrawString("假桌面（演示用，不是真实屏幕）", f, fb, 10, 5);
-                // 假聊天窗口（拖放目标）
+                using (SolidBrush fb = new SolidBrush(Color.FromArgb(140, 220, 228, 240)))
+                    g.DrawString("假桌面（演示用，不是真实屏幕）", f, fb, 10, 4);
                 Rectangle chat = ChatRect();
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(246, 248, 250)))
-                    g.FillRectangle(sb, chat);
-                using (Pen p = new Pen(Color.FromArgb(200, 210, 220), 1f))
-                    g.DrawRectangle(p, chat);
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(88, 198, 120)))
-                    g.FillRectangle(sb, chat.X, chat.Y, chat.Width, 30);
+                using (SolidBrush sb = new SolidBrush(Color.FromArgb(246, 248, 250))) g.FillRectangle(sb, chat);
+                using (Pen p = new Pen(Color.FromArgb(200, 210, 220), 1f)) g.DrawRectangle(p, chat);
+                using (SolidBrush sb = new SolidBrush(Color.FromArgb(88, 198, 120))) g.FillRectangle(sb, chat.X, chat.Y, chat.Width, 28);
                 using (Font f = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
-                using (SolidBrush fb = new SolidBrush(Color.White))
-                    g.DrawString("聊天窗口（假）", f, fb, chat.X + 10, chat.Y + 5);
+                using (SolidBrush fb = new SolidBrush(Color.White)) g.DrawString("聊天窗口（假）", f, fb, chat.X + 10, chat.Y + 4);
                 using (Font f = new Font("Microsoft YaHei UI", 9f))
                 using (SolidBrush fb = new SolidBrush(Color.FromArgb(150, 90, 100, 110)))
-                    g.DrawString("把图拖到这里松手 = 直接粘进输入框", f, fb, chat.X + 10, chat.Bottom - 26);
+                    g.DrawString("把图拖到这里松手 = 直接粘进输入框", f, fb, chat.X + 10, chat.Bottom - 24);
             }
             return b;
         }
 
-        static Rectangle ChatRect() { return new Rectangle(W - 330, 70, 300, 250); }
-
-        // ---- 轮盘：按给定动画进度渲染成一张带透明度的位图（照搬 ui-shot 的做法）----
-        static Bitmap WheelFrame(WheelManager mgr, Settings s, float introT, float show, int corner, out int w, out int h)
+        static Bitmap MakeShot(int i, Color c)
         {
-            WheelForm f = new WheelForm(mgr, s);
-            F(f, "_intro", true);
-            F(f, "_introT", introT);
-            F(f, "_collapsing", false);
-            F(f, "_show", show);
-            F(f, "_collapsed", false);
-            w = f.Width; h = f.Height;
-            Bitmap b = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
+            Bitmap b = new Bitmap(430, 265, PixelFormat.Format32bppPArgb);
             using (Graphics g = Graphics.FromImage(b))
             {
-                g.Clear(Color.Transparent);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                Call(f, "DrawWheel", g, w, h);
+                g.Clear(Color.White);
+                using (SolidBrush sb = new SolidBrush(Color.FromArgb(28, c))) g.FillRectangle(sb, 0, 0, 430, 56);
+                using (Font f = new Font("Microsoft YaHei UI", 17f, FontStyle.Bold))
+                using (SolidBrush fb = new SolidBrush(c)) g.DrawString("截图 " + i, f, fb, 16, 12);
+                using (Font f = new Font("Microsoft YaHei UI", 11f))
+                using (SolidBrush fb = new SolidBrush(Color.FromArgb(120, 40, 44, 52)))
+                {
+                    g.DrawString("演示用的假截图内容（不是真实屏幕）", f, fb, 18, 80);
+                    g.DrawString("框选 -> 自动进环 -> 拖出去就用", f, fb, 18, 108);
+                }
+                using (Pen p = new Pen(Color.FromArgb(38, 0, 0, 0), 2f))
+                    for (int y = 150; y < 265; y += 26) g.DrawLine(p, 18, y, 412, y);
             }
-            f.Dispose();
             return b;
         }
 
-        // 假光标：画一个箭头，省得动真鼠标
-        static void Cursor(Graphics g, int x, int y, float k)
+        static void Cursor(Graphics g, float x, float y, float k)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             PointF[] pts = new PointF[] {
@@ -118,11 +95,23 @@ namespace SnapWheel
             using (Pen p = new Pen(Color.FromArgb(220, 30, 34, 42), 1.4f)) g.DrawPolygon(p, pts);
         }
 
+        static void Caption(Graphics g, string s)
+        {
+            using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
+            using (SolidBrush fb = new SolidBrush(Color.FromArgb(240, 255, 255, 255)))
+            using (SolidBrush bg = new SolidBrush(Color.FromArgb(180, 0, 0, 0)))
+            {
+                SizeF sz = g.MeasureString(s, f);
+                g.FillRectangle(bg, 20, 34, sz.Width + 20, sz.Height + 10);
+                g.DrawString(s, f, fb, 30, 39);
+            }
+        }
+
         [STAThread]
         static void Main()
         {
             Application.EnableVisualStyles();
-            string tmp = Path.Combine(Path.GetTempPath(), "snapwheel_gif");
+            string tmp = Path.Combine(Path.GetTempPath(), "snapwheel_gif2");
             Directory.CreateDirectory(tmp);
             Settings.OverridePath = Path.Combine(tmp, "settings.ini");
             WheelManager.OverrideMetaPath = Path.Combine(tmp, "wheels.ini");
@@ -130,206 +119,180 @@ namespace SnapWheel
 
             Settings s = new Settings();
             s.SaveToDisk = false;
-            s.ShowCountLabel = true;
             WheelManager mgr = new WheelManager(s);
             Store st = mgr.ActiveStore;
             st.SaveToDisk = false;
 
-            // 三张"截图"：用彩色方块 + 文字，看起来像一张截图内容的缩略图
-            Color[] cols = { Color.FromArgb(232, 86, 110), Color.FromArgb(46, 148, 214), Color.FromArgb(247, 166, 35) };
-            Bitmap[] shots = new Bitmap[3];
-            for (int i = 0; i < 3; i++)
-            {
-                shots[i] = new Bitmap(520, 320, PixelFormat.Format32bppPArgb);
-                using (Graphics g = Graphics.FromImage(shots[i]))
-                {
-                    g.Clear(Color.White);
-                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(30, cols[i]))) g.FillRectangle(sb, 0, 0, 520, 70);
-                    using (Font f = new Font("Microsoft YaHei UI", 20f, FontStyle.Bold))
-                    using (SolidBrush fb = new SolidBrush(cols[i]))
-                        g.DrawString("截图 " + (i + 1), f, fb, 18, 18);
-                    using (Font f = new Font("Microsoft YaHei UI", 12f))
-                    using (SolidBrush fb = new SolidBrush(Color.FromArgb(120, 40, 44, 52)))
-                    {
-                        g.DrawString("这是一张演示用的假截图内容", f, fb, 20, 100);
-                        g.DrawString("（不是真实屏幕）", f, fb, 20, 130);
-                    }
-                    using (Pen p = new Pen(Color.FromArgb(40, 0, 0, 0), 2f))
-                        for (int y = 170; y < 320; y += 30) g.DrawLine(p, 20, y, 500, y);
-                }
-            }
-
-            List<Bitmap> frames = new List<Bitmap>();
+            Bitmap shot1 = MakeShot(1, Color.FromArgb(232, 86, 110));
+            Bitmap shot2 = MakeShot(2, Color.FromArgb(46, 148, 214));
             Bitmap desk = FakeDesktop();
 
-            // 阶段一：截图（选区从左上向右下长出来）
-            for (int i = 0; i <= 3; i++)
+            WheelForm wf = new WheelForm(mgr, s);
+            int wwh = wf.Width, whh = wf.Height;
+
+            List<Bitmap> frames = new List<Bitmap>();
+            List<int> delays = new List<int>();
+            Action<Bitmap, int> add = delegate(Bitmap b, int ms) { frames.Add(b); delays.Add(ms); };
+
+            Action<Graphics, float, float> wheel = delegate(Graphics g, float introT, float show)
+            {
+                F(wf, "_intro", introT < 0.999f);
+                F(wf, "_introT", introT);
+                F(wf, "_collapsing", false);
+                F(wf, "_collapsed", false);
+                F(wf, "_show", show);
+                using (Bitmap b = new Bitmap(wwh, whh, PixelFormat.Format32bppPArgb))
+                {
+                    using (Graphics gg = Graphics.FromImage(b))
+                    {
+                        gg.Clear(Color.Transparent);
+                        gg.SmoothingMode = SmoothingMode.AntiAlias;
+                        gg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        Call(wf, "DrawWheel", gg, wwh, whh);
+                    }
+                    g.DrawImage(b, 0, H - whh);
+                }
+            };
+            Func<int, PointF> cardCenter = delegate(int i)
+            {
+                PointF p = (PointF)Call(wf, "ItemCenter", i);
+                return new PointF(p.X, p.Y + (H - whh));
+            };
+
+            Rectangle sel = SelRect();
+
+            add(new Bitmap(desk), 1200);          // 开场停 1.2 秒
+
+            // (1) 框选 10 帧 x 120ms
+            for (int i = 0; i <= 9; i++)
             {
                 Bitmap fr = new Bitmap(desk);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
-                    float t = i / 3f;
-                    Rectangle sel = new Rectangle(120, 90, (int)(520 * t), (int)(320 * t));
-                    using (SolidBrush dim = new SolidBrush(Color.FromArgb(110, 0, 0, 0)))
+                    float t = i / 9f;
+                    Rectangle r = new Rectangle(sel.X, sel.Y, (int)(sel.Width * t), (int)(sel.Height * t));
+                    using (SolidBrush dim = new SolidBrush(Color.FromArgb(115, 0, 0, 0)))
                     {
-                        // 选区外压暗：四块
-                        g.FillRectangle(dim, 0, 0, W, sel.Top);
-                        g.FillRectangle(dim, 0, sel.Bottom, W, H - sel.Bottom);
-                        g.FillRectangle(dim, 0, sel.Top, sel.Left, sel.Height);
-                        g.FillRectangle(dim, sel.Right, sel.Top, W - sel.Right, sel.Height);
+                        g.FillRectangle(dim, 0, 0, W, r.Top);
+                        g.FillRectangle(dim, 0, r.Bottom, W, H - r.Bottom);
+                        g.FillRectangle(dim, 0, r.Top, r.Left, r.Height);
+                        g.FillRectangle(dim, r.Right, r.Top, W - r.Right, r.Height);
                     }
-                    using (Pen p = new Pen(Color.FromArgb(0, 174, 255), 2f)) g.DrawRectangle(p, sel);
-                    using (Font f = new Font("Microsoft YaHei UI", 10f))
-                    using (SolidBrush fb = new SolidBrush(Color.White))
-                        g.DrawString("Ctrl+Shift+S 框选", f, fb, sel.Left, sel.Top - 20);
-                    Cursor(g, sel.Right, sel.Bottom, 1f);
+                    using (Pen p = new Pen(Color.FromArgb(0, 174, 255), 2f)) g.DrawRectangle(p, r);
+                    Cursor(g, r.Right, r.Bottom, 1f);
+                    Caption(g, "1) Ctrl+Shift+S 框选");
                 }
-                frames.Add(fr);
+                add(fr, 120);
             }
-            int w = 0, h = 0;
 
-            // 阶段二：图滑进角落的轮环（轮盘开启动画）
-            st.Add(shots[0]);
-            for (int i = 0; i <= 4; i++)
+            // (2) 截图飞进环里 12 帧 x 110ms
+            st.Add(shot1);
+            PointF c1 = cardCenter(0);
+            float fx0 = sel.X + sel.Width / 2f, fy0 = sel.Y + sel.Height / 2f;
+            for (int i = 0; i <= 11; i++)
             {
                 Bitmap fr = new Bitmap(desk);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
-                    float t = i / 8f;
-                    Bitmap wf = WheelFrame(mgr, s, t, 1f, 0, out w, out h);
-                    g.DrawImage(wf, 0, H - h);
-                    wf.Dispose();
-                    using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
-                    using (SolidBrush fb = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
-                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
-                    {
-                        string t2 = i < 6 ? "截完直接滑进角落的环里" : "不用保存、不用切窗口";
-                        SizeF sz = g.MeasureString(t2, f);
-                        g.FillRectangle(bg, 24, 40, sz.Width + 18, sz.Height + 10);
-                        g.DrawString(t2, f, fb, 33, 45);
-                    }
+                    float t = Ease(i / 11f);
+                    float cx = Lerp(fx0, c1.X, t), cy = Lerp(fy0, c1.Y, t);
+                    float sw = Lerp(sel.Width, 150, t), sh = Lerp(sel.Height, 92, t);
+                    ColorMatrix cm = new ColorMatrix();
+                    cm.Matrix33 = Math.Max(0f, 1f - t * 0.55f);
+                    ImageAttributes ia = new ImageAttributes();
+                    ia.SetColorMatrix(cm);
+                    Rectangle d = new Rectangle((int)(cx - sw / 2), (int)(cy - sh / 2), (int)sw, (int)sh);
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb((int)(90 * (1 - t)), 0, 0, 0)))
+                        g.FillRectangle(sb, d.X + 4, d.Y + 5, d.Width, d.Height);
+                    g.DrawImage(shot1, d, 0, 0, shot1.Width, shot1.Height, GraphicsUnit.Pixel, ia);
+                    ia.Dispose();
+                    wheel(g, Math.Min(1f, t * 1.35f), 1f);
+                    Cursor(g, cx, cy, 1f);
+                    Caption(g, "2) 截完自动飞进角落的环里");
                 }
-                frames.Add(fr);
+                add(fr, 110);
             }
 
-            // 阶段三：从环上把缩略图拖到聊天窗口
-            st.Add(shots[1]);
-            for (int i = 0; i <= 7; i++)
+            {
+                Bitmap fr = new Bitmap(desk);
+                using (Graphics g = Graphics.FromImage(fr)) { wheel(g, 1f, 1f); Cursor(g, c1.X, c1.Y, 1f); Caption(g, "3) 不用保存、不用切窗口，图就挂在环上"); }
+                add(fr, 1400);
+            }
+
+            // (3) 从环上拖进聊天窗口 14 帧 x 110ms
+            st.Add(shot2);
+            Rectangle chat = ChatRect();
+            for (int i = 0; i <= 13; i++)
             {
                 Bitmap fr = new Bitmap(desk);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
-                    float t = i / 7f;
-                    Bitmap wf = WheelFrame(mgr, s, 1f, 1f, 0, out w, out h);
-                    g.DrawImage(wf, 0, H - h);
-                    wf.Dispose();
-                    Rectangle chat = ChatRect();
-                    // 拖动中的缩略图：从环上（左下）飞向聊天窗口
-                    int ww = 170, hh = 105;
-                    int x0 = (int)(60 + (chat.X + 40 - 60) * t);
-                    int y0 = (int)(H - h + 40 + (chat.Y + 90 - (H - h + 40)) * t);
-                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(235, 0, 0, 0)))
-                        g.FillRectangle(sb, x0 + 5, y0 + 6, ww, hh);
-                    g.DrawImage(shots[1], new Rectangle(x0, y0, ww, hh));
-                    using (Pen p = new Pen(Color.FromArgb(90, 170, 255), 2f))
-                        g.DrawRectangle(p, x0, y0, ww, hh);
-                    Cursor(g, x0 + ww / 2, y0 + hh / 2, 1.1f);
-                    using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
-                    using (SolidBrush fb = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
-                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
-                    {
-                        string t2 = "缩略图直接拖进聊天框";
-                        SizeF sz = g.MeasureString(t2, f);
-                        g.FillRectangle(bg, 24, 40, sz.Width + 18, sz.Height + 10);
-                        g.DrawString(t2, f, fb, 33, 45);
-                    }
+                    float t = Ease(i / 13f);
+                    float x1 = chat.X + 40, y1 = chat.Y + 96;
+                    float cx = Lerp(c1.X, x1, t);
+                    float cy = Lerp(c1.Y, y1, t) - (float)Math.Sin(t * Math.PI) * 40f;
+                    int dw = 190, dh = 118;
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(210, 0, 0, 0)))
+                        g.FillRectangle(sb, cx - dw / 2 + 5, cy - dh / 2 + 6, dw, dh);
+                    g.DrawImage(shot2, new Rectangle((int)(cx - dw / 2), (int)(cy - dh / 2), dw, dh));
+                    using (Pen p = new Pen(Color.FromArgb(110, 170, 255), 2f))
+                        g.DrawRectangle(p, (int)(cx - dw / 2), (int)(cy - dh / 2), dw, dh);
+                    wheel(g, 1f, 1f);
+                    Cursor(g, cx + dw / 2 - 10, cy + dh / 2 - 8, 1.1f);
+                    Caption(g, "4) 要用的时候，缩略图直接拖进聊天框");
                 }
-                frames.Add(fr);
+                add(fr, 110);
             }
 
-            // 阶段四：松手，图出现在聊天窗口里 + 一张缩略图留在环上
-            st.Add(shots[2]);
-            for (int i = 0; i <= 4; i++)
             {
                 Bitmap fr = new Bitmap(desk);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
-                    Rectangle chat = ChatRect();
-                    g.DrawImage(shots[2], new Rectangle(chat.X + 40, chat.Y + 90, 170, 105));
-                    Bitmap wf = WheelFrame(mgr, s, 1f, 1f, 0, out w, out h);
-                    g.DrawImage(wf, 0, H - h);
-                    wf.Dispose();
-                    using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
-                    using (SolidBrush fb = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
-                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
-                    {
-                        string t2 = "拖出去就用 —— 图还在环上留着";
-                        SizeF sz = g.MeasureString(t2, f);
-                        g.FillRectangle(bg, 24, 40, sz.Width + 18, sz.Height + 10);
-                        g.DrawString(t2, f, fb, 33, 45);
-                    }
+                    g.DrawImage(shot2, new Rectangle(chat.X + 40, chat.Y + 96, 190, 118));
+                    wheel(g, 1f, 1f);
+                    Cursor(g, chat.X + 150, chat.Y + 250, 1.1f);
+                    Caption(g, "5) 拖出去就用 -- 图还留在环上");
                 }
-                frames.Add(fr);
+                add(fr, 2000);
             }
 
-            string dir = Path.Combine(Directory.GetCurrentDirectory(), "docs");
-            Directory.CreateDirectory(dir);
-            string path = Path.Combine(dir, "demo.gif");
-            WriteGif(path, frames, DelayMs);
-            FileInfo fi = new FileInfo(path);
-            Console.WriteLine("写出 {0}：{1} 帧，{2}x{3}，{4} KB",
-                path, frames.Count, W, H, Math.Round(fi.Length / 1024.0, 1));
+            Directory.CreateDirectory("docs");
+            string path = Path.Combine(Directory.GetCurrentDirectory(), "docs", "demo.gif");
+            WriteGif(path, frames, delays);
+            double sec = 0; for (int i = 0; i < delays.Count; i++) sec += delays[i] / 1000.0;
+            Console.WriteLine("写出 {0}：{1} 帧，{2}x{3}，总时长 {4:0.0} 秒，{5} KB",
+                path, frames.Count, W, H, sec, Math.Round(new FileInfo(path).Length / 1024.0, 1));
             for (int i = 0; i < frames.Count; i++) frames[i].Dispose();
+            wf.Dispose();
         }
 
-        // 转 8bpp 索引色（GIF 的调色板是 256 色，不转的话 GDI+ 会写出巨大的文件）
-        static Bitmap ToIndexed(Bitmap src)
-        {
-            Bitmap b = new Bitmap(src.Width, src.Height, PixelFormat.Format8bppIndexed);
-            ColorPalette pal = b.Palette;
-            for (int i = 0; i < 256; i++)                       // 灰度渐变 + 少量常用色，深色 UI 用这个够
-                pal.Entries[i] = Color.FromArgb(255, i, i, i);
-            for (int i = 0; i < 32; i++)                        // 再补一条蓝色渐变（轮盘玻璃偏蓝）
-                pal.Entries[224 + i] = Color.FromArgb(255, 20 + i * 2, 30 + i * 2, 60 + i * 3);
-            b.Palette = pal;
-            using (Graphics g = Graphics.FromImage(b))
-            {
-                g.CompositingMode = CompositingMode.SourceCopy;
-                g.DrawImage(src, new Rectangle(0, 0, src.Width, src.Height));
-            }
-            return b;
-        }
-
-        // 多帧 GIF：第一帧 MultiFrame，之后每帧 FrameDimensionTime，最后 Flush；
-        // 无限循环用属性 GUID 0x5101（LoopCount=0），每帧延时用 0x5100（单位 10ms）。
-        static void WriteGif(string path, List<Bitmap> frames, int delayMs)
+        static void WriteGif(string path, List<Bitmap> frames, List<int> delays)
         {
             ImageCodecInfo gif = null;
             foreach (ImageCodecInfo c in ImageCodecInfo.GetImageEncoders())
                 if (c.FormatID == ImageFormat.Gif.Guid) { gif = c; break; }
-            if (gif == null) throw new Exception("系统里没有 GIF 编码器");
+            if (gif == null) throw new Exception("no gif encoder");
 
-            // 这两个属性没有强类型常量，得自己写 GUID：
-            //   0x5100 = 每帧延时（单位 10ms）   0x5101 = 循环次数（0 = 无限）
-            Encoder delay = new Encoder(new Guid("51000000-0000-0000-0000-000000000000"));
-            Encoder loop = new Encoder(new Guid("51010000-0000-0000-0000-000000000000"));
+            Encoder delayEnc = new Encoder(new Guid("51000000-0000-0000-0000-000000000000"));
+            Encoder loopEnc = new Encoder(new Guid("51010000-0000-0000-0000-000000000000"));
 
             EncoderParameters ep = new EncoderParameters(3);
             ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.MultiFrame);
-            ep.Param[1] = new EncoderParameter(delay, (long)(delayMs / 10));
-            ep.Param[2] = new EncoderParameter(loop, 0L);          // 0 = 无限循环
-            // 关键：每帧先转成 8bpp 索引色再写。GDI+ 直接写 32bpp 会得到一个几 MB 的 GIF，
-            // 转索引色后大小能掉到十分之一（GIF 本来就是 256 色）。
-            Bitmap first = frames[0];
-            first.Save(path, gif, ep);
+            ep.Param[1] = new EncoderParameter(delayEnc, (long)Math.Max(2, delays[0] / 10));
+            ep.Param[2] = new EncoderParameter(loopEnc, 0L);
+            frames[0].Save(path, gif, ep);
             for (int i = 1; i < frames.Count; i++)
             {
-                ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.FrameDimensionTime);
-                first.SaveAdd(frames[i], ep);
+                EncoderParameters p2 = new EncoderParameters(2);
+                p2.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.FrameDimensionTime);
+                p2.Param[1] = new EncoderParameter(delayEnc, (long)Math.Max(2, delays[i] / 10));
+                frames[0].SaveAdd(frames[i], p2);
+                p2.Dispose();
             }
-            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.Flush);
-            first.SaveAdd(ep);
+            EncoderParameters pf = new EncoderParameters(1);
+            pf.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.Flush);
+            frames[0].SaveAdd(pf);
+            pf.Dispose();
         }
     }
 }
