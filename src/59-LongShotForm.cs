@@ -50,7 +50,7 @@ namespace SnapWheel
             TopMost = true;
             BackColor = Color.FromArgb(24, 26, 32);
             Font = new Font("Microsoft YaHei UI", 9.5f);
-            ClientSize = new Size(_scr.Width, Ui.S(76));
+            ClientSize = new Size(_scr.Width, Ui.S(92));
             Location = new Point(_scr.Left, _scr.Top);
 
             string err = null;
@@ -176,17 +176,17 @@ namespace SnapWheel
 
             int x = icon.Right + Ui.S(12);
             int top = Ui.S(12);
-            TextRenderer.DrawText(g, "滚动长截图：滚到哪儿它接哪儿", Font, new Point(x, top),
+            TextRenderer.DrawText(g, "滚动长截图：把鼠标放到要滚的窗口上，往下滚", Font, new Point(x, top),
                 Color.FromArgb(236, 238, 244), TextFormatFlags.NoPadding);
             using (Font fs = new Font("Microsoft YaHei UI", 8.5f))
-                TextRenderer.DrawText(g, "按 Enter 结束出图 · 滚太快对不上就慢一点", fs, new Point(x, top + Ui.S(21)),
+                TextRenderer.DrawText(g, "滚到哪儿它接哪儿 · Enter 结束出图 · Esc 取消", fs, new Point(x, top + Ui.S(21)),
                     Color.FromArgb(150, 154, 164), TextFormatFlags.NoPadding);
 
             // 右侧：状态 + 高度进度
             string line;
             Color lc = Color.FromArgb(150, 154, 164);
             if (_err) { line = _msg; lc = Color.FromArgb(240, 190, 120); }
-            else if (_shots == 0) line = "还没接上：滚动下面窗口的内容试试";
+            else if (_shots == 0) line = "还没接上：滚一下下面那个窗口的内容（一次别滚太多）";
             else line = "已接 " + _shots + " 段 · 长图 " + _ls.Height + " px 高";
 
             int rw = Ui.S(300);

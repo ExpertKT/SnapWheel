@@ -122,22 +122,36 @@ namespace SnapWheel
         }
 
 
-        // 三个小按钮（截图 / 设置 / 收起）沿**一段同心弧**排布，整体落在**万能键的左上方**（0.6.0 用户要求）。
-        // 几何上的讲究（用几何探针量出来的）：
-        //   · 弧是绕屏幕角的同心圆，从万能键出发沿弧走只有"更右上"和"更左下"两个方向，
-        //     **到不了左上方** —— 左上只有靠**更大的半径**（更远离角）才能到达；
-        //   · 所以半径取 EffR + thumb×0.75 + 按钮半径 + 6：正好在缩略图弧外侧、不压缩略图；
-        //   · 角度以万能键所在角为中心左右各摊一档（order 0/1/2 → 左、中、右），
-        //     于是三个按钮"围绕万能键左上方"排成一小段弧，且间距 = 万能键半径 + 按钮半径 + 8。
+        // 三个小按钮（截图 / 设置 / 收起）：**紧贴万能键的左上方、沿一小段弧排布**（0.6.0 用户要求）。
+        // 上一版理解错了 —— 我把它当成"绕屏幕角的同心弧"，结果排到了缩略图弧那一侧，
+        // 看着就是"靠着 wheel"而不是"靠着万能键"。
+        // 正解是**以万能键自己为圆心**的一段小弧：
+        //   · 半径 = 万能键半径 + 按钮半径 + 6 → 紧贴万能键外缘；
+        //   · 方位固定取屏幕的**左上方**（屏幕坐标 225°：x 负、y 负），
+        //     三个按钮在它两侧各偏 40°，于是"围绕万能键的左上方"排成一小段弧。
         Rectangle BtnRect(int order)
         {
+#if NO_KEY
+            // 无万能键变体：没有可"围绕"的键，退回"贴屏幕角一竖列"（0.2 线冻的是行为，不是这行字）
+            PointF c = Center();
+            int bx = (int)((Sx() > 0) ? c.X + 10 : c.X - 40);
+            float dist = 150f + order * 40f;
+            float by = c.Y + Sy() * dist;
+            if (Sy() > 0) by -= 30f;
+            return new Rectangle(bx, (int)by, 30, 30);
+#else
             const int s = 30;
-            float mid = (_phiMin + _phiMax) / 2f;
-            float r = EffR() + _thumb * 0.75f + s / 2f + 6f;
-            float step = (46f + s / 2f + 8f) / r;        // 46 = 万能键半径（KeyRect 里 s=92 的一半）
-            float phi = mid + step * (order - 1);
-            PointF p = ItemCenterAtPhiRadius(phi, r);
-            return new Rectangle((int)Math.Round(p.X - s / 2f), (int)Math.Round(p.Y - s / 2f), s, s);
+            Rectangle k = KeyRect();
+            if (k.Width < 8 || k.Height < 8) return Rectangle.Empty;      // 保险：拿不到键就不排
+            float kcx = k.X + k.Width / 2f, kcy = k.Y + k.Height / 2f;
+            float rad = k.Width / 2f + s / 2f + 6f;
+            double baseA = Math.PI * 1.25;                               // 225° = 屏幕左上
+            double stepA = Math.PI * 40 / 180;
+            double a = baseA + stepA * (order - 1);
+            int x = (int)Math.Round(kcx + rad * Math.Cos(a));
+            int y = (int)Math.Round(kcy + rad * Math.Sin(a));
+            return new Rectangle(x - s / 2, y - s / 2, s, s);
+#endif
         }
 
 

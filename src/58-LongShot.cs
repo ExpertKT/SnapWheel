@@ -36,7 +36,15 @@ namespace SnapWheel
     sealed class LongShot
     {
         public const int MaxCanvasH = 20000;    // 画布高度上限
-        public const int BandRows = 120;        // 模板带高度
+        public const int BandRows = 100;        // 模板带高度（薄一点 → 能检测的单帧滚动量更大）
+        // ★ 模板带**放在屏幕高度的 62% 处**，绝不贴屏幕底边 —— 原因见 Find() 里的说明
+        //   （屏幕最底下通常是任务栏，它在截图里是静止的，拿它当模板永远匹配不上）。
+        public const float BandCenterFrac = 0.72f;
+        // 第二段验证带（放在屏幕 28% 处）：同一个偏移 d 必须在**两段互不相邻的画面**上都对得上才算数。
+        // 这是防"假匹配"的关键 —— 网页里到处是周期（表格行、列表项、等距的卡片），单段匹配时
+        // 一个错误的 d 也可能把线条对齐（实测滚过头时会挑出 300 这种错偏移，接缝整条错位）；
+        // 两段隔得远，要同时骗过两边的概率低得多。
+        public const float Band2CenterFrac = 0.28f;
         // ⚠️ 这个带**必须薄**，原因是一条硬约束：
         //     能检测出来的最大滚动量 d ≤ 模板带顶行离屏幕顶的距离（bandTop），
         //     因为模板的每一行 y 都要能在新屏里找到 y-d ≥ 0。
@@ -48,8 +56,12 @@ namespace SnapWheel
         public const int SkipBottom = 8;        // 模板带离屏幕底边的距离（躲开滚动条/圆角）
         public const int SkipRight = 24;        // 右侧不参与匹配的宽度（滚动条）
         public const int MinNewRows = 6;        // 小于这个行数算"没滚"，不拼
-        public const double MatchTol = 4.0;     // 代价上限（代价 = 差异像素比例×100 + 平均灰度差；真匹配约 1，假匹配 7 起步）
-        public const double MaxBadRatio = 0.012; // 差异像素比例上限：真匹配 ~0.1%（只有抗锯齿边缘），周期图案假匹配 2% 起步
+        // 判据阈值：合成图测试里像素完全一致（真匹配代价 ≈ 0、差异比例 ≈ 0），但**真实屏幕不是** ——
+        // 浏览器平滑滚动会让内容做子像素重采样、光标在闪、还有视频/动画，前后帧不可能逐像素相同。
+        // 所以这里按"真实场景"放宽（0.6.0 实测：贴屏幕底边的模板带 + 过严的阈值，会让真实使用里
+        // 一帧都接不上）；防止误匹配主要靠下面那条"best×1.8 必须小于 second"的置信度判据。
+        public const double MatchTol = 10.0;     // 代价上限（代价 = 差异像素比例×100 + 平均灰度差）
+        public const double MaxBadRatio = 0.05;  // 差异像素比例上限（真匹配：抗锯齿/重采样边缘，约 1%~3%；假匹配 10% 以上）
         public const int MinCanvasLeft = 0;
 
         // 一次匹配的结果，方便浮层显示"这次接上了多少行 / 为什么没接上"
@@ -158,10 +170,21 @@ namespace SnapWheel
         //   但"明显不同的像素"会成片出现，比例能到 2%~5%。
         //   平均差会被大片相同背景稀释（这正是用例 2 滚过头时"线条对齐"假匹配能溜过去的原因）。
         // 输出 badRatio 供调用方判定；样本太少返回 MaxValue 表示这个候选不算数。
-        static double Score(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int d, out double badRatio)
+        static double Score(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int bandTop2, int bandBot2,
+                            int d, out double badRatio)
         {
             long sad = 0; int n = 0, bad = 0;
-            // 模板带的每一行 y，去找新屏里的 y-d
+            AddBand(prev, cur, sw, bandTop, bandBot, d, ref sad, ref n, ref bad);
+            AddBand(prev, cur, sw, bandTop2, bandBot2, d, ref sad, ref n, ref bad);
+            if (n < 200) { badRatio = 1; return double.MaxValue; }
+            badRatio = (double)bad / n;
+            return badRatio * 100.0 + (double)sad / n;
+        }
+
+        // 把一段横带上的"模板行 y 对新屏行 y-d"累加进统计
+        static void AddBand(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int d,
+                            ref long sad, ref int n, ref int bad)
+        {
             for (int y = bandTop; y < bandBot; y += 2)
             {
                 int y2 = y - d;
@@ -176,20 +199,30 @@ namespace SnapWheel
                     n++;
                 }
             }
-            if (n < 200) { badRatio = 1; return double.MaxValue; }
-            badRatio = (double)bad / n;
-            return badRatio * 100.0 + (double)sad / n;
         }
 
         internal static Match Find(byte[] prev, byte[] cur, int w, int h, int sw, int sh)
         {
             Match m = new Match();
-            int bandTop = h - SkipBottom - BandRows;          // 模板带的上边界
+            // 模板带的**位置**是这套算法最容易踩的坑：不能贴屏幕底边。
+            // 屏幕最底下通常是**任务栏** —— 它在抓屏里是静止的、不跟着页面滚动走，
+            // 拿它当模板的话"怎么对都对得上"（甚至对它自己 SAD≈0），匹配必然失败或挑到假偏移。
+            // 0.6.0 实测：真实屏幕上"压根接不上"就是这个原因，而合成长页测试没暴露它
+            // （合成图里没有任务栏）。
+            // 现在取"屏幕高度 62% 处"为中心的一条带：稳稳落在内容区，上不碰标题栏、下不碰任务栏。
+            int bandBot = (int)(h * BandCenterFrac) + BandRows / 2;
+            if (bandBot > h - SkipBottom) bandBot = h - SkipBottom;
+            int bandTop = bandBot - BandRows;
             if (bandTop < 0) bandTop = 0;
-            int bandBot = h - SkipBottom;                     // 下边界（不含）
 
             int maxD = bandTop;                               // d 最大到"模板带顶行"：再大模板就顶出屏幕了
             if (maxD > h - 16) maxD = h - 16;                 // 保险（矮屏）
+
+            // 第二段验证带（屏幕 28% 处）：和主带隔得远，专门用来拆穿"周期图案对齐"的假匹配
+            int band2Bot = (int)(h * Band2CenterFrac) + BandRows / 2;
+            if (band2Bot > h - SkipBottom) band2Bot = h - SkipBottom;
+            int band2Top = band2Bot - BandRows;
+            if (band2Top < 0) band2Top = 0;
             double best = double.MaxValue, second = double.MaxValue;
             int bestD = 0;
             double bestBad = 1;
@@ -198,7 +231,7 @@ namespace SnapWheel
             for (int d = MinNewRows; d <= maxD; d++)
             {
                 double bad;
-                double cost = Score(prev, cur, sw, bandTop, bandBot, d, out bad);
+                double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, out bad);
                 if (cost < best) { best = cost; bestD = d; bestBad = bad; }
             }
 
@@ -213,7 +246,7 @@ namespace SnapWheel
                 {
                     if (d > bestD - 24 && d < bestD + 24) continue;
                     double bad;
-                    double cost = Score(prev, cur, sw, bandTop, bandBot, d, out bad);
+                    double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, out bad);
                     if (cost < second) second = cost;
                 }
             }

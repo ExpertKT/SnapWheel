@@ -936,42 +936,35 @@ namespace SnapWheel
                 using (Font fw = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
                 {
                     string wn = FitName(_mgr.ActiveWheel.Name, 12);
-                    // 0.6.0 弧线设计语言：胶囊不再是"横着的圆角矩形"，而是**沿同心弧弯出来的一条弧带**，
-                    // 文字也逐字沿弧旋转（字顶朝外）。角度挪到弧上端之外，正好和三按钮所在的
-                    // "万能键左上方"错开，不会压在一起。
-                    PointF cc = Center();
-                    float sx2 = Sx(), sy2 = Sy();
-                    float h2 = 30f;
-                    float r2 = EffR() + _thumb * 0.75f + h2 / 2f;      // 与三按钮同一条同心弧带（让开缩略图）
-                    float mid2 = (_phiMin + _phiMax) / 2f + 0.45f;
-                    float st2 = ArcUi.StepFor(g, wn, fw, r2, 2f);
-                    float span2 = st2 * (wn.Length - 1);
-                    float a0 = mid2 - span2 / 2f - st2 * 1.3f;         // 左端多留一小截放主题色圆点
-                    float a1 = mid2 + span2 / 2f + st2 * 0.6f;
-                    using (GraphicsPath pg2 = ArcUi.Capsule(cc, sx2, sy2, r2, h2, a0, a1))
+                    // 0.6.0 修正：这一块**恢复成原来的样子**（位置、形状都没动）。
+                    // 我上一版把它挪到弧上端外侧、还弯成了弧形 —— 用户明确说"项目名字不用变位置"。
+                    // 要"随弧弯"的是「几 / 几」那个计数胶囊（见 DrawCountPill），不是这个。
+                    SizeF ws = g.MeasureString(wn, fw);
+                    float dot = 9f;
+                    float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
+                    float wx = kcx - pw2 / 2f;
+                    float wy = kr.Y + kr.Height + 4f;
+                    RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
+                    _namePillRect = pill2;                       // 记下来给命中测试用（点它能改名）
+                    using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
                     {
-                        RectangleF bnd2 = pg2.GetBounds();
-                        _namePillRect = bnd2;                          // 命中测试（点它能改名）
                         BackdropClip(g, pg2, an);
-                        Gfx.GlassPanel(g, pg2, bnd2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
+                        Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
                             (int)((StyleNeu() ? 40 : 18) * an / 255f), (int)((StyleNeu() ? 34 : 0) * an / 255f), !StyleFlatOnly());
                         using (Pen bp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)((_nameHover ? 235 : 120) * an / 255f)), _nameHover ? 1.6f : 1.1f))
                             g.DrawPath(bp2, pg2);
                     }
-                    PointF dp2 = ArcUi.Polar(cc, sx2, sy2, a0 + st2 * 0.55f, r2);
+                    float dy2 = pill2.Y + ph2 / 2f;
                     using (SolidBrush db2 = new SolidBrush(Color.FromArgb((int)(250 * an / 255f), acc.R, acc.G, acc.B)))
-                        g.FillEllipse(db2, dp2.X - 4.5f, dp2.Y - 4.5f, 9f, 9f);
+                        g.FillEllipse(db2, pill2.X + 11f, dy2 - dot / 2f, dot, dot);
                     using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
-                        ArcUi.ArcText(g, wn, fw, bw, cc, sx2, sy2, r2, mid2, st2);
-                    // 悬停时在弧的更外侧补一句"点一下改名"（同样沿弧排）
+                        g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
+                    // 悬停时在右边补一句"点一下改名"
                     if (_nameHover && an > 80)
                     {
                         using (Font ft = new Font("Microsoft YaHei UI", 9f))
                         using (SolidBrush bt = new SolidBrush(Color.FromArgb((int)(220 * an / 255f), 235, 238, 245)))
-                        {
-                            float rh = r2 + h2 * 1.1f;
-                            ArcUi.ArcText(g, "点一下改名", ft, bt, cc, sx2, sy2, rh, mid2, ArcUi.StepFor(g, "点一下改名", ft, rh, 2f));
-                        }
+                            g.DrawString("点一下改名", ft, bt, pill2.Right + 8f, dy2 - ft.Height / 2f + 1);
                     }
                 }
                 g.TranslateTransform(-sn.X, -sn.Y);
