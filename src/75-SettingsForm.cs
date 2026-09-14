@@ -164,6 +164,9 @@ namespace SnapWheel
             _dial.Dock = DockStyle.Fill;
             _dial.Margin = new Padding(0);
             _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { TryGoto(_dial.Picked); });
+            // 拖动松手：内容页跟着高亮走。这里用 ShowPage（程序性切页）而不是 TryGoto ——
+            // 拖动允许直接接管上一次还没走完的过渡（从当前进度收尾后再滑向新页），不许被防连点吞掉。
+            _dial.PageDropped += new EventHandler(delegate(object o, EventArgs e2) { ShowPage(_dial.Current); });
             root.Controls.Add(_dial, 0, 1);
 
             // 四张页面格：先建好挂上（空白），内容懒建；非当前页 Visible=false
@@ -642,6 +645,7 @@ namespace SnapWheel
         System.Windows.Forms.Timer _ptimer;
         System.Diagnostics.Stopwatch _pwatch;       // 进度按"真实过去了多少毫秒"算，不按帧数累加
         int _animFrom = -1, _animTo = -1;
+        int _dialFrom = -1;             // 分页器高亮过渡的起点（拖动时它和 _animFrom 可能不是同一页）
         float _animT = 1f;
 
         // "正在翻页"以动画状态为准，不看定时器 —— 定时器被别的东西停掉时防连点也不能失效
@@ -669,6 +673,7 @@ namespace SnapWheel
             if (i == _cur) return;          // 已经在这一页：不重播
             BuildPage(i);
             int from = _cur;
+            int dialFrom = _dial != null ? _dial.Current : -1;   // 分页器高亮的"起点"要按它自己的高亮算
             _cur = i;
             if (_dial != null) _dial.Current = i;
             if (from < 0 || !animate || !IsHandleCreated || _body == null
@@ -677,7 +682,7 @@ namespace SnapWheel
                 SnapTo(i);                  // 首次显示 / 窗口还没出来：直接摆好（老行为）
                 return;
             }
-            StartSlide(from, i);
+            StartSlide(from, i, dialFrom);
         }
 
         // 把正在走的动画立刻收尾到目标页（精确落位，等同动画最后一帧）
@@ -716,10 +721,11 @@ namespace SnapWheel
             if (_body != null) _body.PerformLayout();
         }
 
-        void StartSlide(int from, int to)
+        void StartSlide(int from, int to, int dialFrom)
         {
             BuildPage(from);
             _animFrom = from; _animTo = to; _animT = 0f;
+            _dialFrom = dialFrom < 0 ? from : dialFrom;
             for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = (k == from || k == to);
             _pages[from].Dock = DockStyle.None;      // 交给动画自己摆位置
             _pages[to].Dock = DockStyle.None;
@@ -746,7 +752,7 @@ namespace SnapWheel
             if (_animFrom != _animTo) _pages[_animFrom].Bounds = new Rectangle(oldX, 0, W, H);
             if (_dial != null)
             {
-                _dial.AnimFrom = _animFrom; _dial.AnimTo = _animTo; _dial.AnimT = e;
+                _dial.AnimFrom = _dialFrom; _dial.AnimTo = _animTo; _dial.AnimT = e;
                 _dial.Invalidate();                  // 扇区高亮/凸起跟着一起走过去
             }
         }
@@ -980,11 +986,42 @@ namespace SnapWheel
         const float BandW = 24f;            // 弧的厚度
         const float LiftPx = 2.2f;          // 当前页那一瓣往外凸出去多少（凸起也是平滑过渡的）
 
+        // ---- 按住拖动转环（v0.5.2 追加：和主界面轮盘"能转"的手感对齐）----
+        // 环整圈 = 四瓣 = 150°（SweepTotal），所以"转回正位"的周期就是 150°：
+        // 角度 ≡ 0 (mod 150) 时每一页都恰好落在自己那一瓣的位上 = 和静态布局逐像素相同的样子。
+        // 拖动：整环跟着指针连续转（增量累加，快速来回/转好几圈都不丢），转到指位上的那一瓣高亮；
+        // 松手：ease-out 回到"离松手角度最近的正角度"，最多回弹 75°。
+        public const int DragSlop = 4;      // 按下后位移 < 4px 算点击（点扇区切页），≥ 4px 算拖动
+        public const int SnapMs = 160;      // 吸附时长：和翻页过渡一个量级（140~200ms）
+        public float Angle { get; private set; }        // 环当前旋转角（度）
+        public float TargetAngle { get; private set; }  // 这次吸附的目标角（静止时 ≡ 0 mod 150）
+        public bool Dragging { get { return _drag == 2; } }
+        public event EventHandler PageDropped;          // 拖动松手：Current 才是用户选的那一页
+        int _drag;                 // 0=没按 1=按着（还没过阈值）2=正在拖
+        Point _downPt;
+        float _downAngle;          // 按下那一刻的指针角
+        float _lastPtAngle;        // 上一次的指针角（按增量累加，绕圈/快速来回都不跳）
+        int _grabPage;             // 按下时指针在哪一瓣上
+        System.Windows.Forms.Timer _snapTimer;
+        System.Diagnostics.Stopwatch _snapWatch;
+        float _snapFrom;
+
         public PageDial()
         {
             AnimT = 1f;                       // 默认"过渡已完成"：高亮就停在 AnimTo（也就是 Current）上
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        // 自己的定时器自己停（AGENT-NOTES：#8 窗口关了定时器还在跑）
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_snapTimer != null) { try { _snapTimer.Stop(); _snapTimer.Dispose(); } catch { } _snapTimer = null; }
+                if (_snapWatch != null) { try { _snapWatch.Stop(); } catch { } _snapWatch = null; }
+            }
+            base.Dispose(disposing);
         }
 
         // 这一瓣的"高亮权重" 0..1：翻页时旧页 1->0、新页 0->1，两边同时走
@@ -1024,14 +1061,36 @@ namespace SnapWheel
             return p;
         }
 
-        void Sector(int i, out float start, out float sweep, out PointF mid)
+        // 第 i 瓣在"环转了 rot 度"之后的位置
+        void SectorAt(int i, float rot, out float start, out float sweep, out PointF mid)
         {
             int n = Math.Max(1, Count);
             sweep = SweepTotal / n;
-            start = 270f - SweepTotal / 2f + sweep * i;
+            start = 270f - SweepTotal / 2f + sweep * i + rot;
             double a = (start + sweep / 2f) * Math.PI / 180.0;
             float mr = (Ri + Ro) / 2f;
             mid = new PointF(Cx + (float)(Math.Cos(a) * mr), Cy + (float)(Math.Sin(a) * mr));
+        }
+
+        // 角度归一化：环每 150° 重复一次，所以画/算都只用最靠近 0 的那一份（视觉完全一样，数字不会越滚越大）
+        static float Norm150(float a)
+        {
+            a = (float)(a - 150.0 * Math.Floor((a + 75.0) / 150.0));   // 落到 (-75, 75]
+            return a;
+        }
+
+        // 指针相对圆心的角度（度，0=正右，顺时针为正）
+        float PointerAngle(Point p)
+        {
+            double a = Math.Atan2(p.Y - Cy, p.X - Cx) * 180.0 / Math.PI;
+            return (float)a;
+        }
+
+        // 两个指针角的差（归到 (-180,180]，这样绕着圆心转也不会跳）
+        static float DeltaDeg(float now, float prev)
+        {
+            float d = (float)((now - prev + 540.0) % 360.0 - 180.0);
+            return d;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -1041,34 +1100,62 @@ namespace SnapWheel
             using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
             int n = Count;
             if (n <= 0) return;
+            float rot = Angle;      // 环的旋转
 
-            for (int i = 0; i < n; i++)
+            // 只画"窗口"那一段：把窗口环带当裁剪区，每瓣再按 ±150° 各画一份，
+            // 于是转出去的那部分会从另一头转进来 —— 圆弧永远是一段完整的四瓣，不会缺角、也不会歪。
+            using (GraphicsPath win = Band(Cx, Cy, Ri, Ro, 270f - SweepTotal / 2f, SweepTotal))
             {
-                float start, sweep; PointF mid;
-                Sector(i, out start, out sweep, out mid);
-                float w = Weight(i);
-                bool hot = (i == _hover) && w < 0.5f;
-                // 高亮 = 从"常态底"往主题色插值；同时整瓣沿半径往外凸一点（凸起跟着高亮一起走）
-                double midA = (start + sweep / 2f) * Math.PI / 180.0;
-                float lift = LiftPx * w;
-                float ox = (float)(Math.Cos(midA) * lift), oy = (float)(Math.Sin(midA) * lift);
-                using (GraphicsPath p = Band(Cx + ox, Cy + oy, Ri, Ro, start + 1.2f, sweep - 2.4f))
+                GraphicsState st = g.Save();
+                g.SetClip(win, CombineMode.Replace);
+                for (int k = -1; k <= 1; k++)
                 {
-                    RectangleF box = p.GetBounds();
-                    // 凸起感：顶上一条高光、底下一条暗边（GlassPanel 一上一下，跟轮盘控件同一套路）
-                    Color fill = Mix(hot ? SurfaceHot : Surface, Accent, w);
-                    int hi = (int)Math.Round(190 + (120 - 190) * w);
-                    int shade = (int)Math.Round(46 + (80 - 46) * w);
-                    Gfx.GlassPanel(g, p, box, fill, hi, shade, true);
-                    if (w > 0.01f)
-                        using (Pen pen = new Pen(Color.FromArgb((int)Math.Round(120 * w), 255, 255, 255), 1.2f))
-                        { pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; g.DrawPath(pen, p); }
+                    float r2 = rot + k * SweepTotal;
+                    for (int i = 0; i < n; i++)
+                    {
+                        float start, sweep; PointF mid;
+                        SectorAt(i, r2, out start, out sweep, out mid);
+                        float w = Weight(i);
+                        bool hot = (i == _hover) && w < 0.5f && _drag == 0;
+                        // 高亮 = 从"常态底"往主题色插值；同时整瓣沿半径往外凸一点（凸起跟着高亮一起走）
+                        double midA = (start + sweep / 2f) * Math.PI / 180.0;
+                        float lift = LiftPx * w;
+                        float ox = (float)(Math.Cos(midA) * lift), oy = (float)(Math.Sin(midA) * lift);
+                        using (GraphicsPath p = Band(Cx + ox, Cy + oy, Ri, Ro, start + 1.2f, sweep - 2.4f))
+                        {
+                            RectangleF box = p.GetBounds();
+                            // 凸起感：顶上一条高光、底下一条暗边（GlassPanel 一上一下，跟轮盘控件同一套路）
+                            Color fill = Mix(hot ? SurfaceHot : Surface, Accent, w);
+                            int hi = (int)Math.Round(190 + (120 - 190) * w);
+                            int shade = (int)Math.Round(46 + (80 - 46) * w);
+                            Gfx.GlassPanel(g, p, box, fill, hi, shade, true);
+                            if (w > 0.01f)
+                                using (Pen pen = new Pen(Color.FromArgb((int)Math.Round(120 * w), 255, 255, 255), 1.2f))
+                                { pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; g.DrawPath(pen, p); }
+                        }
+                    }
                 }
-                // 扇区里的序号
-                Rectangle numRc = new Rectangle((int)mid.X - 12, (int)mid.Y - 9, 24, 18);
-                TextRenderer.DrawText(g, (i + 1).ToString(), NumFont, numRc,
-                    Mix(NumIdle, Color.White, w),
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                g.Restore(st);
+            }
+
+            // 扇区里的序号：只画"整块都在窗口里"的那些（贴边的半瓣不画，免得半个数字挂在弧外）
+            for (int k = -1; k <= 1; k++)
+            {
+                float r2 = rot + k * SweepTotal;
+                for (int i = 0; i < n; i++)
+                {
+                    float start, sweep; PointF mid;
+                    SectorAt(i, r2, out start, out sweep, out mid);
+                    if (mid.X < 8 || mid.X > Width - 8) continue;
+                    // 中心角必须落在窗口内（留一点余量给数字本身）
+                    double rel = (start + sweep / 2f) - (270.0 - SweepTotal / 2.0);
+                    if (rel < 0) rel += 360.0;
+                    if (rel < 13 || rel > SweepTotal - 13) continue;
+                    Rectangle numRc = new Rectangle((int)mid.X - 12, (int)mid.Y - 9, 24, 18);
+                    TextRenderer.DrawText(g, (i + 1).ToString(), NumFont, numRc,
+                        Mix(NumIdle, Color.White, Weight(i)),
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                }
             }
 
             // 圆环内圈里写页名：翻页时走到一半换字（不叠字、不跳页）
@@ -1081,7 +1168,7 @@ namespace SnapWheel
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
-        // 命中的扇区；没命中返回 -1（环带内外各放宽 6px，好点一点）
+        // 命中的扇区；没命中返回 -1（环带内外各放宽 6px，好点一点）。带上环的旋转。
         int HitTest(Point p)
         {
             int n = Count;
@@ -1091,18 +1178,80 @@ namespace SnapWheel
             if (d > Ro + 6f || d < Ri - 6f) return -1;
             double ang = Math.Atan2(dy, dx) * 180.0 / Math.PI;
             if (ang < 0) ang += 360.0;
-            double rel = ang - (270.0 - SweepTotal / 2.0);
-            if (rel < 0) rel += 360.0;
+            double rel = ang - (270.0 - SweepTotal / 2.0) - Angle;   // 减掉环的旋转
+            while (rel < 0) rel += 360.0;
+            while (rel >= 360.0) rel -= 360.0;
             if (rel > SweepTotal) return -1;
             int idx = (int)(rel / (SweepTotal / n));
             return idx < n ? idx : n - 1;
         }
 
+        // 拖动中"转到指位上的那一瓣"变成当前页：环转过的瓣数直接把选中页往回推
+        void UpdateDragPage()
+        {
+            int n = Math.Max(1, Count);
+            int steps = (int)Math.Round(Angle / (SweepTotal / n));
+            int p = ((_grabPage - steps) % n + n) % n;
+            if (p != Current)
+            {
+                Current = p;
+                AnimFrom = p; AnimTo = p; AnimT = 1f;   // 拖动中不做补间：指到哪亮到哪（页名也跟着）
+                Invalidate();
+            }
+        }
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left) return;
+            CancelSnap();                       // 上一次吸附没走完就直接接管：从当前角度接着拖，不先跳回去
+            _drag = 1;
+            _downPt = e.Location;
+            _grabPage = HitTest(e.Location);
+            if (_grabPage < 0) _grabPage = Current < 0 ? 0 : Current;   // 按在弧外也允许拖
+            _downAngle = PointerAngle(e.Location);
+            _lastPtAngle = _downAngle;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (_drag == 0)
+            {
+                int i = HitTest(e.Location);
+                if (i != _hover) { _hover = i; Invalidate(); }
+                return;
+            }
+            if (_drag == 1)
+            {
+                int dx = e.X - _downPt.X, dy = e.Y - _downPt.Y;
+                if (dx * dx + dy * dy < DragSlop * DragSlop) return;    // 还没过阈值：仍按"可能是点击"处理
+                _drag = 2;
+                Capture = true;
+                // 基准取"按下那一刻"的指针角：环从按下点开始跟手，位移一点都不丢
+                //（阈值只有 4px ≈ 3°，所以过阈值那一下最多也就 3°，看不出来）
+                _lastPtAngle = _downAngle;
+            }
+            // 正在拖：环跟着指针连续转（增量累加，绕圈、快速来回都不丢）
+            float r = (float)Math.Sqrt((e.X - Cx) * (e.X - Cx) + (e.Y - Cy) * (e.Y - Cy));
+            float a = PointerAngle(e.Location);
+            if (r < 8f) { _lastPtAngle = a; return; }   // 指针贴着圆心：角度没意义，只更新基准，离开时不跳
+            Angle = Norm150(Angle + DeltaDeg(a, _lastPtAngle));
+            _lastPtAngle = a;
+            UpdateDragPage();
+            Invalidate();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (_drag == 0) return;
+            int st = _drag;
+            _drag = 0;
+            if (Capture) Capture = false;
+            if (st == 2) { FinishDrag(); return; }
+            // 没过阈值 = 点击：点哪一瓣翻哪一页（老行为，只是改到松手时判定，才能和拖动区分）
             int i = HitTest(e.Location);
-            // 只报告"点了哪一瓣"：翻不翻由 SettingsForm 定（它还要管动画期间防连点）
             if (i >= 0 && i != Current)
             {
                 Picked = i;
@@ -1110,17 +1259,57 @@ namespace SnapWheel
             }
         }
 
-        protected override void OnMouseMove(MouseEventArgs e)
+        // 捕获被抢走（松手在窗口外、切窗口…）也照样收尾，绝不留半路状态
+        protected override void OnMouseCaptureChanged(EventArgs e)
         {
-            base.OnMouseMove(e);
-            int i = HitTest(e.Location);
-            if (i != _hover) { _hover = i; Invalidate(); }
+            base.OnMouseCaptureChanged(e);
+            if (_drag != 0 && !Capture) { _drag = 0; FinishDrag(); return; }
+            if (_drag == 1) _drag = 0;
         }
 
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
+            if (_drag != 0) return;                 // 拖着的时候移出窗口不算离开（有捕获，继续拖）
             if (_hover != -1) { _hover = -1; Invalidate(); }
+        }
+
+        // 松手：吸附到离当前角度最近的正角度（≡0 mod 150°，也就是每页都回到自己扇区位的那个角度）
+        void FinishDrag()
+        {
+            TargetAngle = (float)(Math.Round(Angle / 150.0) * 150.0);
+            _snapFrom = Angle;
+            _snapWatch = System.Diagnostics.Stopwatch.StartNew();
+            if (_snapTimer == null)
+            {
+                _snapTimer = new System.Windows.Forms.Timer();
+                _snapTimer.Interval = 15;           // 和翻页过渡同一个节拍
+                _snapTimer.Tick += delegate(object o, EventArgs e2) { SnapTick(); };
+            }
+            _snapTimer.Start();
+            if (PageDropped != null) PageDropped(this, EventArgs.Empty);
+            Invalidate();
+        }
+
+        // 直接接管（用户按下时上一次吸附还没走完）：角度保持不动，从当前进度接着拖
+        void CancelSnap()
+        {
+            if (_snapTimer != null && _snapTimer.Enabled) _snapTimer.Stop();
+            if (_snapWatch != null) { try { _snapWatch.Stop(); } catch { } _snapWatch = null; }
+        }
+
+        void SnapTick()
+        {
+            float t = _snapWatch == null ? 1f : (float)(_snapWatch.Elapsed.TotalMilliseconds / SnapMs);
+            if (t >= 1f)
+            {
+                Angle = TargetAngle;                // 精确落到目标角，不留偏差
+                CancelSnap();
+                Invalidate();
+                return;
+            }
+            Angle = _snapFrom + (TargetAngle - _snapFrom) * Gfx.EaseOut(t);
+            Invalidate();
         }
     }
 }
