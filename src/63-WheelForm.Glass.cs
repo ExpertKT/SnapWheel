@@ -39,6 +39,8 @@ namespace SnapWheel
 
         DateTime _backdropFadeAt = DateTime.MinValue;
 
+        int _backdropGen;                    // 玻璃底换到第几代（分层缓存的签名要用它，见 66-Layers）
+
 
         void FreeBackdrop()
         {
@@ -131,6 +133,7 @@ namespace SnapWheel
             _backdropOffset = off;
             _backdropValid = true;
             _backdropAt = DateTime.Now;
+            BackdropChanged();
             _rendered = false;
         }
 
@@ -171,8 +174,20 @@ namespace SnapWheel
                 _backdropOffset = new Point(got.Left - want.Left, got.Top - want.Top);
                 _backdropValid = true;
                 _backdropAt = DateTime.Now;
+                BackdropChanged();
             }
             catch { FreeBackdrop(); }
+        }
+
+
+        // 换上一张新玻璃底时统一收尾：代次 +1（让分层缓存的签名失效）、丢掉上一轮的整帧混图。
+        // 混图必须丢：_backdropMixFrame 记的是"渲染帧号"，而帧号只在真的出图时才 +1，
+        // 所以换底那一帧的帧号很可能只比上一轮最后一张混图大 1 —— 不丢就会把
+        // **上一轮淡入结束时那张几乎全是新底的混图**当成第一帧贴出去，开头闪一下新底。
+        void BackdropChanged()
+        {
+            _backdropGen++;
+            _backdropMixFrame = -1;
         }
 
 
@@ -261,9 +276,11 @@ namespace SnapWheel
         Bitmap BackdropMix()
         {
             if (_backdropOld == null || _backdropBlur == null) return null;
-            // 隔帧重建：淡入进度每帧只动 4% 左右，每两帧算一次肉眼看不出，
-            // 但省掉一次全窗口混合（125% 下约 2~3ms/帧）。
-            if (_backdropMix != null && _frameNo - _backdropMixFrame < 2) return _backdropMix;
+            // 一帧只混一次，同一帧里所有卡片共用（这才是"整帧只混一次"的原意）。
+            // 以前这里写的是 _frameNo - _backdropMixFrame < 2（隔两帧才重建），但帧号每帧都 +1、
+            // 淡入进度也是每帧都推进，于是差值恒为 1 —— 等于**永远**在用上一帧那张混图：
+            // 淡入被量化成 2 帧一步（实测 0.38 秒只有 9 档，一步约 8%，看着一格一格地跳）。
+            if (_backdropMix != null && _backdropMixFrame == _frameNo) return _backdropMix;
             try
             {
                 if (_backdropMix == null || _backdropMix.Width != _backdropBlur.Width || _backdropMix.Height != _backdropBlur.Height)
@@ -277,7 +294,9 @@ namespace SnapWheel
                     g.CompositingMode = CompositingMode.SourceCopy;
                     g.DrawImage(_backdropOld, new Rectangle(0, 0, _backdropMix.Width, _backdropMix.Height));
                     g.CompositingMode = CompositingMode.SourceOver;
-                    float fade = Math.Max(0.06f, Math.Min(1f, _backdropFade));
+                    // 不要再加 Math.Max(0.06f, …) 那种下限：淡入第一帧 fade 就是 0，
+                    // 强制按 6% 新底画 = 换底那一瞬间凭空跳 6%，正是"突兀"的来源之一。
+                    float fade = _backdropFade < 0f ? 0f : (_backdropFade > 1f ? 1f : _backdropFade);
                     ColorMatrix cm = new ColorMatrix(); cm.Matrix33 = fade;
                     _iaBack.SetColorMatrix(cm);
                     g.DrawImage(_backdropBlur, new Rectangle(0, 0, _backdropMix.Width, _backdropMix.Height),

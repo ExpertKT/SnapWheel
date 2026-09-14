@@ -43,6 +43,12 @@ namespace SnapWheel
             if (_show < 0.999f || _intro || _collapsing || _showAnimating) return false;
             if (_deletingItem != null || _dragOutItem != null || _dropActive) return false;
             if (_switchFlash > 0.01f) return false;
+            // 玻璃底正在交叉淡入（换底后的那 0.38 秒）时，控件层绝不能用缓存：
+            // 万能键玻璃盘 / 两个圆按钮 / 名字药丸 / 把手 的模糊底是**烤进这一层位图**里的，
+            // 贴缓存 = 这几处玻璃整整 0.38 秒一动不动，等下一次签名变化（用户一悬停）再整块跳过去
+            // —— 实测 22978 个"受换底影响的像素"里有 18342 个（80%）就没跟着淡，一戳签名直接跳到 0.91。
+            // 宁可这 0.38 秒每帧老实重画（这一档的耗时本来就在 perf 基准里单独计），也不要那种"啪"的一跳。
+            if (which == 1 && _backdropOld != null && _backdropFade < 0.999f) return false;
             if (which == 0) return true;
             // 控件层：任何"动着的 / 按下的 / 弹着的"状态都不用缓存
             if (_toast.Length > 0 || _delConfirm || _menuOpen || _menuT > 0.001f) return false;
@@ -73,6 +79,10 @@ namespace SnapWheel
             h = Mix(h, _settings.Corner); h = Mix(h, _settings.Radius);
             h = Mix(h, _settings.ThumbSize); h = Mix(h, _settings.CardRadius);
             h = Mix(h, Left); h = Mix(h, Top);
+            // 玻璃底的"第几代"也要进签名：换了一张完全不同的桌面之后，这一层里烤的旧底
+            // 就没用了 —— 只靠"淡入期间禁缓存"能保证过程对，但淡入一结束签名又会重新匹配上，
+            // 于是把**旧底那一版**整块贴回来（等于换底白换了）。代次一变，层必须重画。
+            h = Mix(h, _backdropGen);
             // 悬停/按下的**进度值**也必须进签名：按钮的反馈是"渐变"出来的（_keyHov/_closeDown…），
             // 只看那几个 bool 的话，过渡期间会一直贴旧层 —— 表现就是"鼠标放上去没反应"。
             h = Mix(h, (double)_keyHov); h = Mix(h, (double)_keyT);
