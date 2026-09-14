@@ -123,6 +123,17 @@ namespace SnapWheel
             return G(f, "_deletingItem") == null;
         }
 
+        // 空转动画帧，直到视口滚到位（_offset 追上 _targetOffset）。0.5.4 的堆叠测试用它"等这一张滑进去"。
+        static void Settle(WheelForm f, int maxFrames)
+        {
+            for (int i = 0; i < maxFrames; i++)
+            {
+                Call(f, "AnimTickCore");
+                Thread.Sleep(3);
+                if (Math.Abs(Convert.ToSingle(G(f, "_offset")) - Convert.ToSingle(G(f, "_targetOffset"))) <= 0.001f) return;
+            }
+        }
+
         // 场景：轮盘 → 改设置 → 点确定（AfterSettingsApplied）→ 轮盘必须还是看得见的样子。
         // 返回 null 表示通过，否则返回"哪里不对"。
         static string SettingsApplyScene(bool startCollapse, bool collapseFirst, bool endCollapse)
@@ -1553,9 +1564,13 @@ namespace SnapWheel
                 f.MarkNew(ni);
 
                 // 1) 视口必须跟到最新那张（否则它在弧外，动画看不见）
+                //    0.5.4 起"跟到最新"的目标值 = Count - Slots（最新那张顶在弧**上端**），
+                //    不再是 Count-1（最新那张落在下端那一格 —— 那样老图全被挤到弧外、弧上半截永远空着）。
+                float wantTgt = st.Items.Count - s.Slots;
                 double tgt = Convert.ToDouble(G(f, "_targetOffset"));
-                if (Math.Abs(tgt - idx) > 0.001)
-                    return "视口没跟到最新那张：_targetOffset=" + tgt.ToString("0.##") + "，新图索引=" + idx + "（它会被画在可见弧外面）";
+                if (Math.Abs(tgt - wantTgt) > 0.001)
+                    return "视口没跟到最新那张：_targetOffset=" + tgt.ToString("0.##") + "，期望=" + wantTgt.ToString("0.##") +
+                           "（Count=" + st.Items.Count + "，Slots=" + s.Slots + "）";
 
                 // 2) "现在就滑进来"不能被开启动画的错峰表顶掉：跑 200ms 就该已经在出场了
                 for (int i = 0; i < 40; i++) { Call(f, "AnimTickCore"); Thread.Sleep(5); }
@@ -1563,12 +1578,12 @@ namespace SnapWheel
                 if (prEarly <= 0.05f)
                     return "200ms 了这张还没开始滑（EnterProgress=" + prEarly.ToString("0.00") + "）—— MarkNew 被 StartIntro 的错峰表顶掉了";
 
-                // 3) 动画跑完：必须停在弧内的第一格，而且真的画得出来（DrawnRect 不为空）
+                // 3) 动画跑完：必须停在弧内的第一格（0.5.4 起 = 弧**上端**那一格），而且真的画得出来（DrawnRect 不为空）
                 for (int i = 0; i < 200; i++) { Call(f, "AnimTickCore"); Thread.Sleep(3); }
                 float iphi = Convert.ToSingle(Call(f, "ItemPhi", idx));
                 float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
-                if (Math.Abs(iphi - pmin) > 0.03f)
-                    return "跑完之后它没停在第一格：ItemPhi=" + iphi.ToString("0.000") + "，期望≈_phiMin=" + pmin.ToString("0.000");
+                if (Math.Abs(iphi - pmax) > 0.03f)
+                    return "跑完之后它没停在弧上端那一格：ItemPhi=" + iphi.ToString("0.000") + "，期望≈_phiMax=" + pmax.ToString("0.000");
                 float prEnd = Convert.ToSingle(Call(f, "EnterProgress", idx));
                 if (prEnd < 0.99f) return "滑入动画没跑完：EnterProgress=" + prEnd.ToString("0.00");
                 RectangleF r = (RectangleF)Call(f, "DrawnRect", idx);
@@ -1576,6 +1591,200 @@ namespace SnapWheel
                 if (r.X > f.Width || r.Y > f.Height || r.Right < 0f || r.Bottom < 0f)
                     return "它被画在窗口外面：" + r;
                 if (iphi < pmin - 0.50f || iphi > pmax + 0.50f) return "它落在可见弧之外";
+                return null;
+            });
+
+            // ================= 46. 堆叠：新图顶在弧上端，旧的依次往下，堆满后被挤出去 =================
+            // 用户原话："缩略图进 wheel 的逻辑是从 wheel 上端一个个滑下来直到堆满，再让新出现的
+            // 开始从上面挤进来，旧的就被挤下去"。这条盯的就是"谁在上面、谁往下走了多少"。
+            Run("堆叠：最新那张顶在弧上端、旧的依次往下排，堆满后整排被挤下去一格", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.ThumbSize = 96; s.Radius = 256; s.Slots = 5; s.Corner = "BL";
+                s.IntroAnim = false;
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+
+                float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
+                float step = Convert.ToSingle(Call(f, "StepRad"));
+
+                // 先喂 4 张（没堆满）：最新的顶在上端，越老越往下
+                for (int i = 0; i < 4; i++) { f.MarkNew(st.Add(Solid(40, 30, Color.FromArgb(60 + i * 30, 120, 190)))); Settle(f, 260); }
+                for (int i = 0; i < st.Items.Count - 1; i++)
+                {
+                    float a = Convert.ToSingle(Call(f, "ItemPhi", i));
+                    float b = Convert.ToSingle(Call(f, "ItemPhi", i + 1));
+                    if (!(b > a + step * 0.9f))
+                        return "没堆满时就乱了：第" + (i + 1) + "张 phi=" + a.ToString("0.000") +
+                               "，第" + (i + 2) + "张 phi=" + b.ToString("0.000") + "（步长 " + step.ToString("0.000") + "）";
+                }
+                float top4 = Convert.ToSingle(Call(f, "ItemPhi", 3));
+                if (Math.Abs(top4 - pmax) > 0.03f)
+                    return "第 4 张（最新的）没顶在弧上端：phi=" + top4.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
+                if (Math.Abs(Convert.ToSingle(G(f, "_offset")) - (4 - s.Slots)) > 0.02f)
+                    return "视口锚点不对：_offset=" + G(f, "_offset") + "，期望 " + (4 - s.Slots);
+
+                // 再喂第 5、6 张：堆满之后新图把整排往下挤一格
+                for (int k = 5; k <= 6; k++)
+                {
+                    int n = st.Items.Count;
+                    float[] before = new float[n];
+                    for (int i = 0; i < n; i++) before[i] = Convert.ToSingle(Call(f, "ItemPhi", i));
+                    StoreItem it = st.Add(Solid(40, 30, Color.FromArgb(200, 90, 60)));
+                    int idx = st.Items.IndexOf(it);
+                    f.MarkNew(it);
+                    Settle(f, 400);
+
+                    float iphi = Convert.ToSingle(Call(f, "ItemPhi", idx));
+                    if (Math.Abs(iphi - pmax) > 0.03f)
+                        return "第 " + k + " 张没顶在弧上端：phi=" + iphi.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
+                    for (int i = 0; i < n; i++)
+                    {
+                        float d = Convert.ToSingle(Call(f, "ItemPhi", i)) - before[i];
+                        if (Math.Abs(d + step) > 0.005f)
+                            return "第 " + k + " 张进来时，旧的第" + (i + 1) + "张位移=" + d.ToString("0.000") +
+                                   "（期望恰好 -" + step.ToString("0.000") + " = 往下挤一格）";
+                    }
+                    int bottom = st.Items.Count - s.Slots - 1;      // 这一张应该已经被挤出可见弧（只看真的溢出的那一档）
+                    if (bottom >= 0)
+                    {
+                        float bp = Convert.ToSingle(Call(f, "ItemPhi", bottom));
+                        if (!(bp < pmin))
+                            return "第 " + k + " 张进来后，最下面那张（下标" + bottom + "）还在可见弧里：phi=" +
+                                   bp.ToString("0.000") + "，_phiMin=" + pmin.ToString("0.000");
+                    }
+                    if (Math.Abs(Convert.ToSingle(G(f, "_offset")) - (st.Items.Count - s.Slots)) > 0.02f)
+                        return "视口锚点不对：_offset=" + G(f, "_offset") + "，期望 " + (st.Items.Count - s.Slots);
+                }
+                return null;
+            });
+
+            // ================= 47. 逐帧：先隐身于弧外 → 在弧上端进入 → 一路下滑到位 =================
+            // 用户报过"缩略图滑进 wheel 突然闪现、动画和位置合不上"，所以这条盯"每一帧它在哪里"。
+            Run("逐帧：新图先隐身于弧外，进弧那一刻正好在弧上端，之后一路平滑下滑到位", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.ThumbSize = 96; s.Radius = 256; s.Slots = 5; s.Corner = "BL";
+                s.IntroAnim = false;
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+
+                // 先把轮盘堆满（5 张），再截第 6 张 —— 这才是"挤进来"的那一档
+                for (int i = 0; i < 5; i++) { f.MarkNew(st.Add(Solid(40, 30, Color.FromArgb(60 + i * 25, 130, 190)))); Settle(f, 300); }
+
+                float pmax = Convert.ToSingle(G(f, "_phiMax"));
+                StoreItem it = st.Add(Solid(200, 140, Color.FromArgb(220, 80, 60)));
+                int idx = st.Items.IndexOf(it);
+                f.MarkNew(it);
+
+                List<float> drawn = new List<float>();
+                List<bool> vis = new List<bool>();
+                List<float> settlePhi = new List<float>();
+                List<float> prs = new List<float>();
+                for (int i = 0; i < 45; i++)
+                {
+                    float pr = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                    float phi = Convert.ToSingle(Call(f, "ItemPhi", idx));
+                    bool intro = Convert.ToBoolean(G(f, "_intro"));
+                    bool collapsing = Convert.ToBoolean(G(f, "_collapsing"));
+                    float slide = (intro || collapsing) ? 0.62f : 0.30f;
+                    float phid = phi + (1f - pr) * slide;          // 和绘制里那条公式一模一样
+                    drawn.Add(phid);
+                    settlePhi.Add(phi);
+                    prs.Add(pr);
+                    vis.Add(pr > 0.001f && !(phid < Convert.ToSingle(G(f, "_phiMin")) - 0.50f || phid > pmax + 0.50f));
+                    Call(f, "AnimTickCore");
+                    Application.DoEvents();
+                    Thread.Sleep(9);
+                }
+
+                int first = -1;
+                for (int i = 0; i < vis.Count; i++) if (vis[i]) { first = i; break; }
+                if (first < 0) return "45 帧里它一次都没被画出来（一直在弧外）";
+                for (int i = 0; i < first; i++)
+                    if (vis[i]) return "第 " + i + " 帧就已经可见了（不是先隐身）";
+                if (prs[first] <= 0.001f) return "首次可见那一帧的入场进度还是 0";
+                if (!(drawn[first] <= pmax + 0.50f && drawn[first] >= pmax - 0.02f))
+                    return "它不是从弧上端进来的：首次可见处 绘制phi=" + drawn[first].ToString("0.000") + "，弧上端=" + pmax.ToString("0.000") +
+                           "（边界 " + (pmax + 0.5f).ToString("0.000") + "）";
+                float prev2 = float.MaxValue;
+                for (int i = first; i < drawn.Count; i++)
+                {
+                    if (!vis[i]) continue;
+                    if (drawn[i] > prev2 + 0.001f) return "下滑不单调：第 " + i + " 帧 绘制phi=" + drawn[i].ToString("0.000") + "，上一帧 " + prev2.ToString("0.000");
+                    prev2 = drawn[i];
+                }
+                float endPhi = settlePhi[settlePhi.Count - 1];
+                if (Math.Abs(endPhi - pmax) > 0.03f)
+                    return "最后没落在弧上端那一格：ItemPhi=" + endPhi.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
+                if (prs[prs.Count - 1] < 0.99f) return "滑入动画没跑完：EnterProgress=" + prs[prs.Count - 1].ToString("0.00");
+                return null;
+            });
+
+            // ================= 48. 开关关掉：收新图不许把用户正在看的位置拽走 =================
+            Run("开关关掉：收新图时视口一动不动、旧图一张都不动，新图照样从上面滑进来", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.ThumbSize = 96; s.Radius = 256; s.Slots = 5; s.Corner = "BL";
+                s.IntroAnim = false;
+                s.ResetScrollOnCapture = false;                 // ← 用户在设置里关掉了
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+
+                for (int i = 0; i < 6; i++) st.Add(Solid(40, 30, Color.FromArgb(60 + i * 25, 130, 190)));
+                f.RefreshWheel();
+                Settle(f, 300);
+                // 用户自己滚了一格（停在别处）
+                F(f, "_targetOffset", (float)(st.Items.Count - s.Slots + 1));
+                Settle(f, 300);
+
+                double offBefore = Convert.ToDouble(G(f, "_offset"));
+                double tgtBefore = Convert.ToDouble(G(f, "_targetOffset"));
+                float[] before = new float[st.Items.Count];
+                for (int i = 0; i < st.Items.Count; i++) before[i] = Convert.ToSingle(Call(f, "ItemPhi", i));
+
+                StoreItem it = st.Add(Solid(200, 140, Color.FromArgb(220, 80, 60)));
+                int idx = st.Items.IndexOf(it);
+                f.MarkNew(it);
+
+                bool sawMove = false;
+                for (int i = 0; i < 45; i++)
+                {
+                    float pr = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                    if (pr > 0.5f) sawMove = true;              // 入场动画确实在跑
+                    Call(f, "AnimTickCore");
+                    Application.DoEvents();
+                    Thread.Sleep(9);
+                }
+                Settle(f, 300);
+
+                if (Math.Abs(Convert.ToDouble(G(f, "_offset")) - offBefore) > 0.001 || Math.Abs(Convert.ToDouble(G(f, "_targetOffset")) - tgtBefore) > 0.001)
+                    return "视口被拽走了：_offset " + offBefore.ToString("0.00") + " -> " + G(f, "_offset") +
+                           "，_targetOffset " + tgtBefore.ToString("0.00") + " -> " + G(f, "_targetOffset");
+                for (int i = 0; i < idx; i++)
+                {
+                    float d = Convert.ToSingle(Call(f, "ItemPhi", i)) - before[i];
+                    if (Math.Abs(d) > 0.001f) return "旧的第" + (i + 1) + "张被推动了 " + d.ToString("0.000") + "（开关关掉时不该动）";
+                }
+                if (!sawMove) return "新图的入场动画没跑（EnterProgress 一直很小）";
+                float prEnd = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                if (prEnd < 0.99f) return "滑入动画没跑完：EnterProgress=" + prEnd.ToString("0.00");
+                RectangleF r = (RectangleF)Call(f, "DrawnRect", idx);
+                if (r.Width <= 0f || r.Height <= 0f) return "新图落位后画不出来（矩形是空的）";
+                float phiEnd = Convert.ToSingle(Call(f, "ItemPhi", idx));
+                if (phiEnd > Convert.ToSingle(G(f, "_phiMax")) + 0.03f) return "新图落在可见弧之外：ItemPhi=" + phiEnd.ToString("0.000");
                 return null;
             });
 

@@ -60,6 +60,9 @@ namespace SnapWheel
         public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
         public int CollapseSpeed = 150;       // 收起动画速度 %（默认"快"一档，收起要干脆）
         public bool NubSingle = false;        // 只用一个把手：左边那个点一下展开、再点一下收起（底部不占地方）
+        // 收进新图（截图 / 剪贴板 / 导入）之后要不要把滚动位置重置到最新那张。
+        // 开（默认）：视口跟到最新那张 —— 滑入动画看得见；关：完全不碰用户的滚动位置。
+        public bool ResetScrollOnCapture = true;
         // 拖出时要不要同时给"文件"格式。
         // v0.4.8 曾把这里默认改成关，结果老用户拖到资源管理器 / 只吃文件的程序直接放不进去
         // （"缩略图拖出去放不了"就是这么来的）—— 现在默认开，Rev<3 的老配置会被迁移回开。
@@ -137,6 +140,7 @@ namespace SnapWheel
                         else if (k == "CollapseSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.CollapseSpeed = n; }
                         else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) { s.ExpandSpeed = n; s.CollapseSpeed = n; } }   // 兼容旧配置
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
+                        else if (k == "ResetScrollOnCapture") s.ResetScrollOnCapture = (v == "1");
                         else if (k == "DragOutAsFile") s.DragOutAsFile = (v == "1");
                         else if (k == "CheckUpdate") s.CheckUpdate = (v == "1");
                         else if (k == "NubHintDone") s.NubHintDone = (v == "1");
@@ -268,6 +272,7 @@ namespace SnapWheel
                 lines.Add("ExpandSpeed=" + ExpandSpeed);
                 lines.Add("CollapseSpeed=" + CollapseSpeed);
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
+                lines.Add("ResetScrollOnCapture=" + (ResetScrollOnCapture ? "1" : "0"));
                 lines.Add("DragOutAsFile=" + (DragOutAsFile ? "1" : "0"));
                 lines.Add("CheckUpdate=" + (CheckUpdate ? "1" : "0"));
                 lines.Add("NubHintDone=" + (NubHintDone ? "1" : "0"));

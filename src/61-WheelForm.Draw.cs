@@ -1083,7 +1083,10 @@ namespace SnapWheel
         {
             Color acc = _accentCur;
             if (_store.Items.Count == 0 || !_settings.ShowCountLabel) return;
-                int cur = (int)Math.Round(_offset) + 1;
+                // 0.5.4：视口锚点改成"最新那张顶在弧上端"之后，`_offset` 是**弧下端那一格**的下标，
+                // 所以可见区里最靠上（最新）的那张 = _offset + Slots。这么写，默认视口下就是 N/N
+                // （最新那张在最上面），往上滚会依次变小 —— 和以前"跟着滚动位置变"的语义一致。
+                int cur = (int)Math.Round(_offset) + _slots;
                 if (cur < 1) cur = 1;
                 if (cur > _store.Items.Count) cur = _store.Items.Count;
                 string idx = cur + " / " + _store.Items.Count;

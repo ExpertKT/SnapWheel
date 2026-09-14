@@ -314,7 +314,7 @@ namespace SnapWheel
             bmp = ImageIO.Fit(bmp, ImageIO.MaxDim);
             StoreItem it = _store.AddCore(bmp, ImageIO.ExtFor(bmp));
             _enterT0[it] = DateTime.Now;
-            _targetOffset = Math.Max(0, _store.Items.Count - 1);
+            FollowNewest();                       // 视口跟到最新那张（设置里可关）
             _hover = -1; _enlarged = -1;
             ShowToast("已加入 1 张图片");
             Render();
@@ -364,7 +364,7 @@ namespace SnapWheel
                 if (it != null)
                 {
                     _enterT0[it] = DateTime.Now;
-                    _targetOffset = Math.Max(0, _store.Items.Count - 1);
+                    FollowNewest();               // 视口跟到最新那张（设置里可关）
                     _hover = -1; _enlarged = -1;
                     if (_collapsed && _settings.ShowBalloon) Err.Notify("已从剪贴板收进 1 张图");
                     else ShowToast("已从剪贴板收进 1 张图");
@@ -392,7 +392,7 @@ namespace SnapWheel
                 _enterT0[it] = DateTime.Now.AddSeconds(ok * 0.07);    // 依次滑入
                 ok++;
             }
-            _targetOffset = Math.Max(0, _store.Items.Count - 1);      // 视口跟到最后一张
+            FollowNewest();                                           // 视口跟到最后一张（设置里可关）
             _hover = -1; _enlarged = -1;
             if (ok > 0) ShowToast("已加入 " + ok + " 张图片" + (bad > 0 ? "（" + bad + " 张读不了）" : ""));
             else ShowToast("这些文件读不出图片");
@@ -692,7 +692,8 @@ namespace SnapWheel
                 _thumbCache.Remove(it);
                 _enterT0.Remove(it);
                 _scales.Clear();
-                if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
+                if (_targetOffset > MaxOffset()) _targetOffset = MaxOffset();
+                if (_targetOffset < MinOffset()) _targetOffset = MinOffset();
                 if (_offset > _targetOffset) _offset = _targetOffset;
             }
             else if (returned)
@@ -700,7 +701,7 @@ namespace SnapWheel
                 // 拖回轮盘：和刚截完图一样，重新播一次缩略图滑入动画
                 _scales.Remove(_store.Items.IndexOf(it));
                 MarkNew(it);
-                _targetOffset = Math.Max(0, _store.Items.Count - 1);
+                FollowNewest();
                 ShowToast("已放回「" + _mgr.ActiveWheel.Name + "」");
             }
             _hover = -1;
@@ -712,8 +713,8 @@ namespace SnapWheel
         {
             _lastActive = DateTime.Now;
             _targetOffset -= e.Delta / 120;
-            if (_targetOffset < 0) _targetOffset = 0;
-            if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
+            if (_targetOffset < MinOffset()) _targetOffset = MinOffset();
+            if (_targetOffset > MaxOffset()) _targetOffset = MaxOffset();
         }
     }
 }

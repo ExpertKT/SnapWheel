@@ -40,7 +40,7 @@ namespace SnapWheel
         // ---- 第 2 页「轮盘与外观」 ----
         NumericUpDown _numMax, _numThumb, _numRad, _numSlots, _numLabel, _numPeek;
         ComboBox _cmbScale, _cmbRing, _cmbRing2;
-        CheckBox _chkCollapse, _chkSingle, _chkIntroAnim;
+        CheckBox _chkCollapse, _chkSingle, _chkIntroAnim, _chkScrollReset;
         // ---- 第 3 页「风格」 ----
         ComboBox _cmbStyle, _cmbAccent, _cmbAnim;
         CheckBox _chkName, _chkCount, _chkGlassRefresh;
@@ -526,7 +526,15 @@ namespace SnapWheel
             g.Controls.Add(Row(_chkCollapse), 1, 1);
 
             _numPeek = Num(120, 500, s.PeekPercent);
-            Control peekRow = Row(MkLabel("长按放大(%)"), _numPeek);
+            // 顺手把 0.5.4 的"截图后重置滚动位置"放在这一行的空处：这一行只有标签 + 数值框，
+            // 右边空着一大片。**刻意不单独占一行** —— 第 2 页再加一行要多 31px，
+            // 760×574（窗口允许缩到的最小尺寸）下页面格只有 346px、内容已经要 324px，加一行就顶出去被裁了。
+            _chkScrollReset = new CheckBox();
+            _chkScrollReset.AutoSize = true;
+            _chkScrollReset.Text = "截图后把滚动位置重置到最新那张（好让滑入动画看得见）";
+            _chkScrollReset.Checked = s.ResetScrollOnCapture;
+            _chkScrollReset.Margin = new Padding(30, 4, 0, 4);
+            Control peekRow = Row(MkLabel("长按放大(%)"), _numPeek, _chkScrollReset);
             g.Controls.Add(peekRow, 0, 2);
             g.SetColumnSpan(peekRow, 2);
 
@@ -965,6 +973,7 @@ namespace SnapWheel
                 s.ExpandSpeed = ringVals[_cmbRing.SelectedIndex < 0 ? 2 : _cmbRing.SelectedIndex];
                 s.CollapseSpeed = ringVals[_cmbRing2.SelectedIndex < 0 ? 2 : _cmbRing2.SelectedIndex];
                 s.NubSingle = _chkSingle.Checked;
+                s.ResetScrollOnCapture = _chkScrollReset.Checked;   // 0.5.4：截图后要不要把滚动位置重置到最新那张
             }
             if (_built[2])
             {

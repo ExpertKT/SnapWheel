@@ -547,7 +547,20 @@ namespace SnapWheel
             // "缩略图滑进 wheel 突然闪现、动画和位置合不上"就是这个。
             // 剪贴板导入那条路一直是这么做的（OnClipboardChanged / ImportFiles 里都有这一句），
             // 截图这条路以前漏了。
-            _targetOffset = Math.Max(0, _store.Items.Count - 1);
+            //
+            // 0.5.4：目标值从 Count-1 改成 Count-Slots（最新那张顶在弧**上端**，见 OffsetForNewest），
+            // 而且这一步可以在设置里关掉（关 = 保持用户当前滚动位置，不把他正在看的地方拽走）。
+            FollowNewest();
+        }
+
+
+        // 收进 / 截进一张新图之后，视口要不要回到"最新那张"。
+        // 设置项 `ResetScrollOnCapture`（默认开）关掉时：什么都不做 —— 视口就停在用户当前的位置，
+        // 新图照样按 EnterProgress 从上面滑进来，只是不把画面拽走。
+        void FollowNewest()
+        {
+            if (_settings != null && !_settings.ResetScrollOnCapture) return;
+            _targetOffset = OffsetForNewest();
         }
 
 

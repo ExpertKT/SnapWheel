@@ -220,6 +220,11 @@ namespace SnapWheel
             ShowInTaskbar = false;
             TopMost = settings.AlwaysOnTop;
             ApplyLayout();
+            // 视口初始位置 = "最新那张顶在弧上端"（0.5.4 的锚点，见 OffsetForNewest）。
+            // 必须在 ApplyLayout 之后设（_slots / _phiMin / _phiMax 都是它算出来的），
+            // 也必须在这里设：Store 在构造时就把保存目录里的图恢复了，开机第一眼要给最新那批；
+            // 不设的话第一张新图会从"下端那一格"往上爬到上端（反方向的动画）。
+            _offset = _targetOffset = OffsetForNewest();
             GiveFeedback += new GiveFeedbackEventHandler(OnGiveFeedback);
             AllowDrop = true;
             DragEnter += new DragEventHandler(OnDragOverWheel);
@@ -370,6 +375,22 @@ namespace SnapWheel
         float EffR() { return _R; }
 
         float ItemPhi(int i) { return _phiMin + (i - _offset) * StepRad(); }
+
+        // ============================ 视口锚点（0.5.4） ============================
+        // `_offset` 的含义没变：**落在弧下端那一格（_phiMin）上的图片下标**（可以是负数，见下）。
+        // 于是"让最新那张（下标 Count-1）顶在弧的**上端**（_phiMax）"就是：
+        //     _offset + (Slots-1) = Count-1   →   _offset = Count - Slots
+        // Count < Slots 时它是负数 —— 那正是"从弧上端开始往下堆、下端先空着"的样子。
+        //
+        // 为什么改这个：以前"跟到最新"用的是 Count-1（最新那张落在**下端**那一格），
+        // 于是每截一张，之前的图全被推到弧下方看不见，而弧的上半截永远是空的（用户原话
+        // "之前的缩略图在下面全都显示不全，而 wheel 上半部分又空空的没有利用上"）。
+        // 改成"最新顶在上端"之后，老图依次往下排；堆满（Count > Slots）之后再来新图时
+        // _offset 会整体 +1，也就是**新图从上端挤进来、老图一起被往下挤一格**，
+        // 最下面那张滑出可见弧 —— 这就是用户要的堆叠逻辑。
+        float OffsetForNewest() { return _store.Items.Count - _slots; }
+        float MinOffset() { return OffsetForNewest(); }
+        float MaxOffset() { return Math.Max(MinOffset(), _store.Items.Count - 1); }
 
         PointF ItemCenter(int i) { return ItemCenterAtPhi(ItemPhi(i)); }
 
@@ -575,7 +596,8 @@ namespace SnapWheel
                 }
             }
             _hover = -1; _enlarged = -1; _peekIndex = -1;
-            if (_targetOffset > Math.Max(0, _store.Items.Count - 1)) _targetOffset = Math.Max(0, _store.Items.Count - 1);
+            if (_targetOffset > MaxOffset()) _targetOffset = MaxOffset();
+            if (_targetOffset < MinOffset()) _targetOffset = MinOffset();
             if (_offset > _targetOffset) _offset = _targetOffset;
             _rendered = false;
             Render();
@@ -629,7 +651,8 @@ namespace SnapWheel
 
         public void RefreshWheel()
         {
-            _offset = 0f; _targetOffset = 0f;
+            // 回到"最新那张顶在弧上端"这个默认视口（0.5.4 起这就是默认位；以前是 0 = 最老那张在下端）
+            _offset = _targetOffset = OffsetForNewest();
             _hover = -1; _enlarged = -1; _peekIndex = -1;
             _scales.Clear(); _enterT0.Clear();
             _switchFlash = 1f;
@@ -639,7 +662,7 @@ namespace SnapWheel
 
         void AfterWheelSwitch()
         {
-            _offset = 0f; _targetOffset = 0f;
+            _offset = _targetOffset = OffsetForNewest();
             _hover = -1; _enlarged = -1; _peekIndex = -1;
             _scales.Clear(); _enterT0.Clear();
             // 新 wheel 的图依次滑入，形成切换过渡
