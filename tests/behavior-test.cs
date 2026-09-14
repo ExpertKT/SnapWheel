@@ -1336,7 +1336,7 @@ namespace SnapWheel
             });
 
             // ================= 43. 截图确认时同时复制到剪贴板 =================
-            Run("截图确认时同时复制到剪贴板（开着剪贴板里就有这张图 / 关掉不动剪贴板）", delegate
+            Run("截图确认时同时复制到剪贴板（开着有 Bitmap/DIB/PNG 且像素一致 / 关掉不动剪贴板）", delegate
             {
                 // 剪贴板在**锁屏 / 没有交互会话**时不可用（取一下就抛 ExternalException）。
                 // 那种环境里这条容错跳过 —— 不能让整套测试因为环境而不是代码挂掉。
@@ -1369,6 +1369,46 @@ namespace SnapWheel
                 catch (Exception gex) { Console.WriteLine("  （跳过：剪贴板不可用）"); Console.WriteLine("     {0}", gex.GetType().Name); return null; }
                 if (got.Width != on.Result.Width || got.Height != on.Result.Height)
                     return "剪贴板里的图是 " + got.Width + "x" + got.Height + "，和截出来的 " + on.Result.Width + "x" + on.Result.Height + " 对不上";
+
+                // ---- 顺带放上去的 PNG 格式：认这个格式的程序（浏览器/部分编辑器）走的就是它 ----
+                // 只放了 Bitmap+DIB 的话这里会是 false，有些程序就会说"剪贴板里没有图片"。
+                bool hasPng;
+                try
+                {
+                    IDataObject pngObj = Clipboard.GetDataObject();     // 静态 Clipboard 上没有 GetDataPresent，得先取 DataObject
+                    hasPng = pngObj != null && pngObj.GetDataPresent("PNG");
+                }
+                catch (Exception pex0) { Console.WriteLine("  （跳过：剪贴板不可用）"); Console.WriteLine("     {0}", pex0.GetType().Name); return null; }
+                if (!hasPng) return "剪贴板里没有 PNG 格式（只有 Bitmap/DIB）";
+
+                Stream pngKeep = null;               // Bitmap 是懒解码的：底层流在它就活不了，得一直留着
+                Bitmap pngBack = null;
+                try
+                {
+                    object pd = Clipboard.GetData("PNG");
+                    if (pd is Stream) pngKeep = (Stream)pd;
+                    else if (pd is byte[]) pngKeep = new MemoryStream((byte[])pd);
+                    else return "PNG 数据取出来是 " + (pd == null ? "null" : pd.GetType().Name) + "，认不出来";
+                    if (pngKeep.Length <= 0) return "PNG 数据是空的（0 字节）";
+                    pngBack = new Bitmap(pngKeep);
+                }
+                catch (Exception pex)
+                {
+                    Console.WriteLine("  （跳过：剪贴板不可用）");
+                    Console.WriteLine("     {0}", pex.GetType().Name);
+                    return null;
+                }
+                try
+                {
+                    if (pngBack.Width != on.Result.Width || pngBack.Height != on.Result.Height)
+                        return "PNG 解出来是 " + pngBack.Width + "x" + pngBack.Height + "，和截出来的 " + on.Result.Width + "x" + on.Result.Height + " 对不上";
+                    Color pa = pngBack.GetPixel(pngBack.Width / 2, pngBack.Height / 2);
+                    Color pb = on.Result.GetPixel(on.Result.Width / 2, on.Result.Height / 2);
+                    if (pa.ToArgb() != pb.ToArgb())
+                        return "PNG 解出来的中心像素是 " + pa + "，和截图的 " + pb + " 不一致";
+                }
+                finally { pngBack.Dispose(); if (pngKeep != null) pngKeep.Dispose(); }
+
                 on.Dispose();
                 CleanupForms();
 
@@ -1399,6 +1439,15 @@ namespace SnapWheel
                 mark.Dispose();
                 if (kept.Width != 64 || kept.Height != 48)
                     return "设置关着，剪贴板还是被换成了另一张图（" + kept.Width + "x" + kept.Height + "）";
+                // 关着的这一路也不该往剪贴板里塞 PNG（记号图是用 SetImage 放的，本来就没有 PNG）。
+                // 这条只打印不判失败：万一有第三方剪贴板工具插了一脚，不该算到这个功能头上。
+                try
+                {
+                    IDataObject offObj = Clipboard.GetDataObject();
+                    Console.WriteLine("     关掉时剪贴板里有 PNG 吗 = {0}（记号图本来就没有，应该是 False）",
+                        offObj != null && offObj.GetDataPresent("PNG"));
+                }
+                catch (Exception) { }
                 return null;
             });
 

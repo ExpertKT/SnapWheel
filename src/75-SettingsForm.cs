@@ -425,21 +425,27 @@ namespace SnapWheel
             _chkClip.AutoSize = true;
             _chkClip.Text = "复制图片后自动收进轮盘";
             _chkClip.Checked = s.ClipboardImport;
-            // 新勾选框**塞进这一行**（第 6 行左格），不新占一行：页面的行已经排到第 346px 的底，
-            // 再加一行就会把最下面那行顶出可视区。两个勾选框的宽度加起来（167+6+167=346）
-            // 仍在第 1 页列宽 317→346、页面宽 720 的余量里，右侧那列不会被动到。
+            // 新勾选框：这一行的排版是量出来的，别随手改。
+            // 完整提示（"要立刻粘贴时直接 Ctrl+V"）量出来是 342px，塞回左列会把第 1 页顶到 825px
+            // （两列最小宽度 317 + 360 = 677，页面只有 720）—— 所以这一行改成**横跨两列**：
+            // 跨列行不进任何一列的最小宽度，整行 167+6+342+6+128 = 658 ≤ 720 ✓。
+            // 代价只有一个：原来在右列的气泡勾选框跟着流到本行第三个，说明括号去掉
+            // （留着的话整行 762 > 720，右列会挨着裁）—— "显示托盘气泡提示"这个名字本身已经说明它是什么。
             _chkCopy = new CheckBox();
             _chkCopy.AutoSize = true;
-            _chkCopy.Text = "截图后同时复制到剪贴板";
+            _chkCopy.Text = "截图后同时复制到剪贴板（要立刻粘贴时直接 Ctrl+V）";
             _chkCopy.Checked = s.CopyOnCapture;
             _chkCopy.Margin = new Padding(6, 3, 0, 3);
-            g.Controls.Add(Row(_chkClip, _chkCopy), 0, 6);
 
             _chkBalloon = new CheckBox();
             _chkBalloon.AutoSize = true;
-            _chkBalloon.Text = "显示托盘气泡提示（关掉就不再弹右下角通知）";
+            _chkBalloon.Text = "显示托盘气泡提示";
             _chkBalloon.Checked = s.ShowBalloon;
-            g.Controls.Add(Row(_chkBalloon), 1, 6);
+            _chkBalloon.Margin = new Padding(6, 3, 0, 3);
+
+            Control clipRow = Row(_chkClip, _chkCopy, _chkBalloon);
+            g.Controls.Add(clipRow, 0, 6);
+            g.SetColumnSpan(clipRow, 2);
 
             _chkUpdate = new CheckBox();
             _chkUpdate.AutoSize = true;

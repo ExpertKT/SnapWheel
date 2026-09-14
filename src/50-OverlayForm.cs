@@ -811,12 +811,29 @@ namespace SnapWheel
 
             // 顺手把这张图放进剪贴板。"截完立刻粘一次"（Win+Shift+S 之后 Ctrl+V）是最高频的用法，
             // 以前截完只在环上，要粘得先从角落把图拖出去 —— 比系统截图慢一步。
-            // 关掉设置就不碰剪贴板；剪贴板可能正被别的程序占着（SetImage 会抛），
+            // 关掉设置就不碰剪贴板；剪贴板可能正被别的程序占着（会抛），
             // 那种情况只记一条日志、绝不弹框 —— 不能因为剪贴板把整张截图打断。
             // _set 为 null（测试/旧路径）时按"开启"处理，和上面 _textBg 的默认一致。
             if ((_set == null) || _set.CopyOnCapture)
             {
-                try { Clipboard.SetImage(Result); }
+                try
+                {
+                    // 一次把三种格式都放上去（以前只有 SetImage 的 Bitmap + DIB）：
+                    //   Bitmap / DIB —— 画图、Word、微信这些"粘贴图片"走的就是这两个；
+                    //   PNG        —— 认这个格式的程序（浏览器、部分编辑器/截图工具）能拿到
+                    //                 带 alpha 的无损原图，而且不会像 DIB 那样掉透明通道。
+                    DataObject data = new DataObject();
+                    data.SetImage(Result);
+                    using (MemoryStream png = new MemoryStream())
+                    {
+                        Result.Save(png, ImageFormat.Png);
+                        png.Position = 0;                     // 交给剪贴板前把读指针拨回开头
+                        data.SetData("PNG", false, png);      // false = 原样给字节流，别自动转成 .NET 对象
+                        // copy=true：立刻把数据刷进剪贴板（OleFlushClipboard），
+                        // 所以这个 MemoryStream 出作用域被释放之后，粘贴方照样能拿到完整 PNG。
+                        Clipboard.SetDataObject(data, true);
+                    }
+                }
                 catch (Exception cex) { Err.Log("OverlayForm.Confirm.Clipboard", cex); }
             }
 
