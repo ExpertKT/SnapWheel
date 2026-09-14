@@ -72,18 +72,18 @@ namespace SnapWheel
                 // 序号与品牌（左上）
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Accent))
-                    g.DrawString("SnapWheel 快照轮环", fb, sb, 86, 82);
+                    TextRenderer.DrawText(g, "SnapWheel 快照轮环", fb, new Point(86, 74), Accent, TextFormatFlags.NoPadding);
                 using (Font fn = new Font(FONT, 22))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(110, 150, 160, 180)))
-                    g.DrawString(no + " / 9", fn, sb, 1080 - 86 - 70, 86);
+                    TextRenderer.DrawText(g, no + " / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 // 标题（hero 那张更大）
-                float ts = hero ? 96 : (title.Length > 9 ? 62 : 76);
+                float ts = hero ? 96 : 76;      // 字号统一：原来按长度分 62/76 两档，标题高度不齐
                 using (Font ft = new Font(FONT, ts, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Color.White))
-                    g.DrawString(title, ft, sb, 80, hero ? 300 : 216);
+                    TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
 
-                int y = hero ? 440 : 216 + (int)(ts * 1.5f);
+                int y = hero ? 470 : 400;      // 固定行位置：所有图的说明文字落在同一条线上
                 using (Font fl = new Font(FONT, hero ? 40 : 36))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { g.DrawString(line1, fl, sb, 84, y); }
@@ -136,14 +136,14 @@ namespace SnapWheel
 
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Accent))
-                    g.DrawString("SnapWheel", fb, sb, 86, 82);
+                    TextRenderer.DrawText(g, "SnapWheel", fb, new Point(86, 74), Accent, TextFormatFlags.NoPadding);
                 using (Font fn = new Font(FONT, 22))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(110, 150, 160, 180)))
-                    g.DrawString("5 / 9", fn, sb, 1080 - 86 - 70, 86);
+                    TextRenderer.DrawText(g, "5 / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 using (Font ft = new Font(FONT, 104, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Color.White))
-                    g.DrawString("快照轮环", ft, sb, 80, 300);
+                    TextRenderer.DrawText(g, "快照轮环", ft, new Point(80, 300), Color.White, TextFormatFlags.NoPadding);
                 using (Font fs = new Font(FONT, 30))
                 using (SolidBrush sb = new SolidBrush(Sub))
                     g.DrawString("一个常驻屏幕角落的圆环，把截图这件事变顺手", fs, sb, 84, 460);
