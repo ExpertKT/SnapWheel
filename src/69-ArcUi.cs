@@ -108,7 +108,7 @@ namespace SnapWheel
             {
                 string ch = text.Substring(i, 1);
                 SizeF cs = g.MeasureString(ch, f);
-                float a = start + charStep * i;
+                float a = start - charStep * i;   // 倒着排：第一个字落在 phi 大的一侧（屏幕左上），读起来才是正序
                 PointF p = Polar(c, sx, sy, a, r);
                 PointF d = Outward(c, sx, sy, a);
                 // 让"字的上方向"对齐向外法线：GDI+ 里字的上方向是 -Y，旋转 θ 后指向 (sinθ, -cosθ)，
