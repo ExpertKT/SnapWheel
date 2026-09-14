@@ -49,8 +49,19 @@ namespace SnapWheel
         NumericUpDown _numGlass, _numRadius, _numShadow;
         TableLayoutPanel _advR;
 
-        // 窗口出厂尺寸 = 允许缩到的最小尺寸。这个数不能随手改小：四页内容是按 720px 宽（760 - 40 边距）排的。
+        // 窗口出厂尺寸 = 允许缩到的最小尺寸（**逻辑像素**，实际会乘 DPI 系数 K）。
+        // 这个数不能随手改小：四页内容是按 720px 宽（760 - 40 边距）排的。
         const int MinClientW = 760, MinClientH = 574;
+
+        // 测试用：强制指定 DPI 缩放系数（0 = 按真实 DPI 判断）。
+        // 和 Elev.ForceForTest 一个道理 —— 不然"150% 屏幕下会不会被裁"这件事永远只能在那种屏上手测。
+        public static float ForceKForTest = 0f;
+
+        float K = 1f;                          // DPI 缩放系数（长度类尺寸都乘它，字体点数不乘）
+
+        int S(float v) { return (int)Math.Round(v * K); }
+        int S(int v) { return (int)Math.Round(v * K); }
+        Padding Pad(int l, int t, int r, int b) { return new Padding(S(l), S(t), S(r), S(b)); }
 
         static readonly int[] scVals = { 0, 80, 90, 100, 110, 125, 150, 175, 200, 250 };
         static readonly int[] ringVals = { 220, 150, 100, 80, 60, 45 };
@@ -178,8 +189,16 @@ namespace SnapWheel
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
             BackColor = Color.FromArgb(250, 250, 252);
+            // ---- DPI 缩放系数（0.5.3 补）----
+            // 这个窗口的布局全是"写死的物理像素"。在 150% 缩放（144DPI）的屏幕上，**字会按 DPI 放大 1.5 倍，
+            // 窗口却一动不动** —— 于是内容顶出可视区：用户报的"有些选项的字显示不全""下面还有部分被遮住"
+            // （底部按钮行和页脚被切）就是这个。修法：**所有"长度"尺寸都乘 K**；
+            // **字体的点数一个都不动**（点数本来就跟着 DPI 走，再乘一次会变成 2.25 倍）。
+            try { K = ForceKForTest > 0f ? ForceKForTest : Native.DpiScaleOf(IntPtr.Zero); } catch { K = 1f; }
+            if (!(K >= 1f)) K = 1f;               // 小于 100% 不缩（缩了字反而更小、更看不清）
+            if (K > 3f) K = 3f;
             // 有限度地自由调整大小（用户报"有些选项的字显示不全"）：可以拖边框放大 / 缩小，
-            //   下限 = 出厂尺寸（760×574，四页内容在这个尺寸下都排得下）
+            //   下限 = 出厂尺寸（760×574 逻辑像素 × K，四页内容在这个尺寸下都排得下）
             //   上限 = 屏幕工作区的 92%（再大就没意义，也不该长到屏幕外面去）
             // 只动窗口大小：**四页的布局一个字没动**（坐标明确 + 每页懒建 + 保存只写建过的页）。
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -189,8 +208,8 @@ namespace SnapWheel
             StartPosition = FormStartPosition.CenterScreen;
             AutoSize = false;                     // 不随内容长高长胖：大小由用户拖（翻页仍然代替滚动）
             DoubleBuffered = true;                // 滑动时整窗不闪（配合 CreateParams 里的 WS_EX_COMPOSITED）
-            ClientSize = new Size(MinClientW, MinClientH);
-            MinimumSize = SizeFromClientSize(new Size(MinClientW, MinClientH));
+            ClientSize = new Size(S(MinClientW), S(MinClientH));
+            MinimumSize = SizeFromClientSize(new Size(S(MinClientW), S(MinClientH)));
             try
             {
                 Rectangle wa = Screen.PrimaryScreen.WorkingArea;
@@ -200,7 +219,7 @@ namespace SnapWheel
             }
             catch { }
             // 底部原来只留 12px：页脚 "by exper7" 那行的真实文字格比字体行高高，末几行像素会被窗口底边切掉
-            Padding = new Padding(20, 14, 20, 18);
+            Padding = Pad(20, 14, 20, 18);
 
             TableLayoutPanel root = new TableLayoutPanel();
             root.ColumnCount = 1;
@@ -209,11 +228,11 @@ namespace SnapWheel
             root.Dock = DockStyle.Fill;
             root.Margin = new Padding(0);
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));    // 0 标题
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));    // 1 轮盘式分页器
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // 2 当前页
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));    // 3 按钮行（右下）
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));    // 4 版本行（22 太小：标签真实高度+边距放不下，末几行像素会被裁）
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(28)));    // 0 标题
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(96)));    // 1 轮盘式分页器
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));      // 2 当前页
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(40)));    // 3 按钮行（右下）
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(32)));    // 4 版本行（22 太小：标签真实高度+边距放不下，末几行像素会被裁）
             _root = root;
 
             Label head = new Label();
@@ -236,6 +255,7 @@ namespace SnapWheel
             _dial.BackColor = Color.FromArgb(250, 250, 252);
             _dial.Dock = DockStyle.Fill;
             _dial.Margin = new Padding(0);
+            _dial.K = K;                       // 分页器的弧线几何也跟着 DPI 走
             _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { TryGoto(_dial.Picked); });
             // 拖动松手：内容页跟着高亮走。这里用 ShowPage（程序性切页）而不是 TryGoto ——
             // 拖动允许直接接管上一次还没走完的过渡（从当前进度收尾后再滑向新页），不许被防连点吞掉。
@@ -264,12 +284,12 @@ namespace SnapWheel
             // ---------------- 底部按钮（新手引导 / 还原默认 / 确定 取消）行为一字未改 ----------------
             RoundButton ok = new RoundButton();
             ok.Text = "确定";
-            ok.Size = new Size(104, 36);
+            ok.Size = new Size(S(104), S(36));
             ok.Fill = Color.FromArgb(0, 122, 204);
             ok.FillHover = Color.FromArgb(0, 140, 232);
             ok.TextColor = Color.White;
             ok.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            ok.Margin = new Padding(10, 2, 0, 0);
+            ok.Margin = Pad(10, 2, 0, 0);
             ok.Click += new EventHandler(delegate(object o, EventArgs e2) {
                 SaveFromUi();
                 DialogResult = DialogResult.OK;
@@ -277,34 +297,34 @@ namespace SnapWheel
             });
             RoundButton cancel = new RoundButton();
             cancel.Text = "取消";
-            cancel.Size = new Size(104, 36);
+            cancel.Size = new Size(S(104), S(36));
             cancel.Fill = Color.FromArgb(234, 235, 240);
             cancel.FillHover = Color.FromArgb(222, 224, 230);
             cancel.TextColor = Color.FromArgb(58, 60, 66);
             cancel.Font = new Font("Microsoft YaHei UI", 10f);
-            cancel.Margin = new Padding(10, 2, 0, 0);
+            cancel.Margin = Pad(10, 2, 0, 0);
             cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
 
             RoundButton guide = new RoundButton();
             guide.Text = "新手引导";
-            guide.Size = new Size(104, 36);
+            guide.Size = new Size(S(104), S(36));
             guide.Fill = Color.FromArgb(236, 240, 246);
             guide.FillHover = Color.FromArgb(226, 233, 243);
             guide.TextColor = Color.FromArgb(40, 90, 150);
             guide.Font = new Font("Microsoft YaHei UI", 10f);
-            guide.Margin = new Padding(0, 2, 0, 0);
+            guide.Margin = Pad(0, 2, 0, 0);
             guide.Click += new EventHandler(delegate(object o, EventArgs e2)
             { GuideForm gf = new GuideForm(); gf.ShowDialog(this); });
 
             // 还原默认设置：只重置设置项，不动你的图片和 Wheel 内容
             RoundButton reset = new RoundButton();
             reset.Text = "还原默认";
-            reset.Size = new Size(104, 36);
+            reset.Size = new Size(S(104), S(36));
             reset.Fill = Color.FromArgb(252, 238, 236);
             reset.FillHover = Color.FromArgb(248, 224, 220);
             reset.TextColor = Color.FromArgb(178, 66, 52);
             reset.Font = new Font("Microsoft YaHei UI", 10f);
-            reset.Margin = new Padding(10, 2, 0, 0);
+            reset.Margin = Pad(10, 2, 0, 0);
             reset.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
                 DialogResult r2 = MessageBox.Show(this,
@@ -322,12 +342,12 @@ namespace SnapWheel
             // 打赏：收款码弹窗（刻意不写进说明、不显眼，见 84-Reward.cs）
             RoundButton tip = new RoundButton();
             tip.Text = "打赏";
-            tip.Size = new Size(104, 36);
+            tip.Size = new Size(S(104), S(36));
             tip.Fill = Color.FromArgb(252, 246, 234);
             tip.FillHover = Color.FromArgb(248, 236, 216);
             tip.TextColor = Color.FromArgb(160, 116, 30);
             tip.Font = new Font("Microsoft YaHei UI", 10f);
-            tip.Margin = new Padding(10, 2, 0, 0);
+            tip.Margin = Pad(10, 2, 0, 0);
             tip.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
                 try { using (RewardForm rf = new RewardForm()) rf.ShowDialog(this); }
@@ -365,7 +385,7 @@ namespace SnapWheel
             about.AutoSize = true;
             about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
             about.ForeColor = Color.FromArgb(150, 150, 160);
-            about.Margin = new Padding(0, 2, 0, 0);
+            about.Margin = Pad(0, 2, 0, 0);
             root.Controls.Add(about, 0, 4);
 
             ShowPage(0);             // 只建第 1 页
@@ -396,7 +416,7 @@ namespace SnapWheel
 
             _cmbHotkey = new ComboBox();
             _cmbHotkey.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbHotkey.Width = 170;
+            _cmbHotkey.Width = S(170);
             _cmbHotkey.Margin = new Padding(0, 6, 0, 0);
             _cmbHotkey.Items.AddRange(HotkeyUtil.Names);
             _cmbHotkey.SelectedItem = s.Hotkey;
@@ -412,7 +432,7 @@ namespace SnapWheel
 
             _cmbCorner = new ComboBox();
             _cmbCorner.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbCorner.Width = 170;
+            _cmbCorner.Width = S(170);
             _cmbCorner.Margin = new Padding(0, 6, 0, 0);
             _cmbCorner.Items.AddRange(new object[] { "左下角", "右下角", "左上角", "右上角" });
             _cmbCorner.SelectedIndex = CornerIndex(s.Corner);
@@ -428,7 +448,7 @@ namespace SnapWheel
 
             _cmbDel = new ComboBox();
             _cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbDel.Width = 170;
+            _cmbDel.Width = S(170);
             _cmbDel.Margin = new Padding(0, 6, 0, 0);
             _cmbDel.Items.AddRange(new object[] { "双击右键删除", "单击右键删除" });
             _cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
@@ -443,7 +463,7 @@ namespace SnapWheel
 
             _cmbSwitch = new ComboBox();
             _cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbSwitch.Width = 170;
+            _cmbSwitch.Width = S(170);
             _cmbSwitch.Margin = new Padding(0, 6, 0, 0);
             _cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
             _cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
@@ -452,12 +472,12 @@ namespace SnapWheel
             // 保存目录这一行本来就宽，横跨两列（否则两列加起来会顶破窗口宽度）
             _txtDir = new TextBox();
             _txtDir.Text = s.Dir;
-            _txtDir.Width = 300;
+            _txtDir.Width = S(300);
             _txtDir.Margin = new Padding(0, 5, 8, 0);
             Button browse = new Button();
             browse.Text = "浏览";
             browse.AutoSize = true;
-            browse.MinimumSize = new Size(60, 26);
+            browse.MinimumSize = new Size(S(60), S(26));
             browse.Margin = new Padding(0, 4, 0, 0);
             browse.Click += new EventHandler(delegate(object o, EventArgs e2) {
                 FolderBrowserDialog d = new FolderBrowserDialog();
@@ -481,13 +501,13 @@ namespace SnapWheel
             _chkCopy.AutoSize = true;
             _chkCopy.Text = "截图后同时复制到剪贴板（要立刻粘贴时直接 Ctrl+V）";
             _chkCopy.Checked = s.CopyOnCapture;
-            _chkCopy.Margin = new Padding(6, 3, 0, 3);
+            _chkCopy.Margin = new Padding(S(6), 3, 0, 3);
 
             _chkBalloon = new CheckBox();
             _chkBalloon.AutoSize = true;
             _chkBalloon.Text = "显示托盘气泡提示";
             _chkBalloon.Checked = s.ShowBalloon;
-            _chkBalloon.Margin = new Padding(6, 3, 0, 3);
+            _chkBalloon.Margin = new Padding(S(6), 3, 0, 3);
 
             Control clipRow = Row(_chkClip, _chkCopy, _chkBalloon);
             g.Controls.Add(clipRow, 0, 6);
@@ -533,7 +553,7 @@ namespace SnapWheel
             _chkScrollReset.AutoSize = true;
             _chkScrollReset.Text = "截图后把滚动位置重置到最新那张（好让滑入动画看得见）";
             _chkScrollReset.Checked = s.ResetScrollOnCapture;
-            _chkScrollReset.Margin = new Padding(30, 4, 0, 4);
+            _chkScrollReset.Margin = new Padding(S(30), 4, 0, 4);
             Control peekRow = Row(MkLabel("长按放大(%)"), _numPeek, _chkScrollReset);
             g.Controls.Add(peekRow, 0, 2);
             g.SetColumnSpan(peekRow, 2);
@@ -542,7 +562,7 @@ namespace SnapWheel
             _cmbScale = new ComboBox();
             _cmbScale.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbScale.FlatStyle = FlatStyle.Flat;
-            _cmbScale.Width = 170;
+            _cmbScale.Width = S(170);
             _cmbScale.Margin = new Padding(0, 6, 0, 0);
             _cmbScale.Items.Add("自动（按显示器 DPI）");
             for (int i = 1; i < scVals.Length; i++) _cmbScale.Items.Add(scVals[i] + "%");
@@ -561,7 +581,7 @@ namespace SnapWheel
             _cmbRing = new ComboBox();
             _cmbRing.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbRing.FlatStyle = FlatStyle.Flat;
-            _cmbRing.Width = 130;
+            _cmbRing.Width = S(130);
             _cmbRing.Margin = new Padding(0, 6, 0, 0);
             for (int i = 0; i < ringNames.Length; i++) _cmbRing.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
             _cmbRing.SelectedIndex = 2;
@@ -578,7 +598,7 @@ namespace SnapWheel
             _cmbRing2 = new ComboBox();
             _cmbRing2.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbRing2.FlatStyle = FlatStyle.Flat;
-            _cmbRing2.Width = 130;
+            _cmbRing2.Width = S(130);
             _cmbRing2.Margin = new Padding(0, 6, 0, 0);
             for (int i = 0; i < ringNames.Length; i++) _cmbRing2.Items.Add(ringNames[i] + "（" + ringVals[i] + "%）");
             _cmbRing2.SelectedIndex = 2;
@@ -621,7 +641,7 @@ namespace SnapWheel
             _cmbStyle = new ComboBox();
             _cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbStyle.FlatStyle = FlatStyle.Flat;
-            _cmbStyle.Width = 170;
+            _cmbStyle.Width = S(170);
             _cmbStyle.Margin = new Padding(0, 6, 0, 0);
             _cmbStyle.Items.AddRange(new object[] { "新拟态 + 毛玻璃", "纯扁平", "高对比（不透明）" });
             _cmbStyle.SelectedIndex = (s.UiStyle == "flat") ? 1 : (s.UiStyle == "solid" ? 2 : 0);
@@ -629,7 +649,7 @@ namespace SnapWheel
             _cmbAccent = new ComboBox();
             _cmbAccent.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbAccent.FlatStyle = FlatStyle.Flat;
-            _cmbAccent.Width = 170;
+            _cmbAccent.Width = S(170);
             _cmbAccent.Margin = new Padding(0, 6, 0, 0);
             _cmbAccent.Items.Add("跟随 Wheel 颜色");
             for (int i = 0; i < Palette.Names.Length; i++) _cmbAccent.Items.Add("统一：" + Palette.Names[i]);
@@ -641,7 +661,7 @@ namespace SnapWheel
             _cmbAnim = new ComboBox();
             _cmbAnim.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbAnim.FlatStyle = FlatStyle.Flat;
-            _cmbAnim.Width = 170;
+            _cmbAnim.Width = S(170);
             _cmbAnim.Margin = new Padding(0, 6, 0, 0);
             _cmbAnim.Items.AddRange(new object[] { "慢", "标准", "快" });
             _cmbAnim.SelectedIndex = (s.AnimSpeed <= 85) ? 0 : (s.AnimSpeed >= 120 ? 2 : 1);
@@ -655,7 +675,7 @@ namespace SnapWheel
             _chkCount.AutoSize = true;
             _chkCount.Text = "显示计数标签";
             _chkCount.Checked = s.ShowCountLabel;
-            _chkCount.Margin = new Padding(20, 10, 0, 0);
+            _chkCount.Margin = new Padding(S(20), 10, 0, 0);
             Control animRow = Row(MkLabel("动画速度"), _cmbAnim, Gap(24), _chkName, _chkCount);
             g.Controls.Add(animRow, 0, 2);
             g.SetColumnSpan(animRow, 2);
@@ -689,7 +709,7 @@ namespace SnapWheel
             {
                 ComboBox kb = new ComboBox();
                 kb.DropDownStyle = ComboBoxStyle.DropDownList;
-                kb.Width = 150;
+                kb.Width = S(150);
                 kb.Margin = new Padding(0, 6, 14, 0);
                 for (int j = 0; j < Settings.KeyActionIds.Length; j++)
                     kb.Items.Add(Settings.KeyActionName(Settings.KeyActionIds[j]));
@@ -1049,52 +1069,52 @@ namespace SnapWheel
             for (int i = 0; i < rows; i++) g.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
-        static Label MkLabel(string t)
+        Label MkLabel(string t)
         {
             Label l = new Label();
             l.AutoSize = true;
             l.Text = t;
             l.TextAlign = ContentAlignment.MiddleLeft;
-            l.Margin = new Padding(0, 10, 12, 0);
+            l.Margin = Pad(0, 10, 12, 0);
             return l;
         }
 
-        static Label Section(string t)
+        Label Section(string t)
         {
             Label l = new Label();
             l.AutoSize = true;
             l.Text = t;
             l.Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
             l.ForeColor = Color.FromArgb(0, 122, 204);
-            l.Margin = new Padding(0, 14, 0, 2);
+            l.Margin = Pad(0, 14, 0, 2);
             return l;
         }
 
-        static Control Gap(int w)
+        Control Gap(int w)
         {
             Control c = new Control();
-            c.Width = w; c.Height = 1;
+            c.Width = S(w); c.Height = 1;
             c.Margin = new Padding(0);
             return c;
         }
 
-        static NumericUpDown Num(int mn, int mx, int val)
+        NumericUpDown Num(int mn, int mx, int val)
         {
             NumericUpDown n = new NumericUpDown();
             n.Minimum = mn; n.Maximum = mx; n.Value = val;
-            n.Width = 72;
-            n.Height = 26;
-            n.Margin = new Padding(0, 7, 10, 0);
+            n.Width = S(72);
+            n.Height = S(26);
+            n.Margin = Pad(0, 7, 10, 0);
             return n;
         }
 
-        static FlowLayoutPanel Row(params Control[] cs)
+        FlowLayoutPanel Row(params Control[] cs)
         {
             RowPanel f = new RowPanel();
             f.AutoSize = true;
             f.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             f.WrapContents = false;
-            f.Margin = new Padding(0, 5, 0, 5);   // 行距：设置项变多了，压紧一点免得窗口太高
+            f.Margin = Pad(0, 5, 0, 5);   // 行距：设置项变多了，压紧一点免得窗口太高（跟着 DPI 走）
             for (int i = 0; i < cs.Length; i++) f.Controls.Add(cs[i]);
             return f;
         }
@@ -1157,6 +1177,7 @@ namespace SnapWheel
     class PageDial : Control
     {
         public string[] Names = new string[0];
+        public float K = 1f;                // DPI 缩放系数（由 SettingsForm 传进来；只作用在"长度"上）
         public int Current;
         // 刚被点中的扇区（交给 SettingsForm 决定要不要翻：动画期间它会忽略，所以这里不自己改 Current）
         public int Picked { get; set; }
@@ -1175,8 +1196,8 @@ namespace SnapWheel
         static readonly Font TitleFont = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
 
         const float SweepTotal = 150f;      // 整个圆弧张开的度数（其余留白，看起来才像"顶部一小段弧"）
-        const float BandW = 24f;            // 弧的厚度
-        const float LiftPx = 2.2f;          // 当前页那一瓣往外凸出去多少（凸起也是平滑过渡的）
+        const float BandW = 24f;            // 弧的厚度（乘以 K 才是实际像素）
+        const float LiftPx = 2.2f;          // 当前页那一瓣往外凸出去多少（凸起也是平滑过渡的，乘以 K）
 
         // ---- 按住拖动转环（v0.5.2 追加：和主界面轮盘"能转"的手感对齐）----
         // 环整圈 = 四瓣 = 150°（SweepTotal），所以"转回正位"的周期就是 150°：
@@ -1240,8 +1261,8 @@ namespace SnapWheel
         int Count { get { return Names == null ? 0 : Names.Length; } }
         float Cx { get { return Width / 2f; } }
         float Cy { get { return Height - 4f; } }                    // 圆心落在控件底边上：只露出上半圆
-        float Ro { get { return Math.Min(92f, Height - 8f); } }
-        float Ri { get { return Ro - BandW; } }
+        float Ro { get { return Math.Min(92f * K, Height - 8f); } }
+        float Ri { get { return Ro - BandW * K; } }
 
         // 扇区环带路径（外弧顺着画、内弧倒着画，中间留一点缝，瓣与瓣之间才看得出分界）
         static GraphicsPath Band(float cx, float cy, float ri, float ro, float start, float sweep)
@@ -1312,7 +1333,7 @@ namespace SnapWheel
                         bool hot = (i == _hover) && w < 0.5f && _drag == 0;
                         // 高亮 = 从"常态底"往主题色插值；同时整瓣沿半径往外凸一点（凸起跟着高亮一起走）
                         double midA = (start + sweep / 2f) * Math.PI / 180.0;
-                        float lift = LiftPx * w;
+                        float lift = LiftPx * K * w;
                         float ox = (float)(Math.Cos(midA) * lift), oy = (float)(Math.Sin(midA) * lift);
                         using (GraphicsPath p = Band(Cx + ox, Cy + oy, Ri, Ro, start + 1.2f, sweep - 2.4f))
                         {
@@ -1339,12 +1360,12 @@ namespace SnapWheel
                 {
                     float start, sweep; PointF mid;
                     SectorAt(i, r2, out start, out sweep, out mid);
-                    if (mid.X < 8 || mid.X > Width - 8) continue;
+                    if (mid.X < 8 * K || mid.X > Width - 8 * K) continue;
                     // 中心角必须落在窗口内（留一点余量给数字本身）
                     double rel = (start + sweep / 2f) - (270.0 - SweepTotal / 2.0);
                     if (rel < 0) rel += 360.0;
                     if (rel < 13 || rel > SweepTotal - 13) continue;
-                    Rectangle numRc = new Rectangle((int)mid.X - 12, (int)mid.Y - 9, 24, 18);
+                    Rectangle numRc = new Rectangle((int)mid.X - (int)(12 * K), (int)mid.Y - (int)(9 * K), (int)(24 * K), (int)(18 * K));
                     TextRenderer.DrawText(g, (i + 1).ToString(), NumFont, numRc,
                         Mix(NumIdle, Color.White, Weight(i)),
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -1355,8 +1376,8 @@ namespace SnapWheel
             int show = (AnimT < 0.5f && AnimFrom >= 0 && AnimFrom < n) ? AnimFrom : Current;
             if (show < 0 || show >= n) show = AnimTo >= 0 && AnimTo < n ? AnimTo : 0;
             string t = (show >= 0 && show < n) ? Names[show] : "";
-            int tw = TextRenderer.MeasureText(t, TitleFont).Width + 12;
-            Rectangle rc = new Rectangle((int)(Cx - tw / 2f), (int)(Cy - Ri + 34f), tw, 26);
+            int tw = TextRenderer.MeasureText(t, TitleFont).Width + (int)(12 * K);
+            Rectangle rc = new Rectangle((int)(Cx - tw / 2f), (int)(Cy - Ri + 34f * K), tw, (int)(26 * K));
             TextRenderer.DrawText(g, t, TitleFont, rc, Color.FromArgb(64, 70, 82),
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }

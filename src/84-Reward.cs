@@ -452,7 +452,11 @@ namespace SnapWheel
             }
             catch { }
 
-            int pad = 24, y = 18;
+            // 间距按 DPI 走：150% 下 14pt 标题的真实高度是 40px 上下，写死 36px 的行距会跟副标题叠在一起
+            float dk = 1f;
+            try { dk = Native.DpiScaleOf(IntPtr.Zero); } catch { dk = 1f; }
+            if (!(dk >= 1f)) dk = 1f; if (dk > 3f) dk = 3f;
+            int pad = (int)Math.Round(24 * dk), y = (int)Math.Round(18 * dk);
             Label head = new Label();
             head.Text = "请作者喝杯咖啡";
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
@@ -460,15 +464,15 @@ namespace SnapWheel
             head.AutoSize = true;
             head.Location = new Point(pad, y);
             Controls.Add(head);
-            y += 36;
+            y += (int)Math.Round(38 * dk);
 
             Label sub = new Label();
             sub.Text = img != null ? "扫码打赏，随心意就好 —— 不打赏也完全不影响使用。" : "收款码没读出来（图片数据坏了），重装一次应该就好。";
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             sub.AutoSize = true;
-            sub.Location = new Point(pad + 2, y);
+            sub.Location = new Point(pad + (int)Math.Round(2 * dk), y);
             Controls.Add(sub);
-            y += 30;
+            y += (int)Math.Round(30 * dk);
 
             _pic = new PictureBox();
             _pic.Image = img;
@@ -477,7 +481,7 @@ namespace SnapWheel
             _pic.Size = new Size(iw, ih);
             _pic.Location = new Point(pad, y);
             Controls.Add(_pic);
-            y += ih + 10;
+            y += ih + (int)Math.Round(10 * dk);
 
             Label hint = new Label();
             hint.Text = "按 Esc、点窗口外面，或点右上角 × 关掉";
@@ -485,7 +489,7 @@ namespace SnapWheel
             hint.AutoSize = true;
             hint.Location = new Point(pad, y);
             Controls.Add(hint);
-            y += 22;
+            y += (int)Math.Round(22 * dk);
 
             ClientSize = new Size(iw + pad * 2, y + 8);
             CancelButton = null;

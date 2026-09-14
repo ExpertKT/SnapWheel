@@ -46,7 +46,8 @@ namespace SnapWheel
             Color c = hot ? FillHover : Fill;
             if (Ghost) c = Color.FromArgb(hot ? 240 : 200, c.R, c.G, c.B);
 
-            using (GraphicsPath p = Gfx.Round(r, 10f))
+            // 圆角按高度算（28% 高度）：写死 10f 的话，高 DPI 下按钮被放大 1.5 倍、圆角却不变，看着就不搭了
+            using (GraphicsPath p = Gfx.Round(r, Math.Max(2f, r.Height * 0.28f)))
             {
                 if (down)
                 {
