@@ -308,6 +308,50 @@ namespace SnapWheel
             catch { return null; }
         }
 
+        // 把一张"整窗口尺寸"的玻璃底裁进当前形状 —— 只取形状真正会用到的那一小块源图。
+        // 为什么必须这么干：一张 822x822 的底，裁进 6 张卡片 + 十来个控件（万能键盘/圆按钮/药丸/把手），
+        // 每次都让 GDI+ 把**整张图**过一遍采样，一帧就是十几倍全窗口的开销（实测卡片底 2.5ms x 6 张）。
+        // 这里按形状的包围盒把源矩形缩到实际需要的几十像素见方，画出来完全一样、只是不再白算。
+        // 只在交叉淡入分支用：稳态那一路的画法（乃至它的采样细节）一个字都不动，别去碰用户天天看的那张毛玻璃。
+        void DrawGlassCrop(Graphics g, Bitmap bmp, GraphicsPath path, int al)
+        {
+            try
+            {
+                // 形状在**设备坐标**下的包围盒：当前变换里既有 UiK 缩放、也可能有控件层的位移
+                RectangleF pb = path.GetBounds(g.Transform);
+                if (pb.Width < 1f || pb.Height < 1f) return;
+                // 往外放 3px：抗锯齿的边缘 + 后面换算的取整，不能露出一条没画到的缝
+                float pad = 3f;
+                int sx = (int)Math.Floor(pb.X - pad) - _backdropOffset.X;
+                int sy = (int)Math.Floor(pb.Y - pad) - _backdropOffset.Y;
+                int sw = (int)Math.Ceiling(pb.Width + pad * 2f + 2f);
+                int sh = (int)Math.Ceiling(pb.Height + pad * 2f + 2f);
+                if (sx < 0) { sw += sx; sx = 0; }
+                if (sy < 0) { sh += sy; sy = 0; }
+                if (sx + sw > bmp.Width) sw = bmp.Width - sx;
+                if (sy + sh > bmp.Height) sh = bmp.Height - sy;
+                if (sw < 1 || sh < 1) return;
+                // 目标直接用**设备像素整数矩形**：临时把画布变换复位（裁剪区是按设备坐标记住的，
+                // 复位不影响它），于是这是一次 1:1 贴图，既不缩放也不重采样 ——
+                // 而且落点和稳态那条"整张图画进 dest"的路完全同一个像素位置，换路时不会跳。
+                System.Drawing.Drawing2D.Matrix m = g.Transform;
+                try
+                {
+                    g.ResetTransform();
+                    Rectangle dd = new Rectangle(sx + _backdropOffset.X, sy + _backdropOffset.Y, sw, sh);
+                    if (al >= 250) g.DrawImage(bmp, dd, sx, sy, sw, sh, GraphicsUnit.Pixel);   // 满 alpha 就别走 ColorMatrix（慢路径）
+                    else
+                    {
+                        ColorMatrix cmo = new ColorMatrix(); cmo.Matrix33 = al / 255f;
+                        _iaBack.SetColorMatrix(cmo);
+                        g.DrawImage(bmp, dd, sx, sy, sw, sh, GraphicsUnit.Pixel, _iaBack);
+                    }
+                }
+                finally { try { g.Transform = m; } catch { } }
+            }
+            catch { }
+        }
+
         // 把模糊背景裁进这个形状里（画玻璃面板前先调它）
         // alpha 必须传进来：否则淡出动画时玻璃底不跟着变淡，面板会像"卡住"一样不消失
         void BackdropClip(Graphics g, GraphicsPath path, int alpha)
@@ -330,18 +374,7 @@ namespace SnapWheel
                     // 8 张卡片就是 16 次全窗口绘制 —— 实测这一档每帧 20ms 就是这么来的。
                     // 现在整帧只混一次（BackdropMix），每张卡片只画一张图。
                     Bitmap mix = BackdropMix();
-                    if (mix != null)
-                    {
-                        Rectangle mdest = new Rectangle((int)Math.Round(dest.X), (int)Math.Round(dest.Y),
-                            Math.Max(1, (int)Math.Round(mix.Width / UiK)), Math.Max(1, (int)Math.Round(mix.Height / UiK)));
-                        if (al >= 250) g.DrawImage(mix, mdest);        // 满 alpha 就别走 ColorMatrix（慢路径）
-                        else
-                        {
-                            ColorMatrix cmo = new ColorMatrix(); cmo.Matrix33 = al / 255f;
-                            _iaBack.SetColorMatrix(cmo);
-                            g.DrawImage(mix, mdest, 0, 0, mix.Width, mix.Height, GraphicsUnit.Pixel, _iaBack);
-                        }
-                    }
+                    if (mix != null) DrawGlassCrop(g, mix, path, al);
                 }
                 else
                 {
