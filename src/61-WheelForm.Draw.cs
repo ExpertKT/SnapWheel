@@ -1112,7 +1112,7 @@ namespace SnapWheel
                 // 0.5.3：视口锚点改成"最新那张顶在弧上端"之后，`_offset` 是**弧下端那一格**的下标，
                 // 所以可见区里最靠上（最新）的那张 = _offset + Slots。这么写，默认视口下就是 N/N
                 // （最新那张在最上面），往上滚会依次变小 —— 和以前"跟着滚动位置变"的语义一致。
-                int cur = (int)Math.Round(_offset) + _slots;
+                int cur = (int)Math.Round(_targetOffset) + _slots;   // 用目标值：滚轮一滚就更新（用 _offset 要等动画追上去，看着像没变）
                 if (cur < 1) cur = 1;
                 if (cur > _store.Items.Count) cur = _store.Items.Count;
                 string idx = cur + " / " + _store.Items.Count;
