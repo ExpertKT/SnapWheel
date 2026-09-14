@@ -1156,7 +1156,6 @@ namespace SnapWheel
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
                         g.DrawString(idx, f, br, left3 + 6f + ip + 6f, ct3.Y - sz.Height / 2f);
                     }
-                }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
         }
