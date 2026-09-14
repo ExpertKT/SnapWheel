@@ -90,6 +90,7 @@ namespace SnapWheel
                 RemoveItem(prev, true);
             }
             _deletingItem = it;        // 这张交给 AnimTick 播完动画再删
+            _delIdx = _store.Items.IndexOf(it);   // 记住删的是第几张（见 AnimTick 里的视口跟进）
             _deleteProg = 0f;
         }
 

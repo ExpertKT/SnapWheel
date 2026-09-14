@@ -47,6 +47,7 @@ namespace SnapWheel
         int _peekIndex = -1;           // kept during the fade-out so the peek can animate away
         float _dragOutProg = 0f;       // 0..1 pull-out shrink progress
         StoreItem _deletingItem = null;
+        int _delIdx = -1;              // 删除发起时被删那张的下标（删除完成后让视口平滑跟进）
         float _deleteProg = 0f;
         DateTime _lastRightClick = DateTime.MinValue;
         int _lastRightIndex = -1;

@@ -316,6 +316,14 @@ namespace SnapWheel
                 {
                     StoreItem victim = _deletingItem;
                     _deletingItem = null;
+                // 0.6.0：删除后，后面每张图的下标都前移 1 —— 视口也必须跟着挪一格，
+                // 否则"上面的缩略图会瞬间下移一格"（用户反馈的瞬移、没有过渡）。
+                // 判据：删的是视口最下面那张或更靠上的，才需要 -1（可见内容位置保持不变）；
+                // 删的是视口下方的图，可见范围本来就不受影响。用 _targetOffset 而不是 _offset，
+                // 这样位移是**动画过渡**过去的，不是跳过去。
+                if (_delIdx >= 0 && _delIdx <= (int)Math.Round(_targetOffset))
+                    _targetOffset = Math.Max(MinOffset(), _targetOffset - 1f);
+                _delIdx = -1;
                     _deleteProg = 0f;
                     RemoveItem(victim, true);
                 }
