@@ -123,6 +123,19 @@ namespace SnapWheel
                 src = it.Image;
                 if (d.Count > 0) foreach (System.Collections.Generic.KeyValuePair<long, Bitmap> kv in d) { src = kv.Value; break; }
             }
+            // 放大的时候（目标比原图还大）如果没找到"够大"的现成图，就退而用缓存里**最大的那张**当源。
+            // 从已有的小图放大，比从几千像素的原图缩下来快一个数量级 —— 而画质几乎看不出差别
+            // （都是小尺寸重采样）。"大图的缩略图动画第一次播会卡"就是这个原因：
+            // 首次没有大尺寸缓存，于是每一帧都从原图重做一次高质量双三次。
+            if (src == it.Image && (dw > it.Image.Width || dh > it.Image.Height))
+            {
+                long bigA = 0;
+                foreach (KeyValuePair<long, Bitmap> kv in d)
+                {
+                    long a3 = (long)kv.Value.Width * kv.Value.Height;
+                    if (a3 > bigA) { bigA = a3; src = kv.Value; }
+                }
+            }
             b = new Bitmap(dw, dh, PixelFormat.Format32bppPArgb);
             using (Perf.Section("2c9-缩略图生成"))
             using (Graphics gg = Graphics.FromImage(b))
