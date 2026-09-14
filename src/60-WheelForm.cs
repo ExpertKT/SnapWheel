@@ -377,20 +377,32 @@ namespace SnapWheel
         float ItemPhi(int i) { return _phiMin + (i - _offset) * StepRad(); }
 
         // ============================ 视口锚点（0.5.3） ============================
-        // `_offset` 的含义没变：**落在弧下端那一格（_phiMin）上的图片下标**（可以是负数，见下）。
-        // 于是"让最新那张（下标 Count-1）顶在弧的**上端**（_phiMax）"就是：
-        //     _offset + (Slots-1) = Count-1   →   _offset = Count - Slots
-        // Count < Slots 时它是负数 —— 那正是"从弧上端开始往下堆、下端先空着"的样子。
+        // `_offset` 的含义没变：**落在弧起点那一格（_phiMin，靠屏幕角落那端）上的图片下标**。
         //
-        // 为什么改这个：以前"跟到最新"用的是 Count-1（最新那张落在**下端**那一格），
-        // 于是每截一张，之前的图全被推到弧下方看不见，而弧的上半截永远是空的（用户原话
-        // "之前的缩略图在下面全都显示不全，而 wheel 上半部分又空空的没有利用上"）。
-        // 改成"最新顶在上端"之后，老图依次往下排；堆满（Count > Slots）之后再来新图时
-        // _offset 会整体 +1，也就是**新图从上端挤进来、老图一起被往下挤一格**，
-        // 最下面那张滑出可见弧 —— 这就是用户要的堆叠逻辑。
-        float OffsetForNewest() { return _store.Items.Count - _slots; }
+        // 堆叠规则（用户要的"容器渐渐装满"）：
+        //   · **没堆满（Count ≤ Slots）**：锚在弧**起点**（_offset = 0）→ 第 0 张贴住 _phiMin，
+        //     往上一格一格摞。新图从弧上端进来、一路滑到"当前那摞的最上面一格"，所以前几张
+        //     滑得远（像往容器里放），越摞越高，底下几格是被填满的、不留空。
+        //     ⚠️ 这里以前写的是 `Count - Slots`：张数少于 Slots 时它**是负数**，整摞被顶到弧的**上端**、
+        //     下面几格永远空着，新图只滑一小段就停（用户报的"滑下来但没滑到底"）。
+        //   · **堆满（Count > Slots）**：_offset = Count - Slots → 最新那张顶在弧**上端**（_phiMax），
+        //     老图依次往下排；再来新图时 _offset 整体 +1 = 新图从上端挤进来、老图一起被往下挤一格，
+        //     最下面那张滑出可见弧（v0.5.3 前半段就是这条，不变）。
+        float OffsetForNewest() { return Math.Max(0, _store.Items.Count - _slots); }
         float MinOffset() { return OffsetForNewest(); }
         float MaxOffset() { return Math.Max(MinOffset(), _store.Items.Count - 1); }
+
+        // 入场起点：新图一律**从弧的上端滑下来**（不是从"它自己格子上方一点点"开始）。
+        //   · 堆满时它自己的格子就在弧上端 → 还是老样子（0.30 / 开启动画时 0.62），从弧外挤进来；
+        //   · 没堆满时它的格子在弧中下部 → 这里把起点抬到 _phiMax 再往外 0.10，于是一路滑到底。
+        // 上限 1.10 是防呆（弧本身只有 _phiMax-_phiMin ≈ 0.96 宽，再多就是无意义的空滑）。
+        float EnterSlide(int i, float baseSlide)
+        {
+            float d = (_phiMax + 0.10f) - ItemPhi(i);
+            if (d > 1.10f) d = 1.10f;
+            return d > baseSlide ? d : baseSlide;
+        }
+
 
         PointF ItemCenter(int i) { return ItemCenterAtPhi(ItemPhi(i)); }
 

@@ -1612,7 +1612,7 @@ namespace SnapWheel
                 float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
                 float step = Convert.ToSingle(Call(f, "StepRad"));
 
-                // 先喂 4 张（没堆满）：最新的顶在上端，越老越往下
+                // 先喂 4 张（没堆满）：**锚在弧起点**，从下往上一格一格摞（新图落在"当前那摞的最上一格"）
                 for (int i = 0; i < 4; i++) { f.MarkNew(st.Add(Solid(40, 30, Color.FromArgb(60 + i * 30, 120, 190)))); Settle(f, 260); }
                 for (int i = 0; i < st.Items.Count - 1; i++)
                 {
@@ -1622,14 +1622,39 @@ namespace SnapWheel
                         return "没堆满时就乱了：第" + (i + 1) + "张 phi=" + a.ToString("0.000") +
                                "，第" + (i + 2) + "张 phi=" + b.ToString("0.000") + "（步长 " + step.ToString("0.000") + "）";
                 }
+                // 没堆满时第 0 张贴住弧起点（下面几格不留空）+ 视口锚点恒为 0
+                float base4 = Convert.ToSingle(Call(f, "ItemPhi", 0));
+                if (Math.Abs(base4 - pmin) > 0.02f)
+                    return "没堆满时第 1 张没贴住弧起点：ItemPhi(0)=" + base4.ToString("0.000") + "，_phiMin=" + pmin.ToString("0.000");
                 float top4 = Convert.ToSingle(Call(f, "ItemPhi", 3));
-                if (Math.Abs(top4 - pmax) > 0.03f)
-                    return "第 4 张（最新的）没顶在弧上端：phi=" + top4.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
-                if (Math.Abs(Convert.ToSingle(G(f, "_offset")) - (4 - s.Slots)) > 0.02f)
-                    return "视口锚点不对：_offset=" + G(f, "_offset") + "，期望 " + (4 - s.Slots);
+                if (Math.Abs(top4 - (pmin + 3 * step)) > 0.03f)
+                    return "第 4 张（最新的）没落在这一摞的最上一格：phi=" + top4.ToString("0.000") +
+                           "，期望=" + (pmin + 3 * step).ToString("0.000");
+                if (Math.Abs(Convert.ToSingle(G(f, "_offset")) - 0) > 0.02f)
+                    return "没堆满时视口锚点不是弧起点：_offset=" + G(f, "_offset") + "，期望 0";
 
-                // 再喂第 5、6 张：堆满之后新图把整排往下挤一格
-                for (int k = 5; k <= 6; k++)
+                // 再喂第 5 张：正好堆满（锚点仍是 0）—— 老图一张都不动，新图落在弧上端那一格
+                {
+                    int n = st.Items.Count;
+                    float[] before5 = new float[n];
+                    for (int i = 0; i < n; i++) before5[i] = Convert.ToSingle(Call(f, "ItemPhi", i));
+                    StoreItem it5 = st.Add(Solid(40, 30, Color.FromArgb(200, 90, 60)));
+                    int idx5 = st.Items.IndexOf(it5);
+                    f.MarkNew(it5);
+                    Settle(f, 400);
+                    float p5 = Convert.ToSingle(Call(f, "ItemPhi", idx5));
+                    if (Math.Abs(p5 - pmax) > 0.03f)
+                        return "刚堆满那一张没落在弧上端：phi=" + p5.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
+                    for (int i = 0; i < n; i++)
+                    {
+                        float d = Convert.ToSingle(Call(f, "ItemPhi", i)) - before5[i];
+                        if (Math.Abs(d) > 0.001f)
+                            return "刚堆满（Count=Slots）时旧图不该动：第" + (i + 1) + "张位移=" + d.ToString("0.000");
+                    }
+                }
+
+                // 再喂第 6、7 张：溢出之后新图把整排往下挤一格
+                for (int k = 6; k <= 7; k++)
                 {
                     int n = st.Items.Count;
                     float[] before = new float[n];
@@ -1785,6 +1810,84 @@ namespace SnapWheel
                 if (r.Width <= 0f || r.Height <= 0f) return "新图落位后画不出来（矩形是空的）";
                 float phiEnd = Convert.ToSingle(Call(f, "ItemPhi", idx));
                 if (phiEnd > Convert.ToSingle(G(f, "_phiMax")) + 0.03f) return "新图落在可见弧之外：ItemPhi=" + phiEnd.ToString("0.000");
+                return null;
+            });
+
+            // ================= 49. 没堆满时：从弧起点往上摞，新图一路从弧上端滑下来 =================
+            // 用户报的"滑下来但没滑到底"：以前 Count<Slots 时锚点是负数，整摞被顶到弧上端、下面几格空着。
+            // 现在锚在弧起点，新图一律从弧上端进场、滑行距离随摞高递减（"往容器里放"的手感）。
+            Run("没堆满时：第 1 张贴住弧起点，新图一律从弧上端单调下滑并入摞（滑行距离随摞高递减）", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.ThumbSize = 96; s.Radius = 256; s.Slots = 5; s.Corner = "BL";
+                s.IntroAnim = false;
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+
+                float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
+                float step = Convert.ToSingle(Call(f, "StepRad"));
+                float[] slideLen = new float[5];
+
+                for (int k = 1; k <= 4; k++)
+                {
+                    int n0 = st.Items.Count;
+                    float[] before = new float[n0];
+                    for (int i = 0; i < n0; i++) before[i] = Convert.ToSingle(Call(f, "ItemPhi", i));
+
+                    StoreItem it = st.Add(Solid(200, 140, Color.FromArgb(60 + k * 40, 120, 190)));
+                    int idx = st.Items.IndexOf(it);
+                    f.MarkNew(it);
+
+                    float firstPhi = 0f, lastPhi = 0f; bool haveFirst = false, mono = true; float prev = float.MaxValue;
+                    bool everVisible = false;
+                    for (int fr = 0; fr < 40; fr++)
+                    {
+                        float pr = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                        float ph = Convert.ToSingle(Call(f, "ItemPhi", idx));
+                        bool intro = Convert.ToBoolean(G(f, "_intro"));
+                        bool collapsing = Convert.ToBoolean(G(f, "_collapsing"));
+                        float sl = Convert.ToSingle(Call(f, "EnterSlide", idx, (intro || collapsing) ? 0.62f : 0.30f));
+                        float pd = ph + (1f - pr) * sl;
+                        bool vis = pr > 0.001f && !(pd < pmin - 0.50f || pd > pmax + 0.50f);
+                        if (vis)
+                        {
+                            if (!haveFirst) { firstPhi = pd; haveFirst = true; }
+                            if (pd > prev + 0.001f) mono = false;
+                            prev = pd; everVisible = true;
+                        }
+                        lastPhi = ph;
+                        Call(f, "AnimTickCore");
+                        Application.DoEvents();
+                        Thread.Sleep(9);
+                    }
+                    Settle(f, 300);
+
+                    float basePhi = Convert.ToSingle(Call(f, "ItemPhi", 0));
+                    if (Math.Abs(basePhi - pmin) > 0.02f)
+                        return "喂到第 " + k + " 张时第 1 张没贴住弧起点：ItemPhi(0)=" + basePhi.ToString("0.000") + "，_phiMin=" + pmin.ToString("0.000");
+                    if (Math.Abs(Convert.ToSingle(G(f, "_offset"))) > 0.02f)
+                        return "喂到第 " + k + " 张时视口锚点不是 0：_offset=" + G(f, "_offset");
+                    if (!everVisible || firstPhi < pmax - 0.02f)
+                        return "第 " + k + " 张不是从弧上端进场的：首次可见处 phi=" + firstPhi.ToString("0.000") + "，_phiMax=" + pmax.ToString("0.000");
+                    if (!mono) return "第 " + k + " 张下滑不单调";
+                    float want = pmin + (st.Items.Count - 1) * step;
+                    if (Math.Abs(lastPhi - want) > 0.03f)
+                        return "第 " + k + " 张没落在这一摞的最上一格：phi=" + lastPhi.ToString("0.000") + "，期望=" + want.ToString("0.000");
+                    for (int i = 0; i < n0; i++)
+                    {
+                        float d = Convert.ToSingle(Call(f, "ItemPhi", i)) - before[i];
+                        if (Math.Abs(d) > 0.001f) return "没堆满时旧图不该动：第" + (i + 1) + "张位移=" + d.ToString("0.000");
+                    }
+                    slideLen[k] = firstPhi - lastPhi;
+                }
+                for (int k = 2; k <= 4; k++)
+                    if (!(slideLen[k] < slideLen[k - 1] - 0.05f))
+                        return "滑行距离没有随摞高递减：第" + (k - 1) + "张 " + slideLen[k - 1].ToString("0.000") +
+                               " -> 第" + k + "张 " + slideLen[k].ToString("0.000") + "（应当越来越短）";
                 return null;
             });
 

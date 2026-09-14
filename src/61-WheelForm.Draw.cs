@@ -429,7 +429,9 @@ namespace SnapWheel
                     float pr = EnterProgress(i);
                     if (!_collapsed) pr *= CollapseCardP();          // 收起时图片先淡出、沿弧退回角落
                     if (pr <= 0.001f) continue;
-                    float slide = (_intro || _collapsing) ? 0.62f : 0.30f;   // 开启动画时排得更开，像排队滑下来
+                    // 入场一律从**弧的上端**滑下来（EnterSlide 见 60-WheelForm.cs）：
+                    // 堆满时就是老样子 0.30 / 开启动画 0.62；没堆满时一路从 _phiMax 滑到自己的格子
+                    float slide = EnterSlide(i, (_intro || _collapsing) ? 0.62f : 0.30f);
                     float phi = ItemPhi(i) + (1f - pr) * slide;      // slide along the arc
                     if (phi < _phiMin - 0.50f || phi > _phiMax + 0.50f) continue;
                     PointF pc = ItemCenterAtPhi(phi);
