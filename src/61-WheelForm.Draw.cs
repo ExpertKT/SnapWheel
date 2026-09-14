@@ -311,7 +311,7 @@ namespace SnapWheel
 
         // 万能键：新拟态玻璃圆盘 —— 玻璃底 + 上亮下暗 + 主题色核心，按下时核心点亮并轻微放大
         // 小按钮悬停时的外发光：和万能键同款（PathGradientBrush 中心亮、外围透明）。
-        // 抽成方法是因为三处内联会和各自作用域里的局部变量重名（编译期才发现，很烦）。
+        // 抽成方法而不是内联三份：内联会和各自作用域里的局部变量重名（编译期才发现，很烦）。
         void DrawBtnGlow(Graphics g, Rectangle r, bool hot)
         {
             if (!hot || !StyleNeu() || _settings.ShadowPercent <= 8) return;
@@ -834,9 +834,7 @@ namespace SnapWheel
             // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
             PointF c = Center();
             Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
-            DrawBtnGlow(g, cbr, _closeHover);   // 悬停时和万能键一样的发光
-                }
-            }
+            DrawBtnGlow(g, cbr, _closeHover);
             Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
             PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
@@ -889,9 +887,7 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
-            DrawBtnGlow(g, gbr, _gearHover);   // 悬停时和万能键一样的发光
-                }
-            }
+            DrawBtnGlow(g, gbr, _gearHover);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
                 Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
@@ -1055,9 +1051,7 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
-            DrawBtnGlow(g, sbr, _shootHover);   // 悬停时和万能键一样的发光
-                }
-            }
+            DrawBtnGlow(g, sbr, _shootHover);
             if (pb2 > 0.01f)
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
