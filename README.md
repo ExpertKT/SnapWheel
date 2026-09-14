@@ -1,6 +1,10 @@
 # SnapWheel 快照轮环
 
-> 贴在屏幕角落的截图工具：截完自动滑进环里，拖出去就用，也能把图拖回来收着。
+> **截完图还要先保存、再切窗口、再去文件夹里翻出来 —— 其实你只是想把这张图粘进微信。**
+
+**SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
+
+绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个约 200KB 的 exe，Windows 10 / 11 双击就跑。
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
@@ -8,6 +12,20 @@
 ![version](https://img.shields.io/badge/version-v0.5.2-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-191%20KB-lightgrey?style=flat-square)
+![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
+![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
+
+<p align="center">
+  <img src="docs/demo.gif" width="720" alt="框选 → 图滑进角落的轮环 → 拖进聊天框">
+  <br><sub>框选 → 图自动滑进角落的环里 → 拖出去直接用（图还留在环上）</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ExpertKT/SnapWheel/releases/latest"><b>⬇️ 下载最新版</b></a>
+  &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">完整版</a>（含万能键，推荐）
+  &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">无万能键版</a>（0.2 线，已定稿）
+  <br><sub>解压双击 <code>SnapWheel.exe</code> 即用，不需要安装；两个 zip 在同一个 Release 里</sub>
+</p>
 
 <p align="center">
   <img src="docs/wheel.png" width="330" alt="SnapWheel">
