@@ -23,6 +23,10 @@ namespace SnapWheel
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
         [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+        // 剪贴板序号：剪贴板内容一变这个计数器就往前走（系统给的全局值，同一会话里所有进程共享）。
+        // 用它判断"这次 WM_CLIPBOARDUPDATE 是不是我们自己刚写出来的那一下"，比把整张图读回来算指纹便宜得多
+        // （读一张 1600x1000 实测 ~10ms，正好落在"缩略图滑入"那几帧上）。返回 0 表示读不到，调用方要兜底。
+        [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
 
         // 优先"每显示器 DPI 感知 v2"：多屏不同缩放时不会把窗口拉伸糊掉，坐标也按物理像素走
         public static void SetDpiAwarenessBest()

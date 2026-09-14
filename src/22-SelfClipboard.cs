@@ -8,26 +8,41 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 namespace SnapWheel
 {
-    // ============================ "这张剪贴板是我们自己写的"登记簿 ============================
-    // 起因（用户实测到的回归）：截图确认时会把成品图同时复制到剪贴板，而轮盘那边一直挂着
-    // 剪贴板监听（WheelForm 的 WM_CLIPBOARDUPDATE → OnClipboardChanged，设置项 ClipboardImport）。
-    // 于是**自己写的图被自己的监听当成"外面复制的新图"又收了一盘** —— 截一次图，轮盘上出现两张缩略图
-    // （App 里本来就有一句 st.Add(ov.Result)，监听再收一张就是第二张）。
+    // ==================== "这张剪贴板是我们自己写的"登记簿 + 往剪贴板写图的唯一入口 ====================
     //
-    // 谁往剪贴板写图，谁先来这里登记（Note）；监听那边先比对是不是同一张（IsOurs），是就跳过。
-    // 故意**不用**"写完 N 毫秒内忽略"那种时间窗：它会把用户在这段时间里真正复制的一张图也一起吞掉，
-    // 而且窗口一过就失效（截图浮层是模态的，消息什么时候被泵到并不确定）。这里比的是"图长什么样"。
+    // 两件事，都是被同一个功能逼出来的（截图"同时复制到剪贴板"）：
     //
-    // 只跳过一次：命中就清登记；不命中（剪贴板已经被别的东西替换了）也清 —— 不让登记长期挂着屏蔽别人。
+    // 1) 别把自己的图又收一盘。轮盘一直挂着剪贴板监听（WheelForm 的 WM_CLIPBOARDUPDATE →
+    //    OnClipboardChanged，设置项 ClipboardImport 默认开），我们自己写进去的成品图会被它
+    //    当成"外面复制的新图"再收一次 —— 截一次图出两张缩略图。谁写谁登记，监听先比对。
+    //    故意**不用**"写完 N 毫秒内忽略"那种时间窗：它会把用户这段时间里真正复制的一张图也吞掉，
+    //    而且窗口一过就失效（截图浮层是模态的，消息什么时候被泵到并不确定）。
+    //
+    // 2) 别在 UI 线程上写。一张 1600x1000 的图，PNG 编码 ~35ms + OLE 把 Bitmap 刷成 DIB ~45ms
+    //    —— 实测整条路径在 UI 线程上要 80ms，落在"缩略图滑入"的帧上就是一帧 50ms
+    //    （探针实测：基线每帧 2.4ms，写剪贴板那一帧 50.2ms；丢到工作线程后最慢 10.3ms）。
+    //    所以写入交给一个**专用 STA 工作线程**（OLE 剪贴板只能在 STA 上碰），UI 线程只付一次
+    //    位图拷贝（实测 ~7ms）—— 这次拷贝是必须的：轮盘那几帧正拿着同一张 GDI+ 位图在画缩略图，
+    //    后台线程再去编码它，探针里直接撞出"对象当前正在其他地方使用"。
+    //
+    // 判定用两道，先便宜后兜底：
+    //   ① 剪贴板序号（GetClipboardSequenceNumber）：没变就是我们自己刚写的那一下 → 直接跳过，
+    //      **连图都不用读**（读一张 1600x1000 要 ~10ms，也落在动画帧上）；
+    //   ② 指纹（尺寸 + 11 个采样点）：序号对不上时兜底 —— 这一步在"导入外部图"那条路径上本来
+    //      就要读图，所以不额外花钱。
+    // 两道都"只跳过一次"：命中即清；不命中（剪贴板已被别的东西替换）也清，绝不长期屏蔽。
     static class SelfClipboard
     {
-        static string _fp = "";                            // 登记时的指纹（尺寸 + 采样像素），空 = 没有登记
+        static string _fp = "";                            // 登记时算好的指纹（尺寸 + 采样像素），空 = 没有登记
         static int _w, _h;                                 // 登记时的尺寸（跟着指纹一起记，方便诊断）
         static DateTime _at = DateTime.MinValue;           // 登记时刻：只作为记录/诊断，**不参与判定**
+        static long _seq = 0;                              // 我们自己写完之后剪贴板的序号（0 = 没有登记）
+        static Thread _writer = null;                      // 正在后台写剪贴板的那条线程（测试/收尾要等它）
 
         public static bool Pending { get { return _fp.Length > 0; } }
         public static int NoteWidth { get { return _w; } }
@@ -62,7 +77,7 @@ namespace SnapWheel
             finally { if (own && b != null) { try { b.Dispose(); } catch { } } }
         }
 
-        // 写剪贴板之前调用：把"我要写的这张图"记下来
+        // 写剪贴板之前调用：把"我要写的这张图"记下来（指纹 + 尺寸 + 时刻）
         public static void Note(Image im)
         {
             try
@@ -75,9 +90,31 @@ namespace SnapWheel
             catch { _fp = ""; _w = _h = 0; _at = DateTime.MinValue; }
         }
 
-        // 剪贴板监听到一张图时调用：是不是我们自己刚写的那张？
-        // 命中 → true（这一次跳过导入），并且**立刻清掉登记** —— 只跳过一次。
-        // 不命中 → false，同样清掉登记（剪贴板已经被别的东西替换，这条登记过期了）。
+        // 写完之后记下"这一下把剪贴板序号推到了多少"（工作线程/同步写完之后调用）
+        public static void NoteSequence()
+        {
+            try { _seq = Native.GetClipboardSequenceNumber(); }
+            catch { _seq = 0; }
+        }
+
+        // ---- 第一道（便宜）：序号没变 = 还是我们自己刚写的那一下 ----
+        // 命中 → true 并把登记里那张图的指纹带出去（给 _lastClipFp 去重用，省得再读一次图），同时清登记。
+        public static bool TakeBySequence(out string fp)
+        {
+            fp = null;
+            long s = _seq;
+            if (s == 0 || _fp.Length == 0) return false;        // 没登记：直接用图去比（第二道）
+            uint now;
+            try { now = Native.GetClipboardSequenceNumber(); } catch { return false; }
+            if (now == 0 || now != s) return false;              // 剪贴板已经被别的东西动过 → 交给第二道去判断
+            fp = _fp;
+            Clear();
+            return true;
+        }
+
+        // ---- 第二道（兜底）：拿剪贴板里那张图的指纹来比 ----
+        // 命中 → true（这一次跳过导入）并且清登记（只跳过一次）；
+        // 不命中 → false，同样清登记（剪贴板已经被别的东西替换，这条登记过期了）。
         public static bool IsOurs(string fp)
         {
             try
@@ -88,6 +125,61 @@ namespace SnapWheel
             finally { Clear(); }
         }
 
-        public static void Clear() { _fp = ""; _w = _h = 0; _at = DateTime.MinValue; }
+        public static void Clear()
+        {
+            _fp = ""; _w = _h = 0; _at = DateTime.MinValue; _seq = 0;
+        }
+
+        // ============================ 往剪贴板写图（唯一入口） ============================
+        // UI 线程调用：登记指纹 → 拷一份 → 交给专用 STA 工作线程去写（PNG 编码与 OLE flush 都在那边）。
+        // 失败只写日志、绝不弹框（截图流程不能被剪贴板打断）。
+        public static void BeginWrite(Image src)
+        {
+            try
+            {
+                Note(src);                          // 先登记（指纹是原图的；拷贝出来像素一模一样，比对得上）
+                Bitmap copy = new Bitmap(src);      // UI 线程只付这一次拷贝（1600x1000 实测 ~7ms）
+                Thread t = new Thread(delegate () { Write(copy); });
+                t.SetApartmentState(ApartmentState.STA);   // OLE 剪贴板只能在 STA 线程上碰
+                t.IsBackground = true;
+                _writer = t;
+                t.Start();
+            }
+            catch (Exception ex) { Err.Log("SelfClipboard.BeginWrite", ex); }
+        }
+
+        // 工作线程里的正事：一次把三种格式放上去，并立刻持久化（copy=true）
+        static void Write(Bitmap img)
+        {
+            try
+            {
+                //   Bitmap / DIB —— 画图、Word、微信这些"粘贴图片"走的就是这两个；
+                //   PNG        —— 认这个格式的程序（浏览器、部分编辑器/截图工具）能拿到
+                //                 带 alpha 的无损原图，而且不会像 DIB 那样掉透明通道。
+                DataObject data = new DataObject();
+                data.SetImage(img);
+                using (MemoryStream png = new MemoryStream())
+                {
+                    img.Save(png, ImageFormat.Png);
+                    png.Position = 0;                     // 交给剪贴板前把读指针拨回开头
+                    data.SetData("PNG", false, png);      // false = 原样给字节流，别自动转成 .NET 对象
+                    // copy=true：立刻把数据刷进剪贴板（OleFlushClipboard），
+                    // 所以这个 MemoryStream（以及拷出来的位图）之后被释放，粘贴方照样能拿到完整 PNG，
+                    // 程序退出后剪贴板里也还在。
+                    Clipboard.SetDataObject(data, true);
+                }
+                NoteSequence();                           // 记下写完之后剪贴板的序号（监听的便宜判据）
+            }
+            catch (Exception ex) { Err.Log("SelfClipboard.Write", ex); }
+            finally { try { img.Dispose(); } catch { } }   // 拷出来的那一份，写完就还
+        }
+
+        // 等后台那次写剪贴板收工（测试、以及"要立刻读剪贴板"的地方用；正常流程没人等它）
+        public static bool WaitIdle(int ms)
+        {
+            Thread t = _writer;
+            if (t == null) return true;
+            try { return t.Join(ms); } catch { return false; }
+        }
     }
 }

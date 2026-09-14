@@ -326,6 +326,18 @@ namespace SnapWheel
         {
             if (!_settings.ClipboardImport) return;
             if (_dragOutItem != null) return;                                   // 正在拖出，别掺和
+
+            // 第一道（便宜、精确）：剪贴板序号还是我们自己写完那一下 —— 就是我们自己刚写进去的那张，
+            // 直接跳过。**连图都不读**：读一张 1600x1000 实测 ~10ms，正好落在"缩略图滑入"的帧上。
+            // 跳过时把手里的指纹记进 _lastClipFp：系统对"写一次剪贴板"可能通知不止一次，
+            // 第二条通知来的时候登记已经清掉了，靠这条去重才不会又收一张。
+            try
+            {
+                string mine;
+                if (SelfClipboard.TakeBySequence(out mine)) { if (mine != null) _lastClipFp = mine; return; }
+            }
+            catch { }
+
             Bitmap copy = null;
             string fp = "";
             try
@@ -335,10 +347,8 @@ namespace SnapWheel
                 {
                     if (im == null || im.Width < 2 || im.Height < 2) return;
                     fp = SelfClipboard.Fingerprint(im);
-                    // 我们自己刚写进剪贴板的那张（截图"同时复制到剪贴板"、轮盘双击"复制这张图"）：
-                    // 是同一张就跳过这一次 —— 否则截一次图会被监听又收一盘，出现两张缩略图。
-                    // 跳过时顺手记进 _lastClipFp：系统对"写一次剪贴板"可能通知不止一次，
-                    // 第二条通知来的时候登记已经被清掉了，靠这条去重才不会又收一张。
+                    // 第二道（兜底）：序号对不上时（剪贴板被别的程序动过，或者序号读不到）
+                    // 再按"图长什么样"比一次 —— 这一步在下面"导入外部图"那条路上本来就要读图，不额外花钱。
                     if (SelfClipboard.IsOurs(fp)) { _lastClipFp = fp; return; }
                     if (fp == _lastClipFp) return;                              // 同一张图，不重复收
                     copy = new Bitmap(im);
@@ -591,9 +601,10 @@ namespace SnapWheel
             int hh = HitTest(e.Location);
             if (hh >= 0 && _store.Items[hh].Image != null)
             {
-                // 登记一下"这张剪贴板是我们自己写的"，别让剪贴板监听把它当成"用户复制的新图"又收一遍
+                // 登记一下"这张剪贴板是我们自己写的"，别让剪贴板监听把它当成"用户复制的新图"又收一遍；
+                // 写完记下剪贴板序号，监听那边就能用最便宜的判据直接跳过（不必把图读回来比指纹）
                 SelfClipboard.Note(_store.Items[hh].Image);
-                try { Clipboard.SetImage(_store.Items[hh].Image); } catch { }
+                try { Clipboard.SetImage(_store.Items[hh].Image); SelfClipboard.NoteSequence(); } catch { }
             }
         }
 

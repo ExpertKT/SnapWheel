@@ -1362,6 +1362,8 @@ namespace SnapWheel
                 F(on, "_sz", new SizeF(200f, 100f));
                 F(on, "_ang", 0f);
                 Call(on, "Confirm");
+                // 写剪贴板是**后台 STA 线程**做的（不能占 UI 线程的动画帧），所以这里要等它收工再看
+                if (!SelfClipboard.WaitIdle(5000)) return "后台写剪贴板一直没收工（等了 5 秒）";
                 if (on.Result == null) return "确认之后没有产出图（前置条件不成立）";
                 if (!Clipboard.ContainsImage()) return "设置开着，确认截图之后剪贴板里还是没有图（这条功能没接上）";
                 Size got;
@@ -1432,6 +1434,7 @@ namespace SnapWheel
                 F(off, "_sz", new SizeF(200f, 100f));
                 F(off, "_ang", 0f);
                 Call(off, "Confirm");
+                SelfClipboard.WaitIdle(5000);
                 if (off.Result == null) return "关掉之后确认没有产出图（前置条件不成立）";
                 if (!Clipboard.ContainsImage()) return "设置关着，剪贴板里的记号图却没了（说明还是被清了）";
                 Size kept;
@@ -1483,6 +1486,7 @@ namespace SnapWheel
                 F(o, "_sz", new SizeF(200f, 100f));
                 F(o, "_ang", 0f);
                 Call(o, "Confirm");
+                if (!SelfClipboard.WaitIdle(5000)) return "后台写剪贴板一直没收工（等了 5 秒）";
                 if (o.Result == null) return "确认没出图（前置条件不成立）";
                 if (!SelfClipboard.Pending) return "Confirm 没登记这张剪贴板是自己写的（登记簿空着，监听那边无从判断）";
 
