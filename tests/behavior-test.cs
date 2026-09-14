@@ -1522,6 +1522,63 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 45. 刚截的图必须在"看得见的弧"里滑进来 =================
+            // 用户报的"缩略图滑进 wheel 突然闪现、动画和位置合不上"：收起态（用户配置 CollapseMode=1）下
+            // offset 被归零，第 7 张的 ItemPhi（1.747）已经顶到可见弧上界（_phiMax+0.5 = 1.766）里面一点，
+            // 滑入动画基本在弧外跑、擦着边才"啪"地出现；而且 ExpandWheel → StartIntro 会把 MarkNew 的
+            // "现在就滑"覆盖成"0.45 + i*0.13 秒错峰出场"（开机彩虹扫出用的那张表），于是要等 1 秒多才动。
+            Run("刚截的图必须跟手滑进来：视口跟到最新那张，且不被开启动画的错峰表顶掉", delegate
+            {
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.CollapseMode = true;               // 用户就是这个配置
+                s.IntroAnim = true;
+                s.ThumbSize = 96; s.Radius = 256; s.Slots = 5; s.Corner = "BL";   // 用户的真实几何
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+
+                // 环上先有 6 张，再"截"一张新的（第 7 张）—— 这正是会落到弧外的那一档
+                for (int i = 0; i < 6; i++) st.Add(Solid(40, 30, Color.FromArgb(60 + i * 20, 120, 190)));
+                f.CollapseWheel(true);
+                for (int i = 0; i < 400 && !f.IsCollapsed; i++) { Call(f, "AnimTickCore"); Thread.Sleep(3); }
+                if (!f.IsCollapsed) return "前置条件不成立：没进收起态";
+
+                StoreItem ni = st.Add(Solid(120, 80, Color.FromArgb(30, 90, 160)));
+                int idx = st.Items.IndexOf(ni);
+                // 照 90-App.cs 修复后的顺序：先拉出 / 显示，再 MarkNew
+                f.ExpandWheel(true);
+                f.MarkNew(ni);
+
+                // 1) 视口必须跟到最新那张（否则它在弧外，动画看不见）
+                double tgt = Convert.ToDouble(G(f, "_targetOffset"));
+                if (Math.Abs(tgt - idx) > 0.001)
+                    return "视口没跟到最新那张：_targetOffset=" + tgt.ToString("0.##") + "，新图索引=" + idx + "（它会被画在可见弧外面）";
+
+                // 2) "现在就滑进来"不能被开启动画的错峰表顶掉：跑 200ms 就该已经在出场了
+                for (int i = 0; i < 40; i++) { Call(f, "AnimTickCore"); Thread.Sleep(5); }
+                float prEarly = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                if (prEarly <= 0.05f)
+                    return "200ms 了这张还没开始滑（EnterProgress=" + prEarly.ToString("0.00") + "）—— MarkNew 被 StartIntro 的错峰表顶掉了";
+
+                // 3) 动画跑完：必须停在弧内的第一格，而且真的画得出来（DrawnRect 不为空）
+                for (int i = 0; i < 200; i++) { Call(f, "AnimTickCore"); Thread.Sleep(3); }
+                float iphi = Convert.ToSingle(Call(f, "ItemPhi", idx));
+                float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
+                if (Math.Abs(iphi - pmin) > 0.03f)
+                    return "跑完之后它没停在第一格：ItemPhi=" + iphi.ToString("0.000") + "，期望≈_phiMin=" + pmin.ToString("0.000");
+                float prEnd = Convert.ToSingle(Call(f, "EnterProgress", idx));
+                if (prEnd < 0.99f) return "滑入动画没跑完：EnterProgress=" + prEnd.ToString("0.00");
+                RectangleF r = (RectangleF)Call(f, "DrawnRect", idx);
+                if (r.Width <= 0f || r.Height <= 0f) return "画出来的矩形是空的（说明它还是在弧外被跳过了）";
+                if (r.X > f.Width || r.Y > f.Height || r.Right < 0f || r.Bottom < 0f)
+                    return "它被画在窗口外面：" + r;
+                if (iphi < pmin - 0.50f || iphi > pmax + 0.50f) return "它落在可见弧之外";
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             finished = true;

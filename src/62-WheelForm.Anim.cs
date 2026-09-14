@@ -539,7 +539,15 @@ namespace SnapWheel
         // only a NEWLY captured image slides in; everything else is already in place
         public void MarkNew(StoreItem it)
         {
-            if (it != null) _enterT0[it] = DateTime.Now;
+            if (it == null) return;
+            _enterT0[it] = DateTime.Now;
+            // 视口要跟到最新那张 —— 否则"刚截的图"可能落在可见弧之外（收起态下 offset 被归零，
+            // 第 7 张的 ItemPhi 已经是 1.747，而可见弧上界 _phiMax+0.5 只有 1.766）：
+            // 滑入动画其实在弧外跑，等它擦着边跨进来才"啪"地闪现一下 —— 用户报的
+            // "缩略图滑进 wheel 突然闪现、动画和位置合不上"就是这个。
+            // 剪贴板导入那条路一直是这么做的（OnClipboardChanged / ImportFiles 里都有这一句），
+            // 截图这条路以前漏了。
+            _targetOffset = Math.Max(0, _store.Items.Count - 1);
         }
 
 

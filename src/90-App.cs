@@ -420,7 +420,6 @@ namespace SnapWheel
             {
                 Store st = _wheels.ActiveStore;
                 StoreItem ni = st.Add(ov.Result);
-                _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
                 // 关键：浮层关掉之后重抓一次背景。
                 // 之前是拿着"截图浮层还在时抓的"背景去显示玻璃，所以截图完轮盘是暗的，
                 // 过一会儿定时刷新才突然变亮 —— 现在这里立刻换新背景（带淡入过渡）。
@@ -428,6 +427,11 @@ namespace SnapWheel
                 // 截完播拉出动画（收起态拉出来最自然；原来是展开的就直接显示）
                 if (_settings.CollapseMode) _wheel.ExpandWheel(true);   // 截图流程：拉出也快一点
                 else _wheel.ShowWheel();
+                // MarkNew 必须放在"拉出 / 显示"**之后**：收起态那条路走的是 ExpandWheel → StartIntro，
+                // 而 StartIntro 会把 _enterT0 清空、重排成"0.45 + i*0.13 秒"的错峰出场表（开机彩虹扫出用的就是它）。
+                // 反过来的话，刚截这张的"现在就滑进来"会被那张错峰表覆盖 —— 要等 1 秒多才动，
+                // 而且这期间视口还没跟过去（见 MarkNew），用户看到的就是"动画和位置合不上、突然闪现"。
+                _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
             }
             else if (wasExpanded)
             {
