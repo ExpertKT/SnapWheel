@@ -321,11 +321,10 @@ namespace SnapWheel
         }
 
 
-        // 剪贴板里出现图片就自动收进轮盘（可关）；和自己写的剪贴板做区分，并做去重
+        // 剪贴板里出现图片就自动收进轮盘（可关）；**自己写的图不收**（见 SelfClipboard），并做去重
         void OnClipboardChanged()
         {
             if (!_settings.ClipboardImport) return;
-            if ((DateTime.Now - _selfClipboardAt).TotalSeconds < 1.5) return;   // 我们自己刚写的，跳过
             if (_dragOutItem != null) return;                                   // 正在拖出，别掺和
             Bitmap copy = null;
             string fp = "";
@@ -335,7 +334,12 @@ namespace SnapWheel
                 using (Image im = Clipboard.GetImage())
                 {
                     if (im == null || im.Width < 2 || im.Height < 2) return;
-                    fp = Fingerprint(im);
+                    fp = SelfClipboard.Fingerprint(im);
+                    // 我们自己刚写进剪贴板的那张（截图"同时复制到剪贴板"、轮盘双击"复制这张图"）：
+                    // 是同一张就跳过这一次 —— 否则截一次图会被监听又收一盘，出现两张缩略图。
+                    // 跳过时顺手记进 _lastClipFp：系统对"写一次剪贴板"可能通知不止一次，
+                    // 第二条通知来的时候登记已经被清掉了，靠这条去重才不会又收一张。
+                    if (SelfClipboard.IsOurs(fp)) { _lastClipFp = fp; return; }
                     if (fp == _lastClipFp) return;                              // 同一张图，不重复收
                     copy = new Bitmap(im);
                 }
@@ -361,23 +365,8 @@ namespace SnapWheel
         }
 
 
-        // 便宜的指纹：尺寸 + 采样若干点，用来判断"是不是同一张图"
-        static string Fingerprint(Image im)
-        {
-            try
-            {
-                using (Bitmap b = new Bitmap(im, new Size(Math.Min(16, im.Width), Math.Min(16, im.Height))))
-                {
-                    StringBuilder sb = new StringBuilder();
-                    sb.Append(im.Width).Append('x').Append(im.Height).Append(':' );
-                    for (int y = 0; y < b.Height; y += 3)
-                        for (int x = 0; x < b.Width; x += 3)
-                            sb.Append(b.GetPixel(x, y).ToArgb().ToString("X8"));
-                    return sb.ToString();
-                }
-            }
-            catch { return ""; }
-        }
+        // 便宜的指纹挪到 SelfClipboard（写剪贴板那边也要用同一个，才能比出"是不是自己写的那张"）
+        static string Fingerprint(Image im) { return SelfClipboard.Fingerprint(im); }
 
 
         // 把外部图片收进当前 wheel（失败的单张跳过，不打断其它）
@@ -602,7 +591,8 @@ namespace SnapWheel
             int hh = HitTest(e.Location);
             if (hh >= 0 && _store.Items[hh].Image != null)
             {
-                _selfClipboardAt = DateTime.Now;          // 标记一下，别把它当成"用户复制的新图"又收一遍
+                // 登记一下"这张剪贴板是我们自己写的"，别让剪贴板监听把它当成"用户复制的新图"又收一遍
+                SelfClipboard.Note(_store.Items[hh].Image);
                 try { Clipboard.SetImage(_store.Items[hh].Image); } catch { }
             }
         }

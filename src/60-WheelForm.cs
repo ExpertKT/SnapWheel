@@ -143,9 +143,10 @@ namespace SnapWheel
 
         DateTime _collapsedAt = DateTime.MinValue;       // 收起完成的时刻（之后一小段内不允许再展开）
 
-        DateTime _selfClipboardAt = DateTime.MinValue;   // 我们自己写剪贴板的时间（避免自己抄自己）
-
         string _lastClipFp = "";                          // 上一张从剪贴板收进来的图（去重用）
+        // 注：以前这里还有一个 _selfClipboardAt（"自己写完剪贴板 1.5 秒内不导入"的时间窗），
+        // 已经换成 SelfClipboard 的按图指纹登记：时间窗会连用户在这段时间里真正复制的一张图一起吞掉，
+        // 而且窗口一过就失效（截图浮层是模态的，消息什么时候被泵到并不确定）。
 
 
         public bool IsCollapsed { get { return _collapsed; } }

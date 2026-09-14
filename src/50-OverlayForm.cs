@@ -818,6 +818,11 @@ namespace SnapWheel
             {
                 try
                 {
+                    // 关键：先登记"这张剪贴板是我们自己写的"。轮盘那边的剪贴板监听
+                    // （WM_CLIPBOARDUPDATE → OnClipboardChanged）会把成品图当成"外面复制的新图"
+                    // 再收一盘 —— 截一次图出两张缩略图就是这个回归。登记之后监听会跳过这一次。
+                    SelfClipboard.Note(Result);
+
                     // 一次把三种格式都放上去（以前只有 SetImage 的 Bitmap + DIB）：
                     //   Bitmap / DIB —— 画图、Word、微信这些"粘贴图片"走的就是这两个；
                     //   PNG        —— 认这个格式的程序（浏览器、部分编辑器/截图工具）能拿到

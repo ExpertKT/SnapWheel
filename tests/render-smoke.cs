@@ -955,12 +955,11 @@ namespace SnapWheel
                 catch { }
                 Type wt = typeof(WheelForm);
                 MethodInfo occ = wt.GetMethod("OnClipboardChanged", BindingFlags.NonPublic | BindingFlags.Instance);
-                FieldInfo selfAt = wt.GetField("_selfClipboardAt", BindingFlags.NonPublic | BindingFlags.Instance);
                 int baseCount = st.Items.Count;
                 bool on = s.ClipboardImport;
 
                 s.ClipboardImport = true;
-                selfAt.SetValue(f, DateTime.MinValue);
+                SelfClipboard.Clear();               // 没有"我们自己写的"登记（下面这张是"外面复制来的"）
                 using (Bitmap b = new Bitmap(320, 200, PixelFormat.Format32bppArgb))
                 {
                     using (Graphics g = Graphics.FromImage(b)) { g.Clear(Color.CornflowerBlue); g.FillEllipse(Brushes.Orange, 20, 20, 90, 90); }
@@ -969,7 +968,7 @@ namespace SnapWheel
                 Application.DoEvents(); Thread.Sleep(150);
                 occ.Invoke(f, null);
                 int after1 = st.Items.Count;
-                selfAt.SetValue(f, DateTime.MinValue);
+                SelfClipboard.Clear();
                 occ.Invoke(f, null);                 // 同一张图再来一次：指纹应该挡住
                 int after2 = st.Items.Count;
                 bool dedupOk = (after1 == baseCount + 1) && (after2 == after1);
@@ -980,9 +979,10 @@ namespace SnapWheel
                 using (Bitmap b2 = new Bitmap(200, 200, PixelFormat.Format32bppArgb))
                 {
                     using (Graphics g = Graphics.FromImage(b2)) g.Clear(Color.SeaGreen);
+                    // 模拟"这张是我们自己写进去的"：写之前先登记（截图"同时复制"、轮盘双击"复制这张图"都这么干）
+                    SelfClipboard.Note(b2);
                     Clipboard.SetImage(b2);
                 }
-                selfAt.SetValue(f, DateTime.Now);    // 模拟"是我们自己写进去的"
                 Application.DoEvents(); Thread.Sleep(150);
                 occ.Invoke(f, null);
                 bool selfOk = st.Items.Count == after2;
@@ -990,7 +990,7 @@ namespace SnapWheel
                 if (selfOk) pass++; else fail++;
 
                 s.ClipboardImport = false;
-                selfAt.SetValue(f, DateTime.MinValue);
+                SelfClipboard.Clear();
                 occ.Invoke(f, null);
                 bool offOk = st.Items.Count == after2;
                 Console.WriteLine("  {0} 关掉开关后不再自动收纳", offOk ? "OK  " : "FAIL");

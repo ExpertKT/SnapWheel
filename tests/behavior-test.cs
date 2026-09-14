@@ -1451,6 +1451,73 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 44. 自己写的剪贴板，剪贴板监听不能再收一遍 =================
+            // 用户实测的回归：截图确认会把成品图写进剪贴板，而 WheelForm 一直挂着剪贴板监听
+            // （WM_CLIPBOARDUPDATE → OnClipboardChanged，设置项 ClipboardImport 默认开），
+            // 于是"自己写的图"被自己当成"外面复制的新图"又收一盘 —— 截一次图，轮盘上两张缩略图。
+            Run("截图确认写进剪贴板之后，剪贴板监听不能把这张刚截的图又收一盘（一次截图只多一张）", delegate
+            {
+                // 剪贴板在锁屏 / 没有交互会话时不可用 → 容错跳过
+                try { Clipboard.Clear(); }
+                catch (Exception cex)
+                {
+                    Console.WriteLine("  （跳过：剪贴板不可用）");
+                    Console.WriteLine("     {0}: {1}", cex.GetType().Name, cex.Message);
+                    return null;
+                }
+
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.ClipboardImport = true;          // 这个回归就是它引起的（默认就是开的）
+                WheelManager mgr = new WheelManager(s);
+                WheelForm f = NewWheel(mgr, s);
+                f.ShowWheel();
+                Application.DoEvents();
+                Store st = mgr.ActiveStore;
+                int before = st.Items.Count;
+
+                // 走真正的截图确认：Confirm 里会把成品图"同时复制到剪贴板"，并登记"这是我们自己写的"
+                OverlayForm o = Track(new OverlayForm(new Rectangle(0, 0, 400, 300), Solid(400, 300, Color.FromArgb(30, 90, 160)), s));
+                F(o, "_hasSel", true);
+                F(o, "_c", new PointF(200f, 150f));
+                F(o, "_sz", new SizeF(200f, 100f));
+                F(o, "_ang", 0f);
+                Call(o, "Confirm");
+                if (o.Result == null) return "确认没出图（前置条件不成立）";
+                if (!SelfClipboard.Pending) return "Confirm 没登记这张剪贴板是自己写的（登记簿空着，监听那边无从判断）";
+
+                st.Add(o.Result);                          // App 里"截图进环"那一步（st.Add(ov.Result)）
+                Call(f, "OnClipboardChanged");             // 模拟剪贴板监听被触发（反射，不碰鼠标键盘）
+                int n1 = st.Items.Count - before;
+                if (n1 != 1) return "一次截图收进了 " + n1 + " 张（应该是 1 张：App 加的那张，监听不该再加）";
+                if (SelfClipboard.Pending) return "跳过一次之后登记没清掉（会一直屏蔽下去）";
+
+                // 同一张图再来一条通知（系统对一次写剪贴板可能通知不止一次）：也不该又收一张
+                Clipboard.SetImage(o.Result);
+                Call(f, "OnClipboardChanged");
+                int n2 = st.Items.Count - before;
+                if (n2 != 1) return "同一张图的通知来了第二次又收了一张（一共 " + n2 + " 张）";
+
+                // 外面真复制一张**尺寸恰好相同、内容不同**的图：必须正常收进来
+                // （所以指纹要比像素，不能只比尺寸；也不能长期屏蔽）
+                Bitmap outside = Solid(200, 100, Color.FromArgb(220, 40, 90));
+                try { Clipboard.SetImage(outside); }
+                catch (Exception oex)
+                {
+                    outside.Dispose();
+                    Console.WriteLine("  （跳过：剪贴板不可用）");
+                    Console.WriteLine("     {0}", oex.GetType().Name);
+                    return null;
+                }
+                Call(f, "OnClipboardChanged");
+                int n3 = st.Items.Count - before;
+                if (n3 != 2) return "外面复制的那张没被收进来（一共只加了 " + n3 + " 张）";
+
+                Clipboard.Clear();
+                outside.Dispose();
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             finished = true;
