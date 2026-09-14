@@ -78,6 +78,15 @@ namespace SnapWheel
             int dh = Math.Max(1, (int)Math.Round(h * UiK));
             Dictionary<long, Bitmap> d;
             if (!_thumbCache.TryGetValue(it, out d)) { d = new Dictionary<long, Bitmap>(); _thumbCache[it] = d; }
+            // 放大预览（尺寸超过原图）时把尺寸量化到 8px 一档：动画里每帧尺寸都在变，
+            // 不量化的话缓存很快撑满被清空、又回到每帧从原图做高质量双三次 —— 又慢又抖
+            // （用户反馈：大图的放大动画缓慢且有抖动）。缩略图阶段必须保持精确尺寸，
+            // 因为 1:1 贴图靠它，所以只在放大时才量化。
+            if (dw > it.Image.Width || dh > it.Image.Height)
+            {
+                dw = Math.Max(1, (dw + 7) / 8 * 8);
+                dh = Math.Max(1, (dh + 7) / 8 * 8);
+            }
             long key = ((long)dw << 20) | (uint)dh;
             Bitmap b;
             if (d.TryGetValue(key, out b)) return b;
@@ -97,11 +106,22 @@ namespace SnapWheel
                 }
             }
 
-            if (d.Count > 64)
+            if (d.Count > 200)
             {
-                foreach (Bitmap v in d.Values) { try { v.Dispose(); } catch { } }
-                d.Clear();
+                // 只清小的、留住面积最大的那张：清空的话下一帧又得从原图重做一次高质量缩放，
+                // 大图上那一下就是几十毫秒（放大动画卡顿的主要来源）。
+                long keepKey = 0, keepArea = 0;
+                foreach (System.Collections.Generic.KeyValuePair<long, Bitmap> kv in d)
+                {
+                    long a2 = (long)kv.Value.Width * kv.Value.Height;
+                    if (a2 > keepArea) { keepArea = a2; keepKey = kv.Key; }
+                }
+                System.Collections.Generic.List<long> dead = new System.Collections.Generic.List<long>();
+                foreach (System.Collections.Generic.KeyValuePair<long, Bitmap> kv in d)
+                    if (kv.Key != keepKey) dead.Add(kv.Key);
+                for (int q = 0; q < dead.Count; q++) { try { d[dead[q]].Dispose(); } catch { } d.Remove(dead[q]); }
                 src = it.Image;
+                if (d.Count > 0) foreach (System.Collections.Generic.KeyValuePair<long, Bitmap> kv in d) { src = kv.Value; break; }
             }
             b = new Bitmap(dw, dh, PixelFormat.Format32bppPArgb);
             using (Perf.Section("2c9-缩略图生成"))
@@ -1115,11 +1135,10 @@ namespace SnapWheel
                     float h3 = sz.Height + 12f;
                     float r3 = EffR() + 78f;                       // 回到 45° 对角线外侧那一档（原来的位置）
                     float mid3 = (_phiMin + _phiMax) / 2f;         // 45° 对角线方向（用户要求靠 45° 角，别再往下偏）
-                    float st3 = ArcUi.StepFor(g, idx, f, r3, 3f);
-                    float span3 = st3 * (idx.Length - 1);
-                    float b0 = mid3 - span3 / 2f - st3 * 1.5f;        // 左端留一截给圆点
-                    float b1 = mid3 + span3 / 2f + st3 * 0.6f;
-                    using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, b0, b1))
+                    // 弧长按内容算：圆点 + 间隔 + 文字 + 两端留白 —— 这样数字绝不会被胶囊边缘切到
+                    float needLen = ip + 10f + sz.Width + 16f;
+                    float half3 = needLen / 2f / r3;
+                    using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, mid3 - half3, mid3 + half3))
                     {
                         RectangleF bnd3 = pg.GetBounds();
                         BackdropClip(g, pg, ac2);
@@ -1128,16 +1147,14 @@ namespace SnapWheel
                         using (Pen pp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)(110 * ac2 / 255f)), 1.1f))
                             g.DrawPath(pp2, pg);
                     }
-                    PointF dp3 = ArcUi.Polar(cc2, sx3, sy3, b0 + st3 * 0.6f, r3);
+                    // 内容按水平直线摆（弧长很短时和弧的差别可忽略），左右严格留白 ——
+                    // 用户反馈的计数胶囊数字显示问题就是这里排版太挤导致数字被切。
+                    PointF ct3 = ArcUi.Polar(cc2, sx3, sy3, mid3, r3);
+                    float left3 = ct3.X - needLen / 2f;
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
-                        g.FillEllipse(db, dp3.X - ip / 2f, dp3.Y - ip / 2f, ip, ip);
+                        g.FillEllipse(db, left3 + 6f, ct3.Y - ip / 2f, ip, ip);
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
-                        // 文字**水平**放在胶囊正中（用户反馈：斜着排读不出来，像"显示 bug"）。
-                        // 弧线感交给胶囊本体，计数这种短文字保持正立 —— 好读优先。
-                    {
-                        PointF tp3 = ArcUi.Polar(cc2, sx3, sy3, mid3, r3);
-                        SizeF isz = g.MeasureString(idx, f);
-                        g.DrawString(idx, f, br, tp3.X - isz.Width / 2f + ip * 0.55f, tp3.Y - isz.Height / 2f);
+                        g.DrawString(idx, f, br, left3 + 6f + ip + 6f, ct3.Y - sz.Height / 2f);
                     }
                 }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
