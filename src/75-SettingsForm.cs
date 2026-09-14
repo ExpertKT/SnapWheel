@@ -912,7 +912,7 @@ namespace SnapWheel
         // 旧页朝反方向滑出去（Panel 没有透明度，所以只用位移 + 分页器高亮同步过渡，不跳变）。
         // 两页在动画期间**永远刚好拼满可视区** —— 一个在 [x, x+W]、另一个在 [x±W, x±W+W]
         // —— 所以既不重叠也不留缝。
-        const int PageAnimMs = 160;      // 140~200ms 档；15ms 一帧 ≈ 11 帧
+        const int PageAnimMs = 240;      // 0.6.0：160 -> 240ms（用户反馈翻页过渡帧率偏低，拉长时间让帧数更多、更顺）      // 140~200ms 档；15ms 一帧 ≈ 11 帧
         System.Windows.Forms.Timer _ptimer;
         System.Diagnostics.Stopwatch _pwatch;       // 进度按"真实过去了多少毫秒"算，不按帧数累加
         int _animFrom = -1, _animTo = -1;
@@ -1054,7 +1054,7 @@ namespace SnapWheel
             if (_ptimer == null)
             {
                 _ptimer = new System.Windows.Forms.Timer();
-                _ptimer.Interval = 15;                   // 和轮盘动画同一个节拍（~66fps）
+                _ptimer.Interval = 10;                   // 和轮盘动画同一个节拍（~66fps）
                 _ptimer.Tick += delegate(object o, EventArgs e2) { AnimTick(); };
             }
             _ptimer.Start();
