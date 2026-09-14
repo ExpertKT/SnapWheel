@@ -310,6 +310,24 @@ namespace SnapWheel
 
 
         // 万能键：新拟态玻璃圆盘 —— 玻璃底 + 上亮下暗 + 主题色核心，按下时核心点亮并轻微放大
+        // 小按钮悬停时的外发光：和万能键同款（PathGradientBrush 中心亮、外围透明）。
+        // 抽成方法是因为三处内联会和各自作用域里的局部变量重名（编译期才发现，很烦）。
+        void DrawBtnGlow(Graphics g, Rectangle r, bool hot)
+        {
+            if (!hot || !StyleNeu() || _settings.ShadowPercent <= 8) return;
+            using (GraphicsPath gp = new GraphicsPath())
+            {
+                gp.AddEllipse(r.Left - 11f, r.Top - 11f, r.Width + 22f, r.Height + 22f);
+                using (PathGradientBrush halo = new PathGradientBrush(gp))
+                {
+                    halo.CenterPoint = new PointF(r.Left + r.Width / 2f, r.Top + r.Height / 2f);
+                    halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
+                    halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                    g.FillPath(halo, gp);
+                }
+            }
+        }
+
         void DrawKeyDisc(Graphics g, int a, Color acc, Rectangle kr, float kcx, float kcy, float krr)
         {
             float kt = Gfx.Clamp01(_keyT);
@@ -816,21 +834,7 @@ namespace SnapWheel
             // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
             PointF c = Center();
             Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
-            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
-            if (_closeHover && StyleNeu() && _settings.ShadowPercent > 8)
-            {
-                using (GraphicsPath gp = new GraphicsPath())
-                {
-                    float gcx = cbr.Left + cbr.Width / 2f, gcy = cbr.Top + cbr.Height / 2f;
-                    float gho = cbr.Width / 2f + 11f;
-                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
-                    using (PathGradientBrush halo = new PathGradientBrush(gp))
-                    {
-                        halo.CenterPoint = new PointF(gcx, gcy);
-                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
-                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
-                        g.FillPath(halo, gp);
-                    }
+            DrawBtnGlow(g, cbr, _closeHover);   // 悬停时和万能键一样的发光
                 }
             }
             Color acc = _accentCur;
@@ -885,21 +889,7 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
-            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
-            if (_gearHover && StyleNeu() && _settings.ShadowPercent > 8)
-            {
-                using (GraphicsPath gp = new GraphicsPath())
-                {
-                    float gcx = gbr.Left + gbr.Width / 2f, gcy = gbr.Top + gbr.Height / 2f;
-                    float gho = gbr.Width / 2f + 11f;
-                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
-                    using (PathGradientBrush halo = new PathGradientBrush(gp))
-                    {
-                        halo.CenterPoint = new PointF(gcx, gcy);
-                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
-                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
-                        g.FillPath(halo, gp);
-                    }
+            DrawBtnGlow(g, gbr, _gearHover);   // 悬停时和万能键一样的发光
                 }
             }
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
@@ -1065,21 +1055,7 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
-            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
-            if (_shootHover && StyleNeu() && _settings.ShadowPercent > 8)
-            {
-                using (GraphicsPath gp = new GraphicsPath())
-                {
-                    float gcx = sbr.Left + sbr.Width / 2f, gcy = sbr.Top + sbr.Height / 2f;
-                    float gho = sbr.Width / 2f + 11f;
-                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
-                    using (PathGradientBrush halo = new PathGradientBrush(gp))
-                    {
-                        halo.CenterPoint = new PointF(gcx, gcy);
-                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
-                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
-                        g.FillPath(halo, gp);
-                    }
+            DrawBtnGlow(g, sbr, _shootHover);   // 悬停时和万能键一样的发光
                 }
             }
             if (pb2 > 0.01f)
