@@ -14,7 +14,7 @@ namespace SnapWheel
 {
     class Settings
     {
-        public bool SaveToDisk = false;
+        public bool SaveToDisk = true;   // 0.6.0 起默认开：截完就存一份到磁盘（用户习惯）
         public string Dir = "";
         public int MaxCount = 50;
         public bool AutoHide = false;
@@ -37,7 +37,7 @@ namespace SnapWheel
         public int LabelSize = 16;      // index label font size (px)
         public string Corner = "BL";    // BL / BR / TL / TR - which screen corner the ring docks to
         public bool AutoStart = false;  // launch at logon (HKCU Run)
-        public string DeleteMode = "double";  // "double" right-click to delete, or "single"
+        public string DeleteMode = "single";  // 0.6.0 起默认单击删除（用户习惯），右键删除请选 double
         public string SwitchMode = "radial";  // "radial" (万能键圆盘) or "swipe" (长按滑动切换)
         public int PeekPercent = 240;         // 长按放大：百分比（100 = 原大小）
         public bool IntroSeen = false;        // 是否看过新手引导
@@ -52,11 +52,11 @@ namespace SnapWheel
         public bool ShowNameLabel = true;     // 显示 Wheel 名称药丸
         public bool ShowCountLabel = true;    // 显示图片计数药丸
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
-        public bool CollapseMode = false;     // 收起态：像贴边小球一样缩到屏幕边上，留个可点的小把手（默认展开）
-        public bool ClipboardImport = true;   // 剪贴板里出现图片时自动收进轮盘
+        public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
+        public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得"复制一下就被抓走"）
         public bool CopyOnCapture = true;     // 截图确认时同时把图放进剪贴板（要立刻粘贴就直接 Ctrl+V）
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
-        public bool ShowBalloon = true;       // 托盘气泡提示（关掉就不再弹右下角通知）
+        public bool ShowBalloon = false;      // 0.6.0 起默认关：不弹托盘气泡
         public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
         public int CollapseSpeed = 150;       // 收起动画速度 %（默认"快"一档，收起要干脆）
         public bool NubSingle = false;        // 只用一个把手：左边那个点一下展开、再点一下收起（底部不占地方）
@@ -66,7 +66,7 @@ namespace SnapWheel
         // 设置窗口的客户区尺寸（像素）。0 = 没设过 → 按"内容首选尺寸 × DPI"算默认值。
         // 用户拖过窗口之后在关闭时写回这里，下次打开就用他拖出来的大小（会夹进 [最小, 最大]）。
         // 省电模式（默认开）：**只在电池供电时**暂停毛玻璃定时刷新 + 重绘隔帧一次（见 12-Power.cs）。
-        public bool PowerSave = true;
+        public bool PowerSave = false;        // 0.6.0 起默认关（用户实测后选择关掉；电池党可在设置第 4 页打开）
         // ---- 翻译（0.6.0）：留空就走内置的免费引擎链（有道 → MyMemory 保底）----
         // 填了就走你自己那套 OpenAI 兼容接口（DeepSeek / 豆包 / 通义 / 本地 Ollama 都行），
         // 质量最好，也顺带把"机翻腔"消掉。URL 可以只填到 /v1，程序会自己补 /chat/completions。
