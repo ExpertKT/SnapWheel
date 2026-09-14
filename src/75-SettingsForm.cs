@@ -96,7 +96,7 @@ namespace SnapWheel
                 long w = m.WParam.ToInt64();
                 int delta = (int)((w >> 16) & 0xFFFF);
                 if (delta > 0x7FFF) delta -= 0x10000;
-                if (delta != 0) { ShowPage(_cur + (delta > 0 ? -1 : 1)); return true; }
+                if (delta != 0) { TryGoto(_cur + (delta > 0 ? -1 : 1)); return true; }
             }
             return false;
         }
@@ -163,7 +163,7 @@ namespace SnapWheel
             _dial.BackColor = Color.FromArgb(250, 250, 252);
             _dial.Dock = DockStyle.Fill;
             _dial.Margin = new Padding(0);
-            _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { ShowPage(_dial.Picked); });
+            _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { TryGoto(_dial.Picked); });
             root.Controls.Add(_dial, 0, 1);
 
             // 四张页面格：先建好挂上（空白），内容懒建；非当前页 Visible=false
@@ -649,11 +649,23 @@ namespace SnapWheel
 
         void ShowPage(int i) { ShowPage(i, true); }
 
+        // 用户输入路径（点扇区 / 滚轮）走这里：动画期间直接忽略 —— 这就是"防连点"，
+        // 连点不会叠加动画、不会重叠、不会跳变。（把防连点放在输入层，而不是塞进 ShowPage：
+        // 塞进 ShowPage 会让"程序性切页"被悄悄吞掉 —— 没消息泵时动画永远走不完，
+        // 后面几次切页就全丢了，工具/测试里踩到过。）
+        bool TryGoto(int i)
+        {
+            if (Animating) return false;
+            ShowPage(i);
+            return true;
+        }
+
+        // 程序性切页（首次显示 / 工具 / 测试）：一定切过去；上一段动画没收尾就先精确收尾，绝不卡住
         void ShowPage(int i, bool animate)
         {
             if (i < 0) i = 0;
             if (i > _pages.Length - 1) i = _pages.Length - 1;
-            if (Animating) return;          // 动画期间防连点：直接忽略（不会重叠、不会跳变、不会排队）
+            if (Animating) FinishNow();
             if (i == _cur) return;          // 已经在这一页：不重播
             BuildPage(i);
             int from = _cur;
@@ -666,6 +678,17 @@ namespace SnapWheel
                 return;
             }
             StartSlide(from, i);
+        }
+
+        // 把正在走的动画立刻收尾到目标页（精确落位，等同动画最后一帧）
+        void FinishNow()
+        {
+            if (_ptimer != null) _ptimer.Stop();
+            if (_pwatch != null) { try { _pwatch.Stop(); } catch { } _pwatch = null; }
+            int to = _animTo;
+            _animT = 1f;
+            _animFrom = -1;
+            if (to >= 0) SnapTo(to);
         }
 
         void BuildPage(int i)
