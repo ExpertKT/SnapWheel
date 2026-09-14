@@ -1149,15 +1149,17 @@ namespace SnapWheel
                     }
                     // 内容按水平直线摆（弧长很短时和弧的差别可忽略），左右严格留白 ——
                     // 用户反馈的计数胶囊数字显示问题就是这里排版太挤导致数字被切。
-                    PointF ct3 = ArcUi.Polar(cc2, sx3, sy3, mid3, r3);
-                    float left3 = ct3.X - needLen / 2f;
+                    float dotAng = (ip + 9f) / r3;                     // 圆点占的角度宽度
+                    PointF dp3 = ArcUi.Polar(cc2, sx3, sy3, mid3 - half3 + dotAng / 2f + 3f / r3, r3);
+                    // （圆点与文字都按弧坐标摆，不再用屏幕直线坐标）
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
-                        g.FillEllipse(db, left3 + 6f, ct3.Y - ip / 2f, ip, ip);
+                        g.FillEllipse(db, dp3.X - ip / 2f, dp3.Y - ip / 2f, ip, ip);
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
                     // 数字也沿弧排（用户要求跟胶囊同一条弧）：弧长按内容算足了，整串都在胶囊里
                     {
-                        float step3 = needLen / r3 / (idx.Length + 1.2f);
-                        ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, mid3 + step3 * 0.6f, step3, 0.45f);   // 轻微倾斜：有弧度但不躺倒
+                    float step3 = (sz.Width * 1.04f / Math.Max(1, idx.Length)) / r3;   // 每字一个角：按实测字宽，紧凑
+                    float textMid = mid3 + dotAng / 2f;               // 文字整体右偏半个圆点，避开它
+                        ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, textMid, step3, 0.45f);
                     }
                     }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
