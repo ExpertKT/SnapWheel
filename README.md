@@ -16,7 +16,7 @@
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
 <p align="center">
-  <img src="docs/demo.gif" width="720" alt="框选 → 图滑进角落的轮环 → 拖进聊天框">
+  ![框选 → 图滑进角落的轮环 → 拖进聊天框](docs/demo.gif)
   <br><sub>框选 → 图自动滑进角落的环里 → 拖出去直接用（图还留在环上）</sub>
 </p>
 
@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/wheel.png" width="330" alt="SnapWheel">
+  ![SnapWheel](docs/wheel.png)
 </p>
 
 ---
@@ -73,7 +73,7 @@
 ### 上一个版本 v0.5.0：能拿图干的事变多了
 
 <p align="center">
-  <img src="docs/annotate.png" width="640" alt="截图标注">
+  ![截图标注](docs/annotate.png)
   <br><sub>截图时直接标注：箭头 / 方框 / 马赛克 / 文字（画完能拖动、滚轮改大小）</sub>
 </p>
 
@@ -84,7 +84,7 @@
 | **贴图到屏幕（图钉）** | 缩略图上按**鼠标中键** → 把图钉在屏幕上对照看：滚轮缩放、拖动移动、双击 / `Esc` 关掉；托盘可一键收掉全部贴图 |
 
 <p align="center">
-  <img src="docs/ocr.png" width="470" alt="取字 + 翻译">
+  ![取字 + 翻译](docs/ocr.png)
   <br><sub>取字窗口：原文可改、译文一键出、各自可复制</sub>
 </p>
 
@@ -121,15 +121,15 @@
 - **新手引导**：**首次打开、以及每次升级到新版本都会自动弹一次**（跟着版本走，看过就不再弹），平时也能从托盘叫出来
 
 <p align="center">
-  <img src="docs/glass.png" width="300" alt="磨砂玻璃细节">
+  ![磨砂玻璃细节](docs/glass.png)
   &nbsp;&nbsp;
-  <img src="docs/menu.png" width="300" alt="万能键圆盘">
+  ![万能键圆盘](docs/menu.png)
 </p>
 
 <p align="center">
-  <img src="docs/collapsed.png" width="215" alt="收起状态：屏幕边上的小把手">
+  ![收起状态：屏幕边上的小把手](docs/collapsed.png)
   &nbsp;&nbsp;
-  <img src="docs/collapse-anim.png" width="470" alt="彩虹拉出 / 收起">
+  ![彩虹拉出 / 收起](docs/collapse-anim.png)
 </p>
 
 ## 快速开始
@@ -202,7 +202,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 ## 外观与适配
 
 <p align="center">
-  <img src="docs/settings.png" width="620" alt="设置">
+  ![设置](docs/settings.png)
 </p>
 
 | 设置项 | 可选值 |
