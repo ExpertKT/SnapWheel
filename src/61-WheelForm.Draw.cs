@@ -936,32 +936,42 @@ namespace SnapWheel
                 using (Font fw = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold))
                 {
                     string wn = FitName(_mgr.ActiveWheel.Name, 12);
-                    SizeF ws = g.MeasureString(wn, fw);
-                    float dot = 9f;
-                    float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
-                    float wx = kcx - pw2 / 2f;
-                    float wy = kr.Y + kr.Height + 4f;
-                    RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
-                    _namePillRect = pill2;                       // 记下来给命中测试用（点它能改名）
-                    using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
+                    // 0.6.0 弧线设计语言：胶囊不再是"横着的圆角矩形"，而是**沿同心弧弯出来的一条弧带**，
+                    // 文字也逐字沿弧旋转（字顶朝外）。角度挪到弧上端之外，正好和三按钮所在的
+                    // "万能键左上方"错开，不会压在一起。
+                    PointF cc = Center();
+                    float sx2 = Sx(), sy2 = Sy();
+                    float h2 = 30f;
+                    float r2 = EffR() + _thumb * 0.75f + h2 / 2f;      // 与三按钮同一条同心弧带（让开缩略图）
+                    float mid2 = (_phiMin + _phiMax) / 2f + 0.45f;
+                    float st2 = ArcUi.StepFor(g, wn, fw, r2, 2f);
+                    float span2 = st2 * (wn.Length - 1);
+                    float a0 = mid2 - span2 / 2f - st2 * 1.3f;         // 左端多留一小截放主题色圆点
+                    float a1 = mid2 + span2 / 2f + st2 * 0.6f;
+                    using (GraphicsPath pg2 = ArcUi.Capsule(cc, sx2, sy2, r2, h2, a0, a1))
                     {
+                        RectangleF bnd2 = pg2.GetBounds();
+                        _namePillRect = bnd2;                          // 命中测试（点它能改名）
                         BackdropClip(g, pg2, an);
-                        Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
+                        Gfx.GlassPanel(g, pg2, bnd2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
                             (int)((StyleNeu() ? 40 : 18) * an / 255f), (int)((StyleNeu() ? 34 : 0) * an / 255f), !StyleFlatOnly());
                         using (Pen bp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)((_nameHover ? 235 : 120) * an / 255f)), _nameHover ? 1.6f : 1.1f))
                             g.DrawPath(bp2, pg2);
                     }
-                    float dy2 = pill2.Y + ph2 / 2f;
+                    PointF dp2 = ArcUi.Polar(cc, sx2, sy2, a0 + st2 * 0.55f, r2);
                     using (SolidBrush db2 = new SolidBrush(Color.FromArgb((int)(250 * an / 255f), acc.R, acc.G, acc.B)))
-                        g.FillEllipse(db2, pill2.X + 11f, dy2 - dot / 2f, dot, dot);
+                        g.FillEllipse(db2, dp2.X - 4.5f, dp2.Y - 4.5f, 9f, 9f);
                     using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
-                        g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
-                    // 悬停时在右边补一句"点一下改名"
+                        ArcUi.ArcText(g, wn, fw, bw, cc, sx2, sy2, r2, mid2, st2);
+                    // 悬停时在弧的更外侧补一句"点一下改名"（同样沿弧排）
                     if (_nameHover && an > 80)
                     {
                         using (Font ft = new Font("Microsoft YaHei UI", 9f))
                         using (SolidBrush bt = new SolidBrush(Color.FromArgb((int)(220 * an / 255f), 235, 238, 245)))
-                            g.DrawString("点一下改名", ft, bt, pill2.Right + 8f, dy2 - ft.Height / 2f + 1);
+                        {
+                            float rh = r2 + h2 * 1.1f;
+                            ArcUi.ArcText(g, "点一下改名", ft, bt, cc, sx2, sy2, rh, mid2, ArcUi.StepFor(g, "点一下改名", ft, rh, 2f));
+                        }
                     }
                 }
                 g.TranslateTransform(-sn.X, -sn.Y);
@@ -1103,22 +1113,33 @@ namespace SnapWheel
                 using (Font f = new Font("Microsoft YaHei UI", fs, FontStyle.Bold, GraphicsUnit.Pixel))
                 {
                     SizeF sz = g.MeasureString(idx, f);
+                    // 0.6.0 弧线设计语言：计数胶囊也是**沿弧弯出来的弧带**、文字逐字沿弧转。
+                    // 角度放在弧下端之外（phi 更小），与弧上端的名称胶囊左右对称，
+                    // 中间那段"万能键左上方"留给三个小按钮。
+                    PointF cc2 = Center();
+                    float sx3 = Sx(), sy3 = Sy();
                     float ip = sz.Height * 0.72f;                    // 前置的小圆点
-                    PointF tp = HintPos(new SizeF(sz.Width + ip + 8f, sz.Height));
-                    RectangleF pill = new RectangleF(tp.X - 9f, tp.Y - 3f, sz.Width + ip + 26f, sz.Height + 6f);
-                    using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
+                    float h3 = sz.Height + 12f;
+                    float r3 = EffR() + _thumb * 0.75f + h3 / 2f;
+                    float mid3 = (_phiMin + _phiMax) / 2f - 0.45f;
+                    float st3 = ArcUi.StepFor(g, idx, f, r3, 3f);
+                    float span3 = st3 * (idx.Length - 1);
+                    float b0 = mid3 - span3 / 2f - st3 * 1.5f;        // 左端留一截给圆点
+                    float b1 = mid3 + span3 / 2f + st3 * 0.6f;
+                    using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, b0, b1))
                     {
+                        RectangleF bnd3 = pg.GetBounds();
                         BackdropClip(g, pg, ac2);
-                        Gfx.GlassPanel(g, pg, pill, Gfx.A(GlassBase(), GlassA((int)(176 * ac2 / 255f))),
+                        Gfx.GlassPanel(g, pg, bnd3, Gfx.A(GlassBase(), GlassA((int)(176 * ac2 / 255f))),
                             (int)((StyleNeu() ? 38 : 16) * ac2 / 255f), (int)((StyleNeu() ? 32 : 0) * ac2 / 255f), !StyleFlatOnly());
                         using (Pen pp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)(110 * ac2 / 255f)), 1.1f))
                             g.DrawPath(pp2, pg);
                     }
-                    float dotY = pill.Y + pill.Height / 2f;
+                    PointF dp3 = ArcUi.Polar(cc2, sx3, sy3, b0 + st3 * 0.6f, r3);
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
-                        g.FillEllipse(db, pill.X + 10f, dotY - ip / 2f, ip, ip);
+                        g.FillEllipse(db, dp3.X - ip / 2f, dp3.Y - ip / 2f, ip, ip);
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
-                        g.DrawString(idx, f, br, pill.X + 12f + ip, pill.Y + (pill.Height - sz.Height) / 2f + 1);
+                        ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, mid3, st3);
                 }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
