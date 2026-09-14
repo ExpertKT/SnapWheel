@@ -73,10 +73,15 @@ namespace SnapWheel
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && _filterAdded)
+            if (disposing)
             {
-                try { Application.RemoveMessageFilter(this); } catch { }
-                _filterAdded = false;
+                // 自己的定时器必须自己停（v0.5.1 的教训：窗口关了定时器还在跑，白烧 CPU）
+                if (_ptimer != null) { try { _ptimer.Stop(); _ptimer.Dispose(); } catch { } _ptimer = null; }
+                if (_filterAdded)
+                {
+                    try { Application.RemoveMessageFilter(this); } catch { }
+                    _filterAdded = false;
+                }
             }
             base.Dispose(disposing);
         }
@@ -157,7 +162,7 @@ namespace SnapWheel
             _dial.BackColor = Color.FromArgb(250, 250, 252);
             _dial.Dock = DockStyle.Fill;
             _dial.Margin = new Padding(0);
-            _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { ShowPage(_dial.Current); });
+            _dial.PagePicked += new EventHandler(delegate(object o, EventArgs e2) { ShowPage(_dial.Picked); });
             root.Controls.Add(_dial, 0, 1);
 
             // 四张页面格：先建好挂上（空白），内容懒建；非当前页 Visible=false
@@ -628,21 +633,114 @@ namespace SnapWheel
 
         // ============================ 翻页 ============================
         // 第一次翻到某页才建那页的控件；没建过的页 = 没看过 = 没改过。
-        void ShowPage(int i)
+        // 翻页带 160ms 位移动画（15ms 一帧 ≈ 11 帧，实测约 165ms）：新页从一侧滑进来、
+        // 旧页朝反方向滑出去（Panel 没有透明度，所以只用位移 + 分页器高亮同步过渡，不跳变）。
+        // 两页在动画期间**永远刚好拼满可视区** —— 一个在 [x, x+W]、另一个在 [x±W, x±W+W]
+        // —— 所以既不重叠也不留缝。
+        const int PageAnimMs = 160;      // 140~200ms 档；15ms 一帧 = 11 帧，实测约 165ms
+        System.Windows.Forms.Timer _ptimer;
+        int _animFrom = -1, _animTo = -1;
+        float _animT = 1f;
+
+        // "正在翻页"以动画状态为准，不看定时器 —— 定时器被别的东西停掉时防连点也不能失效
+        bool Animating { get { return _animFrom >= 0 && _animTo >= 0 && _animT < 1f; } }
+
+        void ShowPage(int i) { ShowPage(i, true); }
+
+        void ShowPage(int i, bool animate)
         {
             if (i < 0) i = 0;
             if (i > _pages.Length - 1) i = _pages.Length - 1;
-            if (!_built[i])
-            {
-                _built[i] = true;
-                _pages[i].SuspendLayout();
-                _builders[i]();
-                _pages[i].ResumeLayout(true);
-            }
+            if (Animating) return;          // 动画期间防连点：直接忽略（不会重叠、不会跳变、不会排队）
+            if (i == _cur) return;          // 已经在这一页：不重播
+            BuildPage(i);
+            int from = _cur;
             _cur = i;
-            for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = (k == i);
-            if (_dial != null) { _dial.Current = i; _dial.Invalidate(); }
+            if (_dial != null) _dial.Current = i;
+            if (from < 0 || !animate || !IsHandleCreated || _body == null
+                || _body.ClientSize.Width <= 0 || _body.ClientSize.Height <= 0)
+            {
+                SnapTo(i);                  // 首次显示 / 窗口还没出来：直接摆好（老行为）
+                return;
+            }
+            StartSlide(from, i);
+        }
+
+        void BuildPage(int i)
+        {
+            if (_built[i]) return;
+            _built[i] = true;
+            _pages[i].SuspendLayout();
+            _builders[i]();
+            _pages[i].ResumeLayout(true);
+        }
+
+        // 精确落位：Dock=Fill 由布局引擎给出整格矩形，动画结束绝不留下 1px 偏移
+        void SnapTo(int i)
+        {
+            for (int k = 0; k < _pages.Length; k++)
+            {
+                _pages[k].Dock = DockStyle.Fill;
+                _pages[k].Visible = (k == i);
+            }
+            if (_dial != null)
+            {
+                _dial.AnimFrom = i; _dial.AnimTo = i; _dial.AnimT = 1f;
+                _dial.Current = i; _dial.Invalidate();
+            }
             if (_body != null) _body.PerformLayout();
+        }
+
+        void StartSlide(int from, int to)
+        {
+            BuildPage(from);
+            _animFrom = from; _animTo = to; _animT = 0f;
+            for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = (k == from || k == to);
+            _pages[from].Dock = DockStyle.None;      // 交给动画自己摆位置
+            _pages[to].Dock = DockStyle.None;
+            ApplySlide(0f);                          // 第 0 帧：新页整页在窗口外 —— 一帧都不许重叠
+            if (_ptimer == null)
+            {
+                _ptimer = new System.Windows.Forms.Timer();
+                _ptimer.Interval = 15;               // 和轮盘动画同一个节拍（~66fps）
+                _ptimer.Tick += delegate(object o, EventArgs e2) { AnimTick(); };
+            }
+            _ptimer.Start();
+        }
+
+        void ApplySlide(float t)
+        {
+            int W = _body.ClientSize.Width, H = _body.ClientSize.Height;
+            if (W <= 0 || H <= 0) return;
+            float e = Gfx.EaseOut(t);                // 先快后慢、收尾稳（跟轮盘同一套缓动）
+            int dir = (_animTo > _animFrom) ? 1 : -1; // 往后翻：新页从右边进来、旧页往左走
+            int newX = (int)Math.Round(dir * W * (1f - e));    // ±W -> 0
+            int oldX = (int)Math.Round(-dir * W * e);          // 0 -> ∓W
+            _pages[_animTo].Bounds = new Rectangle(newX, 0, W, H);
+            if (_animFrom != _animTo) _pages[_animFrom].Bounds = new Rectangle(oldX, 0, W, H);
+            if (_dial != null)
+            {
+                _dial.AnimFrom = _animFrom; _dial.AnimTo = _animTo; _dial.AnimT = e;
+                _dial.Invalidate();                  // 扇区高亮/凸起跟着一起走过去
+            }
+        }
+
+        void AnimTick()
+        {
+            if (_animFrom < 0 || _animTo < 0) { if (_ptimer != null) _ptimer.Stop(); return; }
+            _animT += 15f / PageAnimMs;
+            if (_animT >= 1f)
+            {
+                _animT = 1f;                        // 收尾精确到 1，不留 1.03 这种余量
+                ApplySlide(1f);                     // 最后一帧：位置精确等于目标（0 偏移）
+                int to = _animTo;
+                _animFrom = -1;
+                if (_ptimer != null) _ptimer.Stop();
+                SnapTo(to);                         // 再交回布局引擎（Dock=Fill），保证和静态布局逐像素一致
+                _animTo = to;
+                return;
+            }
+            ApplySlide(_animT);
         }
 
         // ============================ 保存 ============================
@@ -834,22 +932,51 @@ namespace SnapWheel
     {
         public string[] Names = new string[0];
         public int Current;
+        // 刚被点中的扇区（交给 SettingsForm 决定要不要翻：动画期间它会忽略，所以这里不自己改 Current）
+        public int Picked { get; set; }
+        // 高亮过渡：AnimT=0 时高亮全在 AnimFrom、=1 时全在 AnimTo（由 SettingsForm 的翻页动画推）
+        public int AnimFrom { get; set; }
+        public int AnimTo { get; set; }
+        public float AnimT { get; set; }
         public event EventHandler PagePicked;
         int _hover = -1;
 
         static readonly Color Accent = Color.FromArgb(0, 122, 204);
         static readonly Color Surface = Color.FromArgb(238, 240, 245);
         static readonly Color SurfaceHot = Color.FromArgb(246, 249, 253);
+        static readonly Color NumIdle = Color.FromArgb(112, 120, 134);
         static readonly Font NumFont = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold);
         static readonly Font TitleFont = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
 
         const float SweepTotal = 150f;      // 整个圆弧张开的度数（其余留白，看起来才像"顶部一小段弧"）
         const float BandW = 24f;            // 弧的厚度
+        const float LiftPx = 2.2f;          // 当前页那一瓣往外凸出去多少（凸起也是平滑过渡的）
 
         public PageDial()
         {
+            AnimT = 1f;                       // 默认"过渡已完成"：高亮就停在 AnimTo（也就是 Current）上
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        // 这一瓣的"高亮权重" 0..1：翻页时旧页 1->0、新页 0->1，两边同时走
+        float Weight(int i)
+        {
+            float w = 0f;
+            if (i == AnimTo) w += AnimT;
+            if (i == AnimFrom) w += 1f - AnimT;
+            return w > 1f ? 1f : (w < 0f ? 0f : w);
+        }
+
+        // 颜色按权重插值（不是改透明度：GDI 画字不吃 alpha，插颜色才真的平滑）
+        static Color Mix(Color a, Color b, float t)
+        {
+            if (t <= 0f) return a;
+            if (t >= 1f) return b;
+            return Color.FromArgb(a.A + (int)Math.Round((b.A - a.A) * t),
+                                  a.R + (int)Math.Round((b.R - a.R) * t),
+                                  a.G + (int)Math.Round((b.G - a.G) * t),
+                                  a.B + (int)Math.Round((b.B - a.B) * t));
         }
 
         int Count { get { return Names == null ? 0 : Names.Length; } }
@@ -891,27 +1018,35 @@ namespace SnapWheel
             {
                 float start, sweep; PointF mid;
                 Sector(i, out start, out sweep, out mid);
-                bool cur = (i == Current);
-                bool hot = (i == _hover);
-                using (GraphicsPath p = Band(Cx, Cy, Ri, Ro, start + 1.2f, sweep - 2.4f))
+                float w = Weight(i);
+                bool hot = (i == _hover) && w < 0.5f;
+                // 高亮 = 从"常态底"往主题色插值；同时整瓣沿半径往外凸一点（凸起跟着高亮一起走）
+                double midA = (start + sweep / 2f) * Math.PI / 180.0;
+                float lift = LiftPx * w;
+                float ox = (float)(Math.Cos(midA) * lift), oy = (float)(Math.Sin(midA) * lift);
+                using (GraphicsPath p = Band(Cx + ox, Cy + oy, Ri, Ro, start + 1.2f, sweep - 2.4f))
                 {
                     RectangleF box = p.GetBounds();
                     // 凸起感：顶上一条高光、底下一条暗边（GlassPanel 一上一下，跟轮盘控件同一套路）
-                    Gfx.GlassPanel(g, p, box, cur ? Accent : (hot ? SurfaceHot : Surface),
-                                   cur ? 120 : 190, cur ? 80 : 46, true);
-                    if (cur)
-                        using (Pen pen = new Pen(Color.FromArgb(120, 255, 255, 255), 1.2f))
+                    Color fill = Mix(hot ? SurfaceHot : Surface, Accent, w);
+                    int hi = (int)Math.Round(190 + (120 - 190) * w);
+                    int shade = (int)Math.Round(46 + (80 - 46) * w);
+                    Gfx.GlassPanel(g, p, box, fill, hi, shade, true);
+                    if (w > 0.01f)
+                        using (Pen pen = new Pen(Color.FromArgb((int)Math.Round(120 * w), 255, 255, 255), 1.2f))
                         { pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; g.DrawPath(pen, p); }
                 }
                 // 扇区里的序号
                 Rectangle numRc = new Rectangle((int)mid.X - 12, (int)mid.Y - 9, 24, 18);
                 TextRenderer.DrawText(g, (i + 1).ToString(), NumFont, numRc,
-                    cur ? Color.White : Color.FromArgb(112, 120, 134),
+                    Mix(NumIdle, Color.White, w),
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
 
-            // 圆环内圈里写当前页的名字（翻页时立刻跟着变）
-            string t = (Current >= 0 && Current < n) ? Names[Current] : "";
+            // 圆环内圈里写页名：翻页时走到一半换字（不叠字、不跳页）
+            int show = (AnimT < 0.5f && AnimFrom >= 0 && AnimFrom < n) ? AnimFrom : Current;
+            if (show < 0 || show >= n) show = AnimTo >= 0 && AnimTo < n ? AnimTo : 0;
+            string t = (show >= 0 && show < n) ? Names[show] : "";
             int tw = TextRenderer.MeasureText(t, TitleFont).Width + 12;
             Rectangle rc = new Rectangle((int)(Cx - tw / 2f), (int)(Cy - Ri + 34f), tw, 26);
             TextRenderer.DrawText(g, t, TitleFont, rc, Color.FromArgb(64, 70, 82),
@@ -939,10 +1074,10 @@ namespace SnapWheel
         {
             base.OnMouseDown(e);
             int i = HitTest(e.Location);
+            // 只报告"点了哪一瓣"：翻不翻由 SettingsForm 定（它还要管动画期间防连点）
             if (i >= 0 && i != Current)
             {
-                Current = i;
-                Invalidate();
+                Picked = i;
                 if (PagePicked != null) PagePicked(this, EventArgs.Empty);
             }
         }
