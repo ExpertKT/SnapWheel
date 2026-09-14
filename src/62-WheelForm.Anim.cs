@@ -333,6 +333,12 @@ namespace SnapWheel
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
             if (_deletingItem != null) need = true;
+            if (_phiShift != 0f)
+            {
+                _phiShift *= 0.80f;
+                if (Math.Abs(_phiShift) < 0.002f) _phiShift = 0f;
+                need = true;
+            }
 
             // 提示条（"已加入 N 张图片"）淡入淡出
             if (_toast.Length > 0)

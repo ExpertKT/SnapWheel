@@ -102,6 +102,7 @@ namespace SnapWheel
             // 只有数量变了才整块刷新（用户反馈的正是这个：滚轮滚 wheel 数字不变）。
             // 量化到 0.25 格：滚动时以 4 帧的分辨率更新，够跟手又不会每像素都重建。
             h = Mix(h, (long)Math.Round(_offset * 4));
+            h = Mix(h, (long)Math.Round(_phiShift * 1000));   // 删除后的滑动过渡必须进签名，否则贴的是旧位置的缓存层
             h = Mix(h, _mgr.ActiveWheel.Name);                    // 名字药丸
             for (int i = 0; i < 4; i++) h = Mix(h, KeyActionShort(_settings.KeyActionAt(i)));   // 万能键四个分区上的字
             return h;
