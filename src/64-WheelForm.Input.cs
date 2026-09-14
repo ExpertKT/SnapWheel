@@ -633,6 +633,7 @@ namespace SnapWheel
                     string fpath = _store.EnsureFile(_store.Items[hh]);
                     if (!string.IsNullOrEmpty(fpath) && System.IO.File.Exists(fpath))
                     {
+                        HideWheel();     // 先让开：看图时它挡着，也让窗口状态保持明确
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(fpath) { UseShellExecute = true });
                         return;      // 打开了就别再顺手复制一次
                     }

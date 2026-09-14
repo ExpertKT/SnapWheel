@@ -394,8 +394,14 @@ namespace SnapWheel
         //     老图依次往下排；再来新图时 _offset 整体 +1 = 新图从上端挤进来、老图一起被往下挤一格，
         //     最下面那张滑出可见弧（v0.5.3 前半段就是这条，不变）。
         float OffsetForNewest() { return Math.Max(0, _store.Items.Count - _slots); }
-        float MinOffset() { return OffsetForNewest(); }
-        float MaxOffset() { return Math.Max(MinOffset(), _store.Items.Count - 1); }
+        // 滚动范围（0.6.0 修正）：`_offset` 是**弧下端那一格**的下标（见 ItemPhi），所以
+        //   · 最小值 0        = 最旧那张落在弧起点（一路往回看）
+        //   · 最大值 Count-Slots = 最新那张顶在弧上端（默认视图）
+        // 原来两头的语义写反了（Min=Count-Slots、Max=Count-1），后果有两个，
+        // 而且看起来毫不相干：① 计数胶囊「几 / 几」的序号一直超出总数、被夹成常数，
+        // 滚动时数字不动；② 滚到"极限"时可见范围滑出弧外，最下面那张被切掉一半。
+        float MinOffset() { return 0; }
+        float MaxOffset() { return Math.Max(0, _store.Items.Count - _slots); }
 
         // 入场起点：新图一律**从弧的上端滑下来**（不是从"它自己格子上方一点点"开始）。
         //   · 堆满时它自己的格子就在弧上端 → 还是老样子（0.30 / 开启动画时 0.62），从弧外挤进来；
