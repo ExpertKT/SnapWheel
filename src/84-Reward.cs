@@ -593,11 +593,21 @@ namespace SnapWheel
 
     // ============================ 收款码小窗口 ============================
     // 一张图 + 一句"请作者喝杯咖啡"。Esc、点窗口外面、标题栏 × 都能关掉。
+    //
+    // ⚠️ DPI：这个窗口原来自己算了一遍缩放系数（构造函数里的本地 k + 字段 _k），只把"间距"乘了系数，
+    // 行距还是写死的数字 —— 150% 下 14pt 标题的真实高度是 40px 上下，写死 38px 的行距就跟副标题叠在一起
+    // （用户报的"显示不全"）。现在统一用 13-Ui.cs 那一套（和 75-SettingsForm / 80-Dialogs 完全一样，
+    // 别再在本文件里发明第二套换算）：
+    //   · 坐标 / 边距 / 行距 / 图的上下留白一律过 Ui.S() 乘 DPI 系数；
+    //   · **字体磅值不乘** —— GDI+ 已经按 DPI 渲染过一遍，再乘就是双倍放大；
+    //   · 行高不写死：用 Label 自己报的 PreferredSize.Height（AutoSize 之后它就知道自己多高）+ 乘过 K 的空隙，
+    //     换字体、换缩放都不会叠字；
+    //   · 二维码本身是**图的像素**，1:1 显示、不乘 K（乘了就是拿 1.5 倍插值糊一遍，反而不清楚）；
+    //   · ClientSize 放在**最后**按内容算一次：内容多高窗口就多高，绝不多切一个像素。
     class RewardForm : Form
     {
         bool _activated;          // 已经拿到过焦点：之后失去焦点才算"点了外面"
         PictureBox _pic;
-        float _k = 1f;            // DPI 缩放系数（只作用在间距上；字体点数不乘）
 
         public RewardForm()
         {
@@ -612,16 +622,23 @@ namespace SnapWheel
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
 
-            // 间距按 DPI 走：150% 下 14pt 标题的真实高度是 40px 上下，写死 36px 的行距会跟副标题叠在一起
-            float k = 1f;
-            try { k = Native.DpiScaleOf(IntPtr.Zero); } catch { k = 1f; }
-            if (!(k >= 1f)) k = 1f; if (k > 3f) k = 3f;
-            _k = k;
-            int pad = (int)Math.Round(24 * k), y = (int)Math.Round(18 * k);
+            // 边距 / 起始行高按 DPI 走。系数统一用 Ui.K（13-Ui.cs），本文件不再自己算一遍 ——
+            // 之前那份本地 k 就是"第二套换算"的开头，行距忘了乘，于是 150% 下标题跟副标题叠字。
+            int pad = Ui.S(24), y = Ui.S(18);
+
+            // 文字最多能占多宽（已乘 K）= 屏幕工作区宽 - 左右边距。
+            // 这**只**是"别让窗口长出屏幕"的上限：正常屏幕上标题 / 副标题 / 提示都是一行放得下的，
+            // 走不到折行那一支，版面看起来跟以前一样；只有极端 DPI / 小屏才兜底 ——
+            // 宁可文字折行，也不能让窗口比屏幕还宽（比屏幕宽就等于右边那截根本看不见）。
+            int maxTextW;
+            try { maxTextW = Math.Max(Ui.S(200), Screen.PrimaryScreen.WorkingArea.Width - pad * 2); }
+            catch { maxTextW = Ui.S(420); }
 
             Image img = Reward.Get();
 
             // 图太大就等比缩到工作区的 84%（小屏幕 / 低分辨率下窗口不会长出屏幕）
+            // 380 / 140 是"图读不出来时那个白框"的占位尺寸：和真二维码一样属**图片像素**这一路，不乘 K ——
+            // 真图是按原始像素 1:1 贴的，两条路得用同一把尺子；横向由下面 max(图宽, 文字宽) 兜着，不会裁字
             int iw = img != null ? img.Width : 380;
             int ih = img != null ? img.Height : 140;
             try
@@ -640,41 +657,48 @@ namespace SnapWheel
             head.Text = "请作者喝杯咖啡";
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
-            head.AutoSize = true;
             head.Location = new Point(pad, y);
+            Ui.Wrap(head, maxTextW);          // AutoSize + MaximumSize：自己折行、自己报宽高，不给它写死格子
             Controls.Add(head);
-            y += (int)Math.Round(38 * k);
+            // 行高不再写死（原来的 38*k 是"猜"标题有多高，36 那一版就猜少了、标题跟副标题叠在一起）：
+            // 标题自己报的 PreferredSize.Height + 乘过 K 的空隙 —— 换字体、换缩放都不会叠字，
+            // 这比"把高度算准"可靠得多（80-Dialogs 里那套路数一样）
+            y += head.PreferredSize.Height + Ui.S(13);
 
             Label sub = new Label();
             sub.Text = img != null ? "扫码打赏，随心意就好 —— 不打赏也完全不影响使用。" : "收款码没读出来（图片数据坏了），重装一次应该就好。";
             sub.ForeColor = Color.FromArgb(120, 124, 134);
-            sub.AutoSize = true;
-            sub.Location = new Point(pad + (int)Math.Round(2 * k), y);
+            sub.Location = new Point(pad + Ui.S(2), y);   // 副标题相对标题缩进 2px（跟标题左边对齐得更自然）
+            Ui.Wrap(sub, maxTextW - Ui.S(2));
             Controls.Add(sub);
-            y += (int)Math.Round(30 * k);
+            y += sub.PreferredSize.Height + Ui.S(12);
 
             // 图 1:1 显示（Zoom 装在同尺寸的框里 = 不缩放）：二维码一个像素都不重采样，才最清楚
             _pic = new PictureBox();
             _pic.Image = img;
             _pic.SizeMode = PictureBoxSizeMode.Zoom;
             _pic.BackColor = Color.White;
+            // iw / ih 是**图的像素尺寸**，不乘 K：二维码必须一个像素都不重采样才清楚，
+            // 乘了就是拿 1.5 倍的插值糊一遍。要跟着 DPI 缩的只有图周围那些间距。
             _pic.Size = new Size(iw, ih);
             _pic.Location = new Point(pad, y);
             Controls.Add(_pic);
-            y += ih + (int)Math.Round(10 * k);
+            y += ih + Ui.S(10);
 
             Label hint = new Label();
             hint.Text = "按 Esc、点窗口外面，或点右上角 × 关掉";
             hint.ForeColor = Color.FromArgb(158, 162, 172);
-            hint.AutoSize = true;
             hint.Location = new Point(pad, y);
+            Ui.Wrap(hint, maxTextW);
             Controls.Add(hint);
-            y += (int)Math.Round(22 * k);
+            y += hint.PreferredSize.Height + Ui.S(5);
 
             // 宽度取"图"和"三行文字"里最宽的那个：内嵌图换成窄的二维码之后比副标题还窄，
             // 只按图宽开窗会把副标题右边切掉（和设置窗口那种"字显示不全"是同一类坑）。
+            // 这里也是**最后**一次定尺寸：文字都排完了、图也摆好了，窗口跟着内容长，
+            // 而不是把内容硬塞进一个写死的格子 —— 底部那点留白同样过 K。
             int textW = Math.Max(head.PreferredWidth, Math.Max(sub.PreferredWidth, hint.PreferredWidth));
-            ClientSize = new Size(Math.Max(iw, textW) + pad * 2, y + 8);
+            ClientSize = new Size(Math.Max(iw, textW) + pad * 2, y + Ui.S(8));
             CancelButton = null;
         }
 
@@ -684,11 +708,11 @@ namespace SnapWheel
             base.OnPaint(e);
             if (_pic == null) return;
             Rectangle r = _pic.Bounds;
-            int grow = (int)Math.Round(7 * _k);
+            int grow = Ui.S(7);                  // 绿边的厚度也按 DPI 走（要缩的只有这圈装饰，图本身还是 1:1）
             r.Inflate(grow, grow);
             try
             {
-                using (GraphicsPath p = Gfx.Round(r, (int)Math.Round(10 * _k)))
+                using (GraphicsPath p = Gfx.Round(r, Ui.S(10)))
                 using (SolidBrush b = new SolidBrush(Color.FromArgb(7, 193, 96)))
                     e.Graphics.FillPath(b, p);
             }

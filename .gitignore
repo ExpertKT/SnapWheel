@@ -25,3 +25,7 @@ docs/_raw/
 ~$*
 # 给 AI 看的接手说明（本地，不公开）
 AGENT-NOTES.md
+AGENT-BRIEF.md
+
+# 本地旧版本归档（体积大，不进仓库）
+历史/
