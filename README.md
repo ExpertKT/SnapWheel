@@ -11,7 +11,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![version](https://img.shields.io/badge/version-v0.5.2-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-191%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-215%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
@@ -37,7 +37,7 @@
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 191 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 215 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
 ## 这次更新（v0.5.2）：把一个 12.7ms 的帧拆开，找出真凶
 
@@ -52,6 +52,10 @@
 | **换底交叉淡入整帧只混一次**、隔帧重建 | 玻璃换底 20.3ms → **16.3** |
 
 结果：开启动画 7.9ms / 收起 15.6 / 滚动 10.0 / 悬停放大 14.5 / 玻璃换底 16.3 / 切盘闪光 9.4 —— **全部每帧 ≤20ms，没有一帧超过 40ms**。
+
+### v0.5.2 修订
+
+发布后又按实测反馈补了三处（版本号仍是 v0.5.2）：**修掉本版自身引入的"毛玻璃换底没有过渡"**（换底时 80% 的玻璃像素 0.38 秒纹丝不动、一悬停就"啪"地跳 —— 三处根因已修，实测 22 帧 / 0.385~0.394 秒、19 档渐变、残留旧底像素 18342 → 0）；**设置界面**修标题被削一排、翻页滑动时文字闪动（改成位图滑动，动画帧之间零重排），并让分页器支持**点扇区 / 滚轮 / 按住拖动转环**三种方式（松手 160ms 吸附、精确落位）；仓库页补 `.mailmap` 合并重复作者身份。
 
 ### 上一个版本 v0.5.1：删错了能找回来
 
@@ -290,7 +294,7 @@ tools/                  构建与发布工具（不想碰命令行，双击里�
   发布新版本.bat          改版本号 + 编译 + 归档到 versions\
   build.ps1             上面那个 .bat 实际调用的脚本
   record-version.ps1    版本归档脚本
-tests/                  10 套可复跑的测试与工具（build.ps1 -Test 自动跑其中 5 套）
+tests/                  13 套可复跑的测试与工具（build.ps1 -Test 自动跑其中 5 套）
   resize-geometry-test.cs   缩放几何仿真（角度 × 比例 × 四角 × 摆位）
   io-test.cs                图片格式解析 / 导入落盘
   render-smoke.cs           绘制状态矩阵 + 风格组合 + DPI 缩放 + 淡出（两个变体各跑一遍）
@@ -301,10 +305,12 @@ tests/                  10 套可复跑的测试与工具（build.ps1 -Test 自�
   uipi-drag-test.cs         权限隔离（UIPI）拖放复现
   ui-shot.cs                把各状态渲染成 PNG，离线看设计效果
   toolbar-shot.cs           把截图浮层（含标注工具条）渲染成 PNG，验收"工具条有没有挡住选区"
+  perf-bench.cs             动画性能基准：驱动各段动画逐帧计时（含分段耗时报告）
+  demo-gif.cs               生成 README 首屏那张演示动图（离线渲染，不截真实屏幕）
   promo-shot.cs             生成宣传图（合成假桌面，不泄露真实屏幕）
 docs/                   README 用的界面截图
 dist/                  给用户的使用说明
-versions/              45 个历史版本快照（源码 + exe + 图标 + 说明）
+versions/              47 个历史版本快照（源码 + exe + 图标 + 说明）
 CHANGELOG.md           完整更新日志（含两条产品线说明）
 ```
 
@@ -347,7 +353,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 - 完整更新日志见 **[CHANGELOG.md](CHANGELOG.md)**
 - 里程碑版本在 **[Releases](https://github.com/ExpertKT/SnapWheel/releases)** 可直接下载
-- 全部 43 个版本的快照（源码 + exe + 图标 + 说明）在 **[`versions/`](versions/)**
+- 全部 47 个版本的快照（源码 + exe + 图标 + 说明）在 **[`versions/`](versions/)**
 
 两条产品线同源编译：`v0.3.x / v0.4.x` 是完整版（含万能键），`v0.2.x` 是无万能键变体（`/define:NO_KEY`）。
 
