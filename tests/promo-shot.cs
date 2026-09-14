@@ -233,7 +233,7 @@ namespace SnapWheel
                     if (wheel != null) Fit(g, wheel, new RectangleF(430, 400, 640, 640));
                     float cx = 86, cy = 396;
                     Chip(g, "绿色免安装", ref cx, cy, 26); cy += 62; cx = 86;
-                    Chip(g, "114 KB 单文件", ref cx, cy, 26); cy += 62; cx = 86;
+                    Chip(g, "274 KB 单文件", ref cx, cy, 26); cy += 62; cx = 86;
                     Chip(g, "开源 MIT", ref cx, cy, 26);
                     Text(g, "Windows 10 / 11", 84, 1010, 24, Sub);
                 }
