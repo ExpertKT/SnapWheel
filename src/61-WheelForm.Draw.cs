@@ -816,6 +816,23 @@ namespace SnapWheel
             // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
             PointF c = Center();
             Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
+            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
+            if (_closeHover && StyleNeu() && _settings.ShadowPercent > 8)
+            {
+                using (GraphicsPath gp = new GraphicsPath())
+                {
+                    float gcx = cbr.Left + cbr.Width / 2f, gcy = cbr.Top + cbr.Height / 2f;
+                    float gho = cbr.Width / 2f + 11f;
+                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
+                    using (PathGradientBrush halo = new PathGradientBrush(gp))
+                    {
+                        halo.CenterPoint = new PointF(gcx, gcy);
+                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
+                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                        g.FillPath(halo, gp);
+                    }
+                }
+            }
             Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
             PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
@@ -868,6 +885,23 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
+            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
+            if (_gearHover && StyleNeu() && _settings.ShadowPercent > 8)
+            {
+                using (GraphicsPath gp = new GraphicsPath())
+                {
+                    float gcx = gbr.Left + gbr.Width / 2f, gcy = gbr.Top + gbr.Height / 2f;
+                    float gho = gbr.Width / 2f + 11f;
+                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
+                    using (PathGradientBrush halo = new PathGradientBrush(gp))
+                    {
+                        halo.CenterPoint = new PointF(gcx, gcy);
+                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
+                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                        g.FillPath(halo, gp);
+                    }
+                }
+            }
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
                 Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
@@ -1031,6 +1065,23 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
+            // 悬停时和万能键一样来一圈外发光（用户要求）：PathGradientBrush 中心亮、外围透明。
+            if (_shootHover && StyleNeu() && _settings.ShadowPercent > 8)
+            {
+                using (GraphicsPath gp = new GraphicsPath())
+                {
+                    float gcx = sbr.Left + sbr.Width / 2f, gcy = sbr.Top + sbr.Height / 2f;
+                    float gho = sbr.Width / 2f + 11f;
+                    gp.AddEllipse(gcx - gho, gcy - gho, gho * 2f, gho * 2f);
+                    using (PathGradientBrush halo = new PathGradientBrush(gp))
+                    {
+                        halo.CenterPoint = new PointF(gcx, gcy);
+                        halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
+                        halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                        g.FillPath(halo, gp);
+                    }
+                }
+            }
             if (pb2 > 0.01f)
             {
                 g.TranslateTransform(sh2.X, sh2.Y);
