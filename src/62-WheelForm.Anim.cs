@@ -131,7 +131,7 @@ namespace SnapWheel
         {
             // 0.6.0：每次唤出都重新抢一次最顶层 —— 双击打开图片、图片查看器关掉之后，
             // 轮盘会被压在别的置顶窗口下面（用户反馈：关掉窗口后轮盘回不到最顶层）。
-            try { TopMost = true; BringToFront(); } catch { }
+            try { TopMost = false; TopMost = true; BringToFront(); } catch { }
             if (!Visible) { RequestBackdropAsync(); _show = 0f; _rendered = false; Show(); }
             SetShow(1f);
             _lastActive = DateTime.Now;
@@ -323,6 +323,7 @@ namespace SnapWheel
                 // 用户要的是看着它们滑下来：先给一个 +一个步距的补偿（把图拉回旧位置），
                 // AnimTick 再每帧衰减回 0，于是从旧位置平滑滑到新位置。
                 _phiShift = StepRad();
+                _delShiftFrom = _delIdx;
                 // 0.6.0：删除后，后面每张图的下标都前移 1 —— 视口也必须跟着挪一格，
                 // 否则"上面的缩略图会瞬间下移一格"（用户反馈的瞬移、没有过渡）。
                 // 判据：删的是视口最下面那张或更靠上的，才需要 -1（可见内容位置保持不变）；
@@ -343,7 +344,7 @@ namespace SnapWheel
             if (_phiShift != 0f)
             {
                 _phiShift *= 0.80f;
-                if (Math.Abs(_phiShift) < 0.002f) _phiShift = 0f;
+                if (Math.Abs(_phiShift) < 0.002f) { _phiShift = 0f; _delShiftFrom = -1; }
                 need = true;
             }
 

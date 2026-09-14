@@ -29,6 +29,7 @@ namespace SnapWheel
         // 删除后让上面的图滑下来用的过渡量：删除瞬间设成 -一个步距（抵消刚发生的那格下移），
         // 再由 AnimTick 每帧衰减回 0 —— 图从旧位置平滑滑到新位置，而不是瞬间跳过去。
         float _phiShift = 0f;
+        int _delShiftFrom = -1;        // 只给被删那张及其上方的图加补偿：下面的图本来就不该动
         // ---- 省电模式（见 12-Power.cs）----
         bool _powerSkipped;      // 上一帧是不是被"省电"跳过了（绝不连续跳两帧）
         bool _forceDraw;         // 这一帧必须画（输入导致的：悬停/按下/滚轮）
@@ -383,7 +384,14 @@ namespace SnapWheel
 
         float EffR() { return _R; }
 
-        float ItemPhi(int i) { return _phiMin + (i - _offset) * StepRad() + _phiShift; }
+        float ItemPhi(int i)
+        {
+            float p = _phiMin + (i - _offset) * StepRad();
+            // 删除后的滑动补偿只加在被删那张及其上方的图上：要的是上面的图滑下来填补空位，
+            // 下面的图原地不动（之前是全局补偿，等于整盘都在动）。
+            if (_delShiftFrom >= 0 && i >= _delShiftFrom) p += _phiShift;
+            return p;
+        }
 
         // ============================ 视口锚点（0.5.3） ============================
         // `_offset` 的含义没变：**落在弧起点那一格（_phiMin，靠屏幕角落那端）上的图片下标**。

@@ -103,7 +103,7 @@ namespace SnapWheel
         {
             if (string.IsNullOrEmpty(text)) return;
             int n = text.Length;
-            float start = midPhi - charStep * (n - 1) / 2f;
+            float start = midPhi + charStep * (n - 1) / 2f;   // 起点在 phi 大侧，配合递减步进读起来才是正序
             for (int i = 0; i < n; i++)
             {
                 string ch = text.Substring(i, 1);
