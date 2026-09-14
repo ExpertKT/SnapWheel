@@ -79,12 +79,12 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, no + " / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 // 标题（hero 那张更大）
-                float ts = hero ? 96 : 76;      // 字号统一：原来按长度分 62/76 两档，标题高度不齐
+                float ts = hero ? 96 : 62;      // 统一 62：76 太大（长标题会被右边缘裁），62 既齐又放得下 11 字
                 using (Font ft = new Font(FONT, ts, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Color.White))
                     TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
 
-                int y = hero ? 470 : 400;      // 固定行位置：所有图的说明文字落在同一条线上
+                int y = hero ? 470 : 330;      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
                 using (Font fl = new Font(FONT, hero ? 40 : 36))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { g.DrawString(line1, fl, sb, 84, y); }
@@ -93,7 +93,7 @@ namespace SnapWheel
                 { g.DrawString(line2, fs, sb, 84, y + (hero ? 66 : 58)); }
 
                 // 右上角标（hero 打新，其它打卖点）
-                if (no == 1 || no == 4 || no == 6) Chip(g, no == 1 ? "免安装 · 274 KB" : "0.6.0 新增", 84, y + (hero ? 150 : 126), 24);
+                if (no == 1 || no == 4 || no == 6) Chip(g, no == 1 ? "免安装 · 274 KB" : "0.6.0 新增", 84, y + (hero ? 138 : 112), 24);
 
                 // 界面渲染：贴在下方（hero 靠右放小一点，避免压住文案）
                 if (no == 4) LongDemo(g);          // 长截图没有现成渲染图，现场画个示意
@@ -101,7 +101,7 @@ namespace SnapWheel
                 if (im != null)
                 {
                     int maxW = hero ? 620 : 900;
-                    int maxH = hero ? 520 : 520;
+                    int maxH = hero ? 380 : 520;   // 主图那张文案占得高，卡片要小一点才不压字
                     float s = Math.Min((float)maxW / im.Width, (float)maxH / im.Height);
                     int dw = (int)(im.Width * s), dh = (int)(im.Height * s);
                     int dx = hero ? 1080 - dw - 60 : (1080 - dw) / 2;
