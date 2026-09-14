@@ -1136,7 +1136,7 @@ namespace SnapWheel
                     float r3 = EffR() + 78f;                       // 回到 45° 对角线外侧那一档（原来的位置）
                     float mid3 = (_phiMin + _phiMax) / 2f;         // 45° 对角线方向
                     // 弧长按内容算：圆点 + 间隔 + 文字 + 两端留白 —— 这样数字绝不会被胶囊边缘切到
-                    float needLen = ip + 10f + sz.Width * 1.04f + 16f;   // 给圆点和两端留够，字号不再被挤
+                    float needLen = ip + sz.Width * 1.04f + 30f;   // 圆点(直径+端头留白) + 间隙 + 文字 + 尾端留白
                     float half3 = needLen / 2f / r3;
                     using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, mid3 - half3, mid3 + half3))
                     {
@@ -1149,8 +1149,8 @@ namespace SnapWheel
                     }
                     // 内容按水平直线摆（弧长很短时和弧的差别可忽略），左右严格留白 ——
                     // 用户反馈的计数胶囊数字显示问题就是这里排版太挤导致数字被切。
-                    float dotAng = (ip + 9f) / r3;                     // 圆点占的角度宽度
-                    PointF dp3 = ArcUi.Polar(cc2, sx3, sy3, mid3 + half3 - dotAng / 2f - 3f / r3, r3);   // 圆点在弧的"前一端"（这个角下 phi 大的一侧才是屏幕左上方）
+                    float dotAng = (ip + 12f) / r3;                    // 圆点直径 + 端头留白
+                    PointF dp3 = ArcUi.Polar(cc2, sx3, sy3, mid3 + half3 - dotAng / 2f, r3);   // 圆点在弧的前一端（这个角下 phi 大的一侧才是屏幕左上方）
                     // （圆点与文字都按弧坐标摆，不再用屏幕直线坐标）
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
                         g.FillEllipse(db, dp3.X - ip / 2f, dp3.Y - ip / 2f, ip, ip);
@@ -1158,7 +1158,7 @@ namespace SnapWheel
                     // 数字也沿弧排（用户要求跟胶囊同一条弧）：弧长按内容算足了，整串都在胶囊里
                     {
                     float step3 = (sz.Width * 1.04f / Math.Max(1, idx.Length)) / r3;   // 每字一个角：按实测字宽，紧凑
-                    float textMid = mid3 + dotAng * 0.12f;           // 文字**居中**：只极轻微避开圆点（原来整段往 phi 小侧让，视觉上就偏下）
+                    float textMid = mid3 + half3 - dotAng - (ip / 2f + 6f + sz.Width * 1.04f / 2f) / r3;   // 文字排在圆点之后，中间留 6px 缝（用户反馈：字和圆点会重叠）
                         ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, textMid, step3, 0.45f);
                     }
                     }
