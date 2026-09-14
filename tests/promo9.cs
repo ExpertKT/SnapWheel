@@ -45,7 +45,7 @@ namespace SnapWheel
                 Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口 · 0.6.0 强化", "guide.png", false);
                 Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "promo_menu.png", false);
                 Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "promo_intro.png", false);
-                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "Windows 10 / 11 · 免安装 · 用系统自带运行库，什么都不用装", "wheel.png", false);
+                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "Windows 10 / 11 · 免安装 · 用系统自带运行库", "wheel.png", false);
                 Merge();
                 Console.WriteLine("完成：9 张图 + 一张九宫格总览已输出到 " + outDir);
             }
@@ -95,7 +95,8 @@ namespace SnapWheel
                 if (no == 1 || no == 4 || no == 6) Chip(g, no == 1 ? "免安装 · 274 KB" : "0.6.0 新增", 84, y + (hero ? 150 : 126), 24);
 
                 // 界面渲染：贴在下方（hero 靠右放小一点，避免压住文案）
-                Bitmap im = Load(img);
+                if (no == 4) LongDemo(g);          // 长截图没有现成渲染图，现场画个示意
+                Bitmap im = (no == 4) ? null : Load(img);
                 if (im != null)
                 {
                     int maxW = hero ? 620 : 900;
@@ -191,6 +192,44 @@ namespace SnapWheel
             }
         }
 
+        // 「滚动长截图」那格的示意图：左边一屏网页 → 右边拼出来的长条。
+        // 没有现成截图素材（这个功能是 0.6.0 新加的），所以直接画。
+        static void LongDemo(Graphics g)
+        {
+            int cx = 540, top = 610;
+            using (SolidBrush white = new SolidBrush(Color.FromArgb(242, 250, 252, 255)))
+            using (Pen edge = new Pen(Color.FromArgb(80, 120, 150, 190), 1.4f))
+            {
+                // 左：普通一屏
+                RectangleF a = new RectangleF(cx - 350, top, 280, 320);
+                using (GraphicsPath rp = Gfx.Round(a, 16f)) { g.FillPath(white, rp); g.DrawPath(edge, rp); }
+                for (int i = 0; i < 8; i++)
+                {
+                    using (SolidBrush lb = new SolidBrush(Color.FromArgb(i % 3 == 0 ? 160 : 95, 90, 120, 160)))
+                        g.FillRectangle(lb, a.X + 22, a.Y + 26 + i * 34, a.Width - 44 - (i % 3) * 44, 11);
+                }
+                // 右：拼出来的长条（分成几段，示意"一段段接上去"）
+                RectangleF b = new RectangleF(cx + 80, top - 60, 280, 440);
+                using (GraphicsPath rp = Gfx.Round(b, 16f)) { g.FillPath(white, rp); g.DrawPath(edge, rp); }
+                for (int i = 0; i < 11; i++)
+                {
+                    using (SolidBrush lb = new SolidBrush(Color.FromArgb(i % 4 == 0 ? 160 : 95, 90, 120, 160)))
+                        g.FillRectangle(lb, b.X + 22, b.Y + 24 + i * 36, b.Width - 44 - (i % 4) * 40, 11);
+                    if (i == 3 || i == 7)     // 拼接缝
+                        using (Pen sp = new Pen(Color.FromArgb(150, 0, 138, 226), 2f))
+                            g.DrawLine(sp, b.X + 10, b.Y + 24 + i * 36 - 8, b.Right - 10, b.Y + 24 + i * 36 - 8);
+                }
+            }
+            using (Font f = new Font(FONT, 52, FontStyle.Bold))
+            using (SolidBrush sb = new SolidBrush(Accent))
+                g.DrawString("→", f, sb, cx - 46, top + 120);
+            using (Font f = new Font(FONT, 24))
+            using (SolidBrush sb = new SolidBrush(Sub))
+            {
+                g.DrawString("一屏一屏自动滚", f, sb, cx - 360, top + 350);
+                g.DrawString("无缝拼成一张长图", f, sb, cx + 90, top + 400);
+            }
+        }
         static void Backdrop(Graphics g, int w, int h, int seed)
         {
             using (LinearGradientBrush lg = new LinearGradientBrush(new Rectangle(0, 0, w, h), BgTop, BgBottom, 62f))
