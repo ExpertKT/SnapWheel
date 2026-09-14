@@ -125,6 +125,15 @@ namespace SnapWheel
 
             byte[] cur = Sample(frame);
             Match m = Find(_prev, cur, _w, _h, _sw, _sh);
+            // 诊断：把每次判定的依据写进日志（真实屏幕上"接不上"时，这是唯一能看出卡在哪的东西）
+            try
+            {
+                Err.Log("LongShot", new Exception("帧 " + _shotCount + " " + _w + "x" + _h + " -> "
+                    + (m.Ok ? ("接上 " + m.NewRows + " 行") : "拒绝")
+                    + " best=" + m.Score.ToString("0.00") + " second=" + m.Second.ToString("0.00")
+                    + " bad=" + m.BadRatio.ToString("0.000") + " why=" + (m.Why == null ? "-" : m.Why)));
+            }
+            catch { }
             if (!m.Ok) { _why = m.Why; return false; }
 
             addedRows = m.NewRows;
@@ -185,12 +194,12 @@ namespace SnapWheel
         static void AddBand(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int d,
                             ref long sad, ref int n, ref int bad)
         {
-            for (int y = bandTop; y < bandBot; y += 2)
+            for (int y = bandTop; y < bandBot; y += 3)
             {
                 int y2 = y - d;
                 if (y2 < 0) continue;
                 int o1 = y * sw, o2 = y2 * sw;
-                for (int x = 0; x < sw; x += 2)
+                for (int x = 0; x < sw; x += 4)
                 {
                     int a = prev[o1 + x], b = cur[o2 + x];
                     int diff = (a > b) ? (a - b) : (b - a);
@@ -216,6 +225,7 @@ namespace SnapWheel
             if (bandTop < 0) bandTop = 0;
 
             int maxD = bandTop;                               // d 最大到"模板带顶行"：再大模板就顶出屏幕了
+            if (maxD > 500) maxD = 500;                       // 上限：再大的单帧滚动本来也难保证拼对，还极费时间
             if (maxD > h - 16) maxD = h - 16;                 // 保险（矮屏）
 
             // 第二段验证带（屏幕 28% 处）：和主带隔得远，专门用来拆穿"周期图案对齐"的假匹配

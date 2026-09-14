@@ -1113,8 +1113,8 @@ namespace SnapWheel
                     float sx3 = Sx(), sy3 = Sy();
                     float ip = sz.Height * 0.72f;                    // 前置的小圆点
                     float h3 = sz.Height + 12f;
-                    float r3 = EffR() + _thumb * 0.75f + h3 / 2f;
-                    float mid3 = (_phiMin + _phiMax) / 2f - 0.45f;
+                    float r3 = EffR() + 78f;                       // 回到 45° 对角线外侧那一档（原来的位置）
+                    float mid3 = (_phiMin + _phiMax) / 2f;         // 45° 对角线方向（用户要求靠 45° 角，别再往下偏）
                     float st3 = ArcUi.StepFor(g, idx, f, r3, 3f);
                     float span3 = st3 * (idx.Length - 1);
                     float b0 = mid3 - span3 / 2f - st3 * 1.5f;        // 左端留一截给圆点

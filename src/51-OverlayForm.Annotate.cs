@@ -61,7 +61,8 @@ namespace SnapWheel
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
         const int IdxUndo = IdxBg + 3;
-        const int BtnCount = IdxBg + 4;
+        const int IdxLong = IdxBg + 4;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
+        const int BtnCount = IdxBg + 5;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -550,7 +551,20 @@ namespace SnapWheel
                             break;
                         }
                     case IdxSizeDown:   // A-
-                    case IdxSizeUp:     // A+
+                    case IdxLong:       // 长图：一页纸 + 上下箭头
+                    float lx = d2.Left + d2.Width / 2f, ly = d2.Top + d2.Height / 2f;
+                    using (Pen pl = new Pen(Color.FromArgb(226, 232, 240), 1.6f))
+                    {
+                        g.DrawRectangle(pl, lx - 5f * _k, ly - 8f * _k, 10f * _k, 16f * _k);
+                        g.DrawLine(pl, lx, ly - 9f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx - 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx + 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx, ly + 9f * _k, lx, ly + 14f * _k);
+                        g.DrawLine(pl, lx - 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
+                        g.DrawLine(pl, lx + 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
+                    }
+                    break;
+                case IdxSizeUp:     // A+
                         {
                             using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                             using (SolidBrush b = new SolidBrush(ic))
@@ -701,6 +715,14 @@ namespace SnapWheel
                     else if (i == IdxBg) { _textBg = !_textBg; SaveTextBg(); }
                     else if (i == IdxSizeDown) { if (_sel != null) ResizeShape(_sel, -1f); else SetNextTextSize(_textSize - 2f); }
                     else if (i == IdxSizeUp) { if (_sel != null) ResizeShape(_sel, 1f); else SetNextTextSize(_textSize + 2f); }
+                    else if (i == IdxLong)
+                    {
+                        // 0.6.0：把当前选区交给 App 去跑滚动长截图（只拼这一块，不再抓整屏）
+                        WantLongShot = true;
+                        LongShotRegion = ScreenFor(_vs, new Point((int)_c.X, (int)_c.Y), _hasSel);
+                        DialogResult = DialogResult.OK;
+                        Close();
+                    }
 
                     else Undo();
                     Invalidate();

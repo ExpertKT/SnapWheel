@@ -52,7 +52,6 @@ namespace SnapWheel
             };
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
-            menu.Items.Add("滚动长截图…", null, new EventHandler(OnLongShot));
             menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
             menu.Items.Add("新手引导", null, new EventHandler(OnGuide));
             menu.Items.Add("重播开启动画", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
@@ -400,6 +399,12 @@ namespace SnapWheel
             }
             else if (_wheel.Visible) _wheel.Hide();   // don't let the topmost wheel sit over the capture overlay
 
+            // 第一次用截图浮层：让工具条旁边亮一次"能标注"的提示（只亮这一次）
+            if (!_settings.AnnotHintDone)
+            {
+                _settings.AnnotHintDone = true;
+                _settings.Save();
+            }
             Rectangle vs = SystemInformation.VirtualScreen;
             Bitmap shot = new Bitmap(vs.Width, vs.Height);
             try
@@ -409,14 +414,16 @@ namespace SnapWheel
             }
             catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
 
-            // 第一次用截图浮层：让工具条旁边亮一次"能标注"的提示（只亮这一次）
-            if (!_settings.AnnotHintDone)
-            {
-                _settings.AnnotHintDone = true;
-                _settings.Save();
-            }
             OverlayForm ov = new OverlayForm(vs, shot, _settings);
             ov.ShowDialog();
+            if (ov.WantLongShot)
+            {
+                // 0.6.0：在截图浮层里点了「长图」—— 带着他框的那块区域去跑滚动长截图
+                Rectangle reg = ov.LongShotRegion;
+                try { ov.Dispose(); } catch { }
+                RunLongShot(reg, wasExpanded);
+                return;
+            }
             if (ov.Result != null)
             {
                 Store st = _wheels.ActiveStore;
@@ -444,11 +451,11 @@ namespace SnapWheel
         // 托盘 / 菜单进来的入口。用户拍板的交互是"他自己滚，程序跟着无缝拼接" ——
         // 所以这里只做三件事：把轮盘让开、抓好第一屏、把 LongShotForm 摆上去。
         // 拼接本身在 58-LongShot.cs（引擎）和 59-LongShotForm.cs（提示条 + 定时抓帧）里。
-        void OnLongShot(object sender, EventArgs e) { CaptureLong(); }
+        // 入口在截图浮层的工具条上（用户要求：长截图从截图页面选，而不是托盘）
 
-        void CaptureLong()
+        void RunLongShot(Rectangle region, bool wasExpanded)
         {
-            bool wasExpanded = _wheel.Visible;
+            // 轮盘在进浮层时已经让开了；这里只负责长图本身
             if (_settings.CollapseMode && _wheel.Visible)
             {
                 _wheel.CollapseWheel(true);
@@ -456,21 +463,12 @@ namespace SnapWheel
             }
             else if (_wheel.Visible) _wheel.Hide();
 
-            Rectangle vs = SystemInformation.VirtualScreen;
-            Bitmap shot = new Bitmap(vs.Width, vs.Height);
-            try
-            {
-                using (Graphics g = Graphics.FromImage(shot))
-                    g.CopyFromScreen(vs.Left, vs.Top, 0, 0, vs.Size, CopyPixelOperation.SourceCopy);
-            }
-            catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
-
-            LongShotForm lf = new LongShotForm(shot);
+            LongShotForm lf = new LongShotForm(region);
             lf.ShowDialog();
             Bitmap result = lf.Result;
             try { lf.Dispose(); } catch { }
-            // 第一帧在 Start 里就整张拷进画布了，这里可以放心释放（别留着 16MB）
-            try { shot.Dispose(); } catch { }
+
+
 
             if (result != null)
             {

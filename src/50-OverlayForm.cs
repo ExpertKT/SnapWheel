@@ -24,6 +24,9 @@ namespace SnapWheel
         SizeF _sz;
         float _ang = 0f;
         bool _hasSel;
+        // 0.6.0：浮层工具条上的「长图」按钮 —— 点它就带着当前选区去跑滚动长截图（不再走托盘）
+        public bool WantLongShot = false;
+        public Rectangle LongShotRegion = Rectangle.Empty;
 
         bool _dragging;      // 新建选区
         Point _start;

@@ -7,42 +7,38 @@ using System.Windows.Forms;
 namespace SnapWheel
 {
     // ==================== 滚动长截图（0.6.0）：交互层 ====================
-    // 用户拍板的交互是「**他自己滚，程序跟着无缝拼接**」—— 不给目标窗口发合成滚轮消息，
-    // 所以不挑窗口、也不怕惯性滚动和滚动节流。
+    // 交互是"**他自己滚，程序跟着无缝拼接**"——不给目标窗口发合成滚轮消息，所以不挑窗口、
+    // 也不怕惯性滚动和滚动节流。
     //
-    // 这个窗口就是一条**贴在屏幕顶部的提示条**（宽 = 光标所在屏幕的宽，高 76px）：
-    //   · 显示已接了几段、长图现在多高、距离上限还有多少；
-    //   · 失配时直接说原因（"这一屏没对上，再滚一下"），不静默失败；
-    //   · Enter = 结束并出图，Esc = 取消。
+    // 0.6.0 修订：入口从托盘搬到**截图浮层的工具条**（用户要求），而且**只抓他在浮层里框出来的那块选区**：
+    //   · 以前抓整个屏幕，长图里混着任务栏、侧边栏、别的窗口；现在你在哪个区域滚，就只拼那个区域。
+    //   · 提示条贴在选区**上方**（放不下就改到下方），不会挡住你要看的内容。
+    //
+    // 这个窗口就是那条提示条：显示已接了几段、长图现在多高、失配时直接说原因；Enter 出图、Esc 取消。
     //
     // 三个关键点：
-    //   ① 窗口设了 WDA_EXCLUDEFROMCAPTURE —— **抓屏拍不到它自己**，否则每一帧都带着这条提示，
-    //      拼出来的长图会一路重复这条黑边。
-    //   ② 每 200ms 抓一屏就交给 LongShot.Push 去判：接得上就接，接不上就等下一帧。
+    //   ① 窗口设了 WDA_EXCLUDEFROMCAPTURE —— 抓屏拍不到它自己（否则每帧都带着这条提示、长图一路重复）。
+    //   ② 每 200ms 抓一帧交给 LongShot.Push 去判：接得上就接，接不上就等下一帧。
     //      **不单独做"停稳检测"**：滚动中抓到的帧本来就匹配不上，判据交给拼接算法，逻辑只有一份。
-    //      抓屏用一张复用的位图，避免每 200ms 分配一次 16MB。
-    //   ③ 提示条只占屏幕顶部一条 —— 不遮内容（遮罩式浮层会让人看不清要滚的东西），
-    //      鼠标也不会跑上去，滚轮照旧作用在下面的目标窗口。
+    //   ③ 抓屏用一张复用的位图，不每 200ms 分配一次（选区大时那是十几 MB）。
     class LongShotForm : Form
     {
         public Bitmap Result;
 
-        readonly Rectangle _scr;              // 提示条所在屏幕
-        readonly Rectangle _vs;               // 虚拟屏（抓帧用它 —— 必须和第一帧同尺寸，否则 Push 会全部判"尺寸变了"）
+        readonly Rectangle _region;           // 要拼的那块屏幕区域（就是浮层里的选区）
         readonly LongShot _ls = new LongShot();
         readonly Timer _t;
-        readonly Bitmap _scratch;             // 复用的抓屏位图
+        readonly Bitmap _scratch;             // 复用的抓屏位图（选区尺寸）
         string _msg = "滚到哪儿它接哪儿";
         bool _err = false;
         bool _busy = false;
         int _shots = 0;
-        int _fails = 0;
 
-        public LongShotForm(Bitmap firstFrame)
+        public LongShotForm(Rectangle region)
         {
-            _vs = SystemInformation.VirtualScreen;
-            try { _scr = Screen.FromPoint(Cursor.Position).Bounds; }
-            catch { _scr = new Rectangle(_vs.Left, _vs.Top, _vs.Width, _vs.Height); }
+            if (region.Width < 16 || region.Height < 16)
+                region = new Rectangle(region.Left, region.Top, Math.Max(16, region.Width), Math.Max(16, region.Height));
+            _region = region;
 
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
@@ -50,15 +46,26 @@ namespace SnapWheel
             TopMost = true;
             BackColor = Color.FromArgb(24, 26, 32);
             Font = new Font("Microsoft YaHei UI", 9.5f);
-            ClientSize = new Size(_scr.Width, Ui.S(92));
-            Location = new Point(_scr.Left, _scr.Top);
+
+            int barH = Ui.S(86);
+            int barW = Math.Max(Ui.S(420), _region.Width);
+            Rectangle scr;
+            try { scr = Screen.FromRectangle(_region).Bounds; }
+            catch { scr = new Rectangle(_region.Left, _region.Top, barW, barH); }
+
+            int by = _region.Top - barH - Ui.S(8);          // 默认贴在选区上方
+            if (by < scr.Top) by = Math.Min(scr.Bottom - barH, _region.Bottom + Ui.S(8));   // 上方放不下就放下方
+            int bx = Math.Max(scr.Left, Math.Min(_region.Left, scr.Right - barW));
+            ClientSize = new Size(barW, barH);
+            Location = new Point(bx, by);
+
+            try { _scratch = new Bitmap(_region.Width, _region.Height, PixelFormat.Format32bppPArgb); }
+            catch { _scratch = null; }
 
             string err = null;
-            bool ok = (firstFrame != null) && _ls.Start(firstFrame, out err);
+            Bitmap first = Grab();
+            bool ok = (first != null) && _ls.Start(first, out err);
             if (!ok) { _msg = err ?? "没能开始长截图"; _err = true; }
-
-            try { _scratch = new Bitmap(_vs.Width, _vs.Height, PixelFormat.Format32bppPArgb); }
-            catch { _scratch = null; }
 
             _t = new Timer();
             _t.Interval = 200;
@@ -80,15 +87,15 @@ namespace SnapWheel
             BringToFront();
         }
 
-        // 抓一屏（写到复用的位图里，省得每 200ms 分配一张全屏图）
+        // 抓一帧（写进复用位图里）
         Bitmap Grab()
         {
             if (_scratch == null) return null;
             try
             {
                 using (Graphics g = Graphics.FromImage(_scratch))
-                    g.CopyFromScreen(_vs.Left, _vs.Top, 0, 0,
-                                     new Size(_scratch.Width, _scr.Height), CopyPixelOperation.SourceCopy);
+                    g.CopyFromScreen(_region.Left, _region.Top, 0, 0,
+                                     new Size(_scratch.Width, _scratch.Height), CopyPixelOperation.SourceCopy);
                 return _scratch;
             }
             catch { return null; }
@@ -110,13 +117,11 @@ namespace SnapWheel
                 if (ok)
                 {
                     _shots++;
-                    _fails = 0;
                     _err = false;
                     _msg = "刚接上 " + added + " 行";
                 }
                 else
                 {
-                    _fails++;
                     _err = true;
                     _msg = (_ls.LastWhy == null ? "这一屏没对上，再滚一下" : _ls.LastWhy);
                 }
@@ -163,7 +168,6 @@ namespace SnapWheel
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            // 左侧：图标块 + 标题
             int pad = Ui.S(14);
             int ih = Ui.S(44);
             Rectangle icon = new Rectangle(pad, (ClientSize.Height - ih) / 2, ih, ih);
@@ -175,28 +179,26 @@ namespace SnapWheel
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
             int x = icon.Right + Ui.S(12);
-            int top = Ui.S(12);
-            TextRenderer.DrawText(g, "滚动长截图：把鼠标放到要滚的窗口上，往下滚", Font, new Point(x, top),
+            int top = Ui.S(10);
+            TextRenderer.DrawText(g, "滚动长截图：把鼠标放到刚才框选的区域里，往下滚", Font, new Point(x, top),
                 Color.FromArgb(236, 238, 244), TextFormatFlags.NoPadding);
             using (Font fs = new Font("Microsoft YaHei UI", 8.5f))
-                TextRenderer.DrawText(g, "滚到哪儿它接哪儿 · Enter 结束出图 · Esc 取消", fs, new Point(x, top + Ui.S(21)),
+                TextRenderer.DrawText(g, "一次别滚太多 · Enter 结束出图 · Esc 取消", fs, new Point(x, top + Ui.S(20)),
                     Color.FromArgb(150, 154, 164), TextFormatFlags.NoPadding);
 
-            // 右侧：状态 + 高度进度
             string line;
             Color lc = Color.FromArgb(150, 154, 164);
             if (_err) { line = _msg; lc = Color.FromArgb(240, 190, 120); }
-            else if (_shots == 0) line = "还没接上：滚一下下面那个窗口的内容（一次别滚太多）";
+            else if (_shots == 0) line = "还没接上：在那块区域里往下滚滚轮";
             else line = "已接 " + _shots + " 段 · 长图 " + _ls.Height + " px 高";
 
             int rw = Ui.S(300);
-            Rectangle rr = new Rectangle(ClientSize.Width - pad - rw, top, rw, Ui.S(40));
+            Rectangle rr = new Rectangle(ClientSize.Width - pad - rw, top, rw, Ui.S(36));
             TextRenderer.DrawText(g, line, Font, rr, lc,
                 TextFormatFlags.Right | TextFormatFlags.Top | TextFormatFlags.NoPadding);
 
-            // 进度条：画布高度 / 上限
             int pw = rw, ph = Ui.S(4);
-            int py = rr.Bottom - Ui.S(6);
+            int py = rr.Bottom - Ui.S(2);
             Rectangle track = new Rectangle(rr.Right - pw, py, pw, ph);
             using (SolidBrush b = new SolidBrush(Color.FromArgb(60, 64, 74))) g.FillRectangle(b, track);
             double frac = (double)_ls.Height / LongShot.MaxCanvasH;
