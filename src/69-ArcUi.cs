@@ -48,7 +48,7 @@ namespace SnapWheel
         {
             List<PointF> pts = new List<PointF>();
             float rOut = r + h / 2f, rIn = r - h / 2f;
-            int seg = Math.Max(3, (int)(Math.Abs(a1 - a0) * 180.0 / Math.PI / 2.0));
+            int seg = Math.Max(6, (int)(Math.Abs(a1 - a0) * 180.0 / Math.PI / 1.0));   // 每 1 度一个点：更圆润
 
             for (int i = 0; i <= seg; i++)                       // 外弧 a0 -> a1
                 pts.Add(Polar(c, sx, sy, a0 + (a1 - a0) * i / seg, rOut));
@@ -73,14 +73,18 @@ namespace SnapWheel
             Tangent(c, sx, sy, a, r, out tx, out ty);
             if (tx == 0 && ty == 0) { tx = -uy; ty = ux; }
 
-            const int steps = 8;
+            const int steps = 14;
             for (int i = 1; i < steps; i++)
             {
                 // 参数 t：0 = 外点、π/2 = 切线外推点、π = 内点
                 double t = atEnd ? (Math.PI * i / steps) : (Math.PI * (steps - i) / steps);
                 float ct = (float)Math.Cos(t), st = (float)Math.Sin(t);
-                pts.Add(new PointF(mid.X + (h / 2f) * (ux * ct + tx * st),
-                                   mid.Y + (h / 2f) * (uy * ct + ty * st)));
+                // 端帽必须凸向弧继续往外的那一侧：a1 端（外弧终点）继续往前 = +切线；
+                // a0 端（内弧终点）要往回走 = -切线。这里原来两端都用了 +切线 —— a0 端于是
+                // 凸向了弧带内部、和弧带自交，填充出来就是一个缺口（用户反馈的胶囊显示异常）。
+                float dir = atEnd ? 1f : -1f;
+                pts.Add(new PointF(mid.X + (h / 2f) * (ux * ct + dir * tx * st),
+                                   mid.Y + (h / 2f) * (uy * ct + dir * ty * st)));
             }
         }
 

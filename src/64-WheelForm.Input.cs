@@ -144,7 +144,7 @@ namespace SnapWheel
             Rectangle k = KeyRect();
             if (k.Width < 8 || k.Height < 8) return Rectangle.Empty;      // 保险：拿不到键就不排
             float kcx = k.X + k.Width / 2f, kcy = k.Y + k.Height / 2f;
-            float rad = k.Width / 2f + s / 2f + 6f;
+            float rad = k.Width / 2f + s / 2f + 22f;      // 留出万能键那圈外发光的位置（用户反馈：贴太近把光盖住了）
             double baseA = Math.PI * 1.25;                               // 225° = 屏幕左上
             double stepA = Math.PI * 40 / 180;
             double a = baseA + stepA * (order - 1);

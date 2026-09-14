@@ -40,6 +40,8 @@ namespace SnapWheel
                 region = new Rectangle(region.Left, region.Top, Math.Max(16, region.Width), Math.Max(16, region.Height));
             _region = region;
 
+            // 双缓冲：抓帧/状态刷新时提示条不再闪（用户反馈：进入滚动时 UI 在抖）
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
@@ -68,7 +70,7 @@ namespace SnapWheel
             if (!ok) { _msg = err ?? "没能开始长截图"; _err = true; }
 
             _t = new Timer();
-            _t.Interval = 200;
+            _t.Interval = 300;      // 300ms 抓一帧：200ms 太密，会把目标程序的滚动拖得不平滑（用户反馈）
             _t.Tick += new EventHandler(OnTick);
             if (ok) _t.Start();
         }
