@@ -134,7 +134,12 @@ namespace SnapWheel
                     + " bad=" + m.BadRatio.ToString("0.000") + " why=" + (m.Why == null ? "-" : m.Why)));
             }
             catch { }
-            if (!m.Ok) { _why = m.Why; return false; }
+            if (!m.Ok)
+            {
+                _why = m.Why;
+                _prev = cur;   // 关键：失败也把基准推到当前帧，否则下一拍还在跟起点帧比，越滚越对不上
+                return false;
+            }
 
             addedRows = m.NewRows;
             int room = MaxCanvasH - _canvasH;
@@ -142,13 +147,26 @@ namespace SnapWheel
             if (addedRows <= 0) { _why = "长图已经到最大高度了"; return false; }
 
             // 把新屏的**最后 addedRows 行**贴到画布下方：这就是新露出来的内容
-            int srcY = _h - addedRows;
+            // ⚠️ 取"新露出的内容"必须避开屏幕底部的**静止区**（典型就是任务栏）：它不随页面滚动移动，
+            // 直接取屏幕最底部的 addedRows 行，等于每一帧都把任务栏又贴进长图一次 ——
+            // 结果就是"长图里全是堆叠的任务栏、几乎没有内容"（用户实测）。
+            // 做法：从最底部往上逐行比对上一帧，找出连续没变的那一段，就是静止区高度。
+            int still = 0;
+            for (int y = _h - 1; y > bandBot && still < _h - bandBot - 2; y--)
+            {
+                if (RowDiff(_prev, cur, _sw, y) > 3.0) break;
+                still++;
+            }
+            int take = addedRows;
+            int srcY = _h - still - take;
+            if (srcY < 0) { srcY = 0; take = _h - still; }
+            if (take <= 0) { _why = "没有可拼的新内容"; return false; }
             using (Graphics g = Graphics.FromImage(_canvas))
             {
                 g.DrawImage(frame, new Rectangle(0, _canvasH, _w, addedRows),
                                    new Rectangle(0, srcY, _w, addedRows), GraphicsUnit.Pixel);
             }
-            _canvasH += addedRows;
+            _canvasH += take;
             _shotCount++;
             _prev = cur;
             return true;
@@ -288,6 +306,15 @@ namespace SnapWheel
             // 那条判据只会一路拒。现在由上面的绝对判据（代价上限 + 差异像素比例）把关。
             m.NewRows = bestD;
             return m;
+        }
+
+        // 某一行在两帧之间的平均灰度差（用于找屏幕底部的静止区）
+        static double RowDiff(byte[] a, byte[] b, int sw, int y)
+        {
+            if (a == null || b == null) return 999;
+            int o = y * sw; long s = 0; int n = 0;
+            for (int x = 0; x < sw; x += 3) { int d = a[o + x] - b[o + x]; s += d < 0 ? -d : d; n++; }
+            return n == 0 ? 999 : (double)s / n;
         }
 
         // 灰度采样：列方向 2px 取 1（跳过右侧 SkipRight），行方向全取（行是匹配方向，不能跳）
