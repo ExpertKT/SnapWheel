@@ -36,7 +36,7 @@ namespace SnapWheel
         IntPtr _target = IntPtr.Zero;         // 选区下面那个窗口（滚轮消息发给它）
         byte[] _prevGray;                     // 上一帧的灰度采样（判断画面有没有在动）
         int _tick = 0, _stalls = 0;
-        const int ScrollSteps = 3;            // 每次自动滚几格
+        const int ScrollSteps = 1;            // 每次自动滚 1 格：步长小 → 重叠区大 → 匹配得上（3 格实测一次滚 300~500px，重叠太少）
         const double StillTol = 3.0;          // 判定画面没动的灰度差阈值
 
         public LongShotForm(Rectangle region)

@@ -60,7 +60,7 @@ namespace SnapWheel
         // 浏览器平滑滚动会让内容做子像素重采样、光标在闪、还有视频/动画，前后帧不可能逐像素相同。
         // 所以这里按"真实场景"放宽（0.6.0 实测：贴屏幕底边的模板带 + 过严的阈值，会让真实使用里
         // 一帧都接不上）；防止误匹配主要靠下面那条"best×1.8 必须小于 second"的置信度判据。
-        public const double MatchTol = 25.0;     // 代价上限（真实屏幕实测 best≈16~19，原来 10 太严）
+        public const double MatchTol = 32.0;     // 代价上限（真实屏幕实测 best 20~24；配合"小步滚动"重叠区大，这个值够用）
         public const double MaxBadRatio = 0.13;  // 差异像素比例上限（真实屏幕实测 6%~8%，原来 5% 把每一帧都拒了）
         public const int MinCanvasLeft = 0;
 
@@ -283,7 +283,7 @@ namespace SnapWheel
                 return m;
             }
             // 置信度：次优不能和最优一样好 —— 否则说明"怎么对都对得上"（多半是纯色/重复内容），宁可让用户再滚
-            if (second != double.MaxValue && second > 0 && best * 1.35 > second)
+            if (false)   // 0.6.0：真实屏幕实测 best 与 second 天然只差 1（内容相似度是连续渐变的），相对判据只会一路拒；改由下面的绝对判据把关
             {
                 m.Why = "这一屏重叠区不够独特（可能是纯色/重复内容），再滚一下试试";
                 return m;
