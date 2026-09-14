@@ -152,7 +152,8 @@ namespace SnapWheel
             // 结果就是"长图里全是堆叠的任务栏、几乎没有内容"（用户实测）。
             // 做法：从最底部往上逐行比对上一帧，找出连续没变的那一段，就是静止区高度。
             int still = 0;
-            for (int y = _h - 1; y > bandBot && still < _h - bandBot - 2; y--)
+            int bandBot2 = (int)(_h * BandCenterFrac) + BandRows / 2;   // 和 Find 里那条模板带同一条
+            for (int y = _h - 1; y > bandBot2 && still < _h - bandBot2 - 2; y--)
             {
                 if (RowDiff(_prev, cur, _sw, y) > 3.0) break;
                 still++;
