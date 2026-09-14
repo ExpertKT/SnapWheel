@@ -34,8 +34,8 @@ namespace SnapWheel
         static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
         static float Ease(float t) { return 1f - (1f - t) * (1f - t); }
 
-        static Rectangle ChatRect() { return new Rectangle(W - 296, 54, 266, 214); }
-        static Rectangle DocRect() { return new Rectangle(64, 46, 470, 300); }
+        static Rectangle ChatRect() { return new Rectangle(W - 282, 52, 252, 200); }
+        static Rectangle DocRect() { return new Rectangle(44, 44, 356, 262); }
         static Rectangle SelRect() { return new Rectangle(96, 78, 420, 250); }
 
         // 画一个像样的桌面：壁纸 + 任务栏 + 图标，不写任何"这是假的"字样
@@ -74,7 +74,6 @@ namespace SnapWheel
                     g.DrawString("截图", f, fb, 32, 86);
                     g.DrawString("素材", f, fb, 32, 146);
                 }
-                if (withDoc)
                 {
                     Rectangle d = DocRect();
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(250, 251, 253))) g.FillRectangle(sb, d);
@@ -84,8 +83,7 @@ namespace SnapWheel
                     using (Pen p = new Pen(Color.FromArgb(36, 0, 0, 0), 2f))
                         for (int y = d.Y + 60; y < d.Bottom - 30; y += 26) g.DrawLine(p, d.X + 24, y, d.Right - 30, y);
                 }
-                else
-                {
+                {   // 聊天窗口也画上：整段故事都在同一个桌面里，不再中途换背景
                     Rectangle c = ChatRect();
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(247, 249, 251))) g.FillRectangle(sb, c);
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(88, 198, 120))) g.FillRectangle(sb, c.X, c.Y, c.Width, 26);
@@ -163,8 +161,7 @@ namespace SnapWheel
 
             Bitmap shot = MakeShot(Color.FromArgb(232, 86, 110));
             Bitmap outside = MakeShot(Color.FromArgb(46, 148, 214));   // 从别处拖进来的那张
-            Bitmap deskChat = FakeDesktop(false);
-            Bitmap deskDoc = FakeDesktop(true);
+            Bitmap deskDoc = FakeDesktop(true);   // 文档窗口 + 聊天窗口都画在同一个桌面里
 
             WheelForm wf = new WheelForm(mgr, s);
             int wwh = wf.Width, whh = wf.Height;
@@ -231,7 +228,7 @@ namespace SnapWheel
             PointF c1 = cardCenter(0);
             for (int i = 0; i <= 9; i++)
             {
-                Bitmap fr = new Bitmap(deskChat);
+                Bitmap fr = new Bitmap(deskDoc);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
                     float t = Ease(i / 9f);
@@ -252,7 +249,7 @@ namespace SnapWheel
             }
 
             {
-                Bitmap fr = new Bitmap(deskChat);
+                Bitmap fr = new Bitmap(deskDoc);
                 using (Graphics g = Graphics.FromImage(fr)) { wheel(g, 1f); Cursor(g, c1.X, c1.Y, 1f); Caption(g, "图就挂在环上：换到哪个窗口它都在"); }
                 add(fr, 1300);
             }
@@ -282,6 +279,8 @@ namespace SnapWheel
                 add(fr, 110);
             }
             F(wf, "_dropActive", false); F(wf, "_dropExternal", false); F(wf, "_dropCount", 0);
+            if (st.Items.Count < 2) st.Add(outside);   // 松手之后才真的进环
+            c2 = cardCenter(1);
 
             {
                 Bitmap fr = new Bitmap(deskDoc);
