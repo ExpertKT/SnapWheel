@@ -33,7 +33,7 @@ namespace SnapWheel
         bool _filterAdded;
 
         // ---- 第 1 页「行为与快捷键」 ----
-        CheckBox _chkDisk, _chkAutoStart, _chkAuto, _chkTop, _chkClip, _chkBalloon, _chkUpdate, _chkDragFile;
+        CheckBox _chkDisk, _chkAutoStart, _chkAuto, _chkTop, _chkClip, _chkCopy, _chkBalloon, _chkUpdate, _chkDragFile;
         TextBox _txtDir;
         NumericUpDown _numSec;
         ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch;
@@ -425,7 +425,15 @@ namespace SnapWheel
             _chkClip.AutoSize = true;
             _chkClip.Text = "复制图片后自动收进轮盘";
             _chkClip.Checked = s.ClipboardImport;
-            g.Controls.Add(Row(_chkClip), 0, 6);
+            // 新勾选框**塞进这一行**（第 6 行左格），不新占一行：页面的行已经排到第 346px 的底，
+            // 再加一行就会把最下面那行顶出可视区。两个勾选框的宽度加起来（167+6+167=346）
+            // 仍在第 1 页列宽 317→346、页面宽 720 的余量里，右侧那列不会被动到。
+            _chkCopy = new CheckBox();
+            _chkCopy.AutoSize = true;
+            _chkCopy.Text = "截图后同时复制到剪贴板";
+            _chkCopy.Checked = s.CopyOnCapture;
+            _chkCopy.Margin = new Padding(6, 3, 0, 3);
+            g.Controls.Add(Row(_chkClip, _chkCopy), 0, 6);
 
             _chkBalloon = new CheckBox();
             _chkBalloon.AutoSize = true;
@@ -887,6 +895,7 @@ namespace SnapWheel
                 s.DeleteMode = (_cmbDel.SelectedIndex == 1) ? "single" : "double";
                 s.SwitchMode = (_cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
                 s.ClipboardImport = _chkClip.Checked;
+                s.CopyOnCapture = _chkCopy.Checked;
                 s.ShowBalloon = _chkBalloon.Checked;
                 s.CheckUpdate = _chkUpdate.Checked;
                 s.DragOutAsFile = _chkDragFile.Checked;

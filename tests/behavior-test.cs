@@ -1335,6 +1335,73 @@ namespace SnapWheel
                 return null;
             });
 
+            // ================= 43. 截图确认时同时复制到剪贴板 =================
+            Run("截图确认时同时复制到剪贴板（开着剪贴板里就有这张图 / 关掉不动剪贴板）", delegate
+            {
+                // 剪贴板在**锁屏 / 没有交互会话**时不可用（取一下就抛 ExternalException）。
+                // 那种环境里这条容错跳过 —— 不能让整套测试因为环境而不是代码挂掉。
+                try
+                {
+                    Clipboard.Clear();
+                    if (Clipboard.ContainsImage()) return "清空之后剪贴板里还有图（前置条件不成立）";
+                }
+                catch (Exception cex)
+                {
+                    Console.WriteLine("  （跳过：剪贴板不可用）");
+                    Console.WriteLine("     {0}: {1}", cex.GetType().Name, cex.Message);
+                    return null;
+                }
+
+                // ---- 开着（默认）：确认之后剪贴板里就是这张图，尺寸和选区一致 ----
+                Settings s = new Settings();
+                s.SaveToDisk = false;
+                s.CopyOnCapture = true;
+                OverlayForm on = Track(new OverlayForm(new Rectangle(0, 0, 400, 300), Solid(400, 300, Color.FromArgb(30, 90, 160)), s));
+                F(on, "_hasSel", true);
+                F(on, "_c", new PointF(200f, 150f));
+                F(on, "_sz", new SizeF(200f, 100f));
+                F(on, "_ang", 0f);
+                Call(on, "Confirm");
+                if (on.Result == null) return "确认之后没有产出图（前置条件不成立）";
+                if (!Clipboard.ContainsImage()) return "设置开着，确认截图之后剪贴板里还是没有图（这条功能没接上）";
+                Size got;
+                try { using (Image ci = Clipboard.GetImage()) { if (ci == null) return "ContainsImage 为真却取不到图"; got = ci.Size; } }
+                catch (Exception gex) { Console.WriteLine("  （跳过：剪贴板不可用）"); Console.WriteLine("     {0}", gex.GetType().Name); return null; }
+                if (got.Width != on.Result.Width || got.Height != on.Result.Height)
+                    return "剪贴板里的图是 " + got.Width + "x" + got.Height + "，和截出来的 " + on.Result.Width + "x" + on.Result.Height + " 对不上";
+                on.Dispose();
+                CleanupForms();
+
+                // ---- 关掉：确认截图不能动剪贴板（先塞一张记号图，看它还在不在）----
+                Bitmap mark = Solid(64, 48, Color.Crimson);
+                try { Clipboard.SetImage(mark); }
+                catch (Exception mex)
+                {
+                    mark.Dispose();
+                    Console.WriteLine("  （跳过：剪贴板不可用）");
+                    Console.WriteLine("     {0}", mex.GetType().Name);
+                    return null;
+                }
+
+                Settings s2 = new Settings();
+                s2.SaveToDisk = false;
+                s2.CopyOnCapture = false;          // 用户把这条关掉
+                OverlayForm off = Track(new OverlayForm(new Rectangle(0, 0, 400, 300), Solid(400, 300, Color.FromArgb(30, 90, 160)), s2));
+                F(off, "_hasSel", true);
+                F(off, "_c", new PointF(200f, 150f));
+                F(off, "_sz", new SizeF(200f, 100f));
+                F(off, "_ang", 0f);
+                Call(off, "Confirm");
+                if (off.Result == null) return "关掉之后确认没有产出图（前置条件不成立）";
+                if (!Clipboard.ContainsImage()) return "设置关着，剪贴板里的记号图却没了（说明还是被清了）";
+                Size kept;
+                using (Image ci2 = Clipboard.GetImage()) kept = ci2 == null ? Size.Empty : ci2.Size;
+                mark.Dispose();
+                if (kept.Width != 64 || kept.Height != 48)
+                    return "设置关着，剪贴板还是被换成了另一张图（" + kept.Width + "x" + kept.Height + "）";
+                return null;
+            });
+
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             finished = true;

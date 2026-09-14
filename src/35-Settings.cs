@@ -54,6 +54,7 @@ namespace SnapWheel
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = false;     // 收起态：像贴边小球一样缩到屏幕边上，留个可点的小把手（默认展开）
         public bool ClipboardImport = true;   // 剪贴板里出现图片时自动收进轮盘
+        public bool CopyOnCapture = true;     // 截图确认时同时把图放进剪贴板（要立刻粘贴就直接 Ctrl+V）
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
         public bool ShowBalloon = true;       // 托盘气泡提示（关掉就不再弹右下角通知）
         public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
@@ -129,6 +130,7 @@ namespace SnapWheel
                         else if (k == "UiScale") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 250) s.UiScale = n; }
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
+                        else if (k == "CopyOnCapture") s.CopyOnCapture = (v == "1");
                         else if (k == "GlassRefresh") s.GlassRefresh = (v == "1");
                         else if (k == "ShowBalloon") s.ShowBalloon = (v == "1");
                         else if (k == "ExpandSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.ExpandSpeed = n; }
@@ -260,6 +262,7 @@ namespace SnapWheel
                 lines.Add("UiScale=" + UiScale);
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));
+                lines.Add("CopyOnCapture=" + (CopyOnCapture ? "1" : "0"));
                 lines.Add("GlassRefresh=" + (GlassRefresh ? "1" : "0"));
                 lines.Add("ShowBalloon=" + (ShowBalloon ? "1" : "0"));
                 lines.Add("ExpandSpeed=" + ExpandSpeed);

@@ -808,6 +808,18 @@ namespace SnapWheel
             EndText(true);                       // 还在输入框里的文字也算数
             if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }   // 记住"文字底"的选择
             Result = CropSelection(true);
+
+            // 顺手把这张图放进剪贴板。"截完立刻粘一次"（Win+Shift+S 之后 Ctrl+V）是最高频的用法，
+            // 以前截完只在环上，要粘得先从角落把图拖出去 —— 比系统截图慢一步。
+            // 关掉设置就不碰剪贴板；剪贴板可能正被别的程序占着（SetImage 会抛），
+            // 那种情况只记一条日志、绝不弹框 —— 不能因为剪贴板把整张截图打断。
+            // _set 为 null（测试/旧路径）时按"开启"处理，和上面 _textBg 的默认一致。
+            if ((_set == null) || _set.CopyOnCapture)
+            {
+                try { Clipboard.SetImage(Result); }
+                catch (Exception cex) { Err.Log("OverlayForm.Confirm.Clipboard", cex); }
+            }
+
             DialogResult = DialogResult.OK;
             Close();
         }
