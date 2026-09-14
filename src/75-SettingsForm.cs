@@ -169,8 +169,9 @@ namespace SnapWheel
             StartPosition = FormStartPosition.CenterScreen;
             AutoSize = false;                     // 固定大小：翻页代替滚动，窗口不再随内容长高长胖
             DoubleBuffered = true;                // 滑动时整窗不闪（配合 CreateParams 里的 WS_EX_COMPOSITED）
-            ClientSize = new Size(760, 560);
-            Padding = new Padding(20, 14, 20, 12);
+            ClientSize = new Size(760, 574);
+            // 底部原来只留 12px：页脚 "by exper7" 那行的真实文字格比字体行高高，末几行像素会被窗口底边切掉
+            Padding = new Padding(20, 14, 20, 18);
 
             TableLayoutPanel root = new TableLayoutPanel();
             root.ColumnCount = 1;
@@ -183,7 +184,7 @@ namespace SnapWheel
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));    // 1 轮盘式分页器
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // 2 当前页
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));    // 3 按钮行（右下）
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));    // 4 版本行
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));    // 4 版本行（22 太小：标签真实高度+边距放不下，末几行像素会被裁）
             _root = root;
 
             Label head = new Label();
@@ -318,7 +319,7 @@ namespace SnapWheel
             about.AutoSize = true;
             about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
             about.ForeColor = Color.FromArgb(150, 150, 160);
-            about.Margin = new Padding(0, 4, 0, 0);
+            about.Margin = new Padding(0, 2, 0, 0);
             root.Controls.Add(about, 0, 4);
 
             ShowPage(0);             // 只建第 1 页
