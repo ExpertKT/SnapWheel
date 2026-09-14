@@ -548,7 +548,7 @@ namespace SnapWheel
             // 剪贴板导入那条路一直是这么做的（OnClipboardChanged / ImportFiles 里都有这一句），
             // 截图这条路以前漏了。
             //
-            // 0.5.4：目标值从 Count-1 改成 Count-Slots（最新那张顶在弧**上端**，见 OffsetForNewest），
+            // 0.5.3：目标值从 Count-1 改成 Count-Slots（最新那张顶在弧**上端**，见 OffsetForNewest），
             // 而且这一步可以在设置里关掉（关 = 保持用户当前滚动位置，不把他正在看的地方拽走）。
             FollowNewest();
         }

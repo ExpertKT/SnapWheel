@@ -220,7 +220,7 @@ namespace SnapWheel
             ShowInTaskbar = false;
             TopMost = settings.AlwaysOnTop;
             ApplyLayout();
-            // 视口初始位置 = "最新那张顶在弧上端"（0.5.4 的锚点，见 OffsetForNewest）。
+            // 视口初始位置 = "最新那张顶在弧上端"（0.5.3 的锚点，见 OffsetForNewest）。
             // 必须在 ApplyLayout 之后设（_slots / _phiMin / _phiMax 都是它算出来的），
             // 也必须在这里设：Store 在构造时就把保存目录里的图恢复了，开机第一眼要给最新那批；
             // 不设的话第一张新图会从"下端那一格"往上爬到上端（反方向的动画）。
@@ -376,7 +376,7 @@ namespace SnapWheel
 
         float ItemPhi(int i) { return _phiMin + (i - _offset) * StepRad(); }
 
-        // ============================ 视口锚点（0.5.4） ============================
+        // ============================ 视口锚点（0.5.3） ============================
         // `_offset` 的含义没变：**落在弧下端那一格（_phiMin）上的图片下标**（可以是负数，见下）。
         // 于是"让最新那张（下标 Count-1）顶在弧的**上端**（_phiMax）"就是：
         //     _offset + (Slots-1) = Count-1   →   _offset = Count - Slots
@@ -651,7 +651,7 @@ namespace SnapWheel
 
         public void RefreshWheel()
         {
-            // 回到"最新那张顶在弧上端"这个默认视口（0.5.4 起这就是默认位；以前是 0 = 最老那张在下端）
+            // 回到"最新那张顶在弧上端"这个默认视口（0.5.3 起这就是默认位；以前是 0 = 最老那张在下端）
             _offset = _targetOffset = OffsetForNewest();
             _hover = -1; _enlarged = -1; _peekIndex = -1;
             _scales.Clear(); _enterT0.Clear();

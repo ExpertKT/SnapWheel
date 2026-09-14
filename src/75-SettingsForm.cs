@@ -526,7 +526,7 @@ namespace SnapWheel
             g.Controls.Add(Row(_chkCollapse), 1, 1);
 
             _numPeek = Num(120, 500, s.PeekPercent);
-            // 顺手把 0.5.4 的"截图后重置滚动位置"放在这一行的空处：这一行只有标签 + 数值框，
+            // 顺手把 0.5.3 的"截图后重置滚动位置"放在这一行的空处：这一行只有标签 + 数值框，
             // 右边空着一大片。**刻意不单独占一行** —— 第 2 页再加一行要多 31px，
             // 760×574（窗口允许缩到的最小尺寸）下页面格只有 346px、内容已经要 324px，加一行就顶出去被裁了。
             _chkScrollReset = new CheckBox();
@@ -973,7 +973,7 @@ namespace SnapWheel
                 s.ExpandSpeed = ringVals[_cmbRing.SelectedIndex < 0 ? 2 : _cmbRing.SelectedIndex];
                 s.CollapseSpeed = ringVals[_cmbRing2.SelectedIndex < 0 ? 2 : _cmbRing2.SelectedIndex];
                 s.NubSingle = _chkSingle.Checked;
-                s.ResetScrollOnCapture = _chkScrollReset.Checked;   // 0.5.4：截图后要不要把滚动位置重置到最新那张
+                s.ResetScrollOnCapture = _chkScrollReset.Checked;   // 0.5.3：截图后要不要把滚动位置重置到最新那张
             }
             if (_built[2])
             {

@@ -123,7 +123,7 @@ namespace SnapWheel
             return G(f, "_deletingItem") == null;
         }
 
-        // 空转动画帧，直到视口滚到位（_offset 追上 _targetOffset）。0.5.4 的堆叠测试用它"等这一张滑进去"。
+        // 空转动画帧，直到视口滚到位（_offset 追上 _targetOffset）。0.5.3 的堆叠测试用它"等这一张滑进去"。
         static void Settle(WheelForm f, int maxFrames)
         {
             for (int i = 0; i < maxFrames; i++)
@@ -1564,7 +1564,7 @@ namespace SnapWheel
                 f.MarkNew(ni);
 
                 // 1) 视口必须跟到最新那张（否则它在弧外，动画看不见）
-                //    0.5.4 起"跟到最新"的目标值 = Count - Slots（最新那张顶在弧**上端**），
+                //    0.5.3 起"跟到最新"的目标值 = Count - Slots（最新那张顶在弧**上端**），
                 //    不再是 Count-1（最新那张落在下端那一格 —— 那样老图全被挤到弧外、弧上半截永远空着）。
                 float wantTgt = st.Items.Count - s.Slots;
                 double tgt = Convert.ToDouble(G(f, "_targetOffset"));
@@ -1578,7 +1578,7 @@ namespace SnapWheel
                 if (prEarly <= 0.05f)
                     return "200ms 了这张还没开始滑（EnterProgress=" + prEarly.ToString("0.00") + "）—— MarkNew 被 StartIntro 的错峰表顶掉了";
 
-                // 3) 动画跑完：必须停在弧内的第一格（0.5.4 起 = 弧**上端**那一格），而且真的画得出来（DrawnRect 不为空）
+                // 3) 动画跑完：必须停在弧内的第一格（0.5.3 起 = 弧**上端**那一格），而且真的画得出来（DrawnRect 不为空）
                 for (int i = 0; i < 200; i++) { Call(f, "AnimTickCore"); Thread.Sleep(3); }
                 float iphi = Convert.ToSingle(Call(f, "ItemPhi", idx));
                 float pmin = Convert.ToSingle(G(f, "_phiMin")), pmax = Convert.ToSingle(G(f, "_phiMax"));
