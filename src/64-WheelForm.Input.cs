@@ -626,6 +626,19 @@ namespace SnapWheel
             int hh = HitTest(e.Location);
             if (hh >= 0 && _store.Items[hh].Image != null)
             {
+                // 0.6.0：双击缩略图 = 用系统默认看图程序**打开原图**（用户要求）。
+                // 图可能只在内存里（没开存盘），先 EnsureFile 落一份到磁盘再打开。
+                try
+                {
+                    string fpath = _store.EnsureFile(_store.Items[hh]);
+                    if (!string.IsNullOrEmpty(fpath) && System.IO.File.Exists(fpath))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(fpath) { UseShellExecute = true });
+                        return;      // 打开了就别再顺手复制一次
+                    }
+                }
+                catch { }
+                // 拿不到文件（或打开失败）就退回原来的行为：复制到剪贴板
                 // 登记一下"这张剪贴板是我们自己写的"，别让剪贴板监听把它当成"用户复制的新图"又收一遍；
                 // 写完记下剪贴板序号，监听那边就能用最便宜的判据直接跳过（不必把图读回来比指纹）
                 SelfClipboard.Note(_store.Items[hh].Image);
