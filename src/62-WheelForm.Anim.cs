@@ -341,6 +341,14 @@ namespace SnapWheel
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
             if (_deletingItem != null) need = true;
+            // 持久置顶：图片查看器之类的窗口自己也是置顶的，它一关，Windows 就把我们排到
+            // 非置顶带里去了 —— 只在唤出那一刻抢一次不够（用户反馈：一关图片窗口轮盘就沉下去）。
+            // 这里每 2 秒校验一次，被排下去了就重新抢回来。窗口本来就在顶上时这次调用几乎无成本。
+            if (Visible && _settings.AlwaysOnTop && (DateTime.Now - _topMostAt).TotalSeconds > 2.0)
+            {
+                _topMostAt = DateTime.Now;
+                try { TopMost = false; TopMost = true; } catch { }
+            }
             if (_phiShift != 0f)
             {
                 _phiShift *= 0.80f;
