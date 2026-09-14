@@ -52,6 +52,7 @@ namespace SnapWheel
             };
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("截图", null, new EventHandler(OnHotkey));
+            menu.Items.Add("滚动长截图…", null, new EventHandler(OnLongShot));
             menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
             menu.Items.Add("新手引导", null, new EventHandler(OnGuide));
             menu.Items.Add("重播开启动画", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
@@ -436,6 +437,53 @@ namespace SnapWheel
             else if (wasExpanded)
             {
                 _wheel.ExpandWheel(true);        // 取消了截图，也把轮盘拉回来
+            }
+        }
+
+        // ==================== 滚动长截图（0.6.0） ====================
+        // 托盘 / 菜单进来的入口。用户拍板的交互是"他自己滚，程序跟着无缝拼接" ——
+        // 所以这里只做三件事：把轮盘让开、抓好第一屏、把 LongShotForm 摆上去。
+        // 拼接本身在 58-LongShot.cs（引擎）和 59-LongShotForm.cs（提示条 + 定时抓帧）里。
+        void OnLongShot(object sender, EventArgs e) { CaptureLong(); }
+
+        void CaptureLong()
+        {
+            bool wasExpanded = _wheel.Visible;
+            if (_settings.CollapseMode && _wheel.Visible)
+            {
+                _wheel.CollapseWheel(true);
+                for (int i = 0; i < 90 && !_wheel.IsCollapsed; i++) { Application.DoEvents(); System.Threading.Thread.Sleep(8); }
+            }
+            else if (_wheel.Visible) _wheel.Hide();
+
+            Rectangle vs = SystemInformation.VirtualScreen;
+            Bitmap shot = new Bitmap(vs.Width, vs.Height);
+            try
+            {
+                using (Graphics g = Graphics.FromImage(shot))
+                    g.CopyFromScreen(vs.Left, vs.Top, 0, 0, vs.Size, CopyPixelOperation.SourceCopy);
+            }
+            catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
+
+            LongShotForm lf = new LongShotForm(shot);
+            lf.ShowDialog();
+            Bitmap result = lf.Result;
+            try { lf.Dispose(); } catch { }
+            // 第一帧在 Start 里就整张拷进画布了，这里可以放心释放（别留着 16MB）
+            try { shot.Dispose(); } catch { }
+
+            if (result != null)
+            {
+                Store st = _wheels.ActiveStore;
+                StoreItem ni = st.Add(result);
+                try { _wheel.RequestBackdropAsync(); } catch { }
+                if (_settings.CollapseMode) _wheel.ExpandWheel(true);
+                else _wheel.ShowWheel();
+                _wheel.MarkNew(ni);      // 和普通截图一样：刚出的这张要有"滑进来"的动画
+            }
+            else if (wasExpanded)
+            {
+                _wheel.ExpandWheel(true);        // 取消了长截图，也把轮盘拉回来
             }
         }
 

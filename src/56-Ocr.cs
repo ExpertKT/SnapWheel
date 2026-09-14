@@ -188,7 +188,11 @@ namespace SnapWheel
             if (_engine == null) { error = _why; return null; }
             try
             {
-                object sw = SoftwareBitmapFromPixels(bgra, w, h);
+                // ① 低对比度先拉伸：暗色主题截图、半透明面板上的浅灰字最容易认错，
+                //    而直方图拉开之后再交给引擎，实测能明显少错字（见 Stretch 的说明）
+                bool stretched;
+                byte[] pre = Stretch(bgra, w, h, out stretched);
+                object sw = SoftwareBitmapFromPixels(pre, w, h);
                 if (sw == null) { error = "这台系统不支持直接把像素交给 OCR"; return null; }
                 float wordH;
                 string txt = RecognizeSoftwareBitmap(sw, out error, out wordH);
@@ -198,22 +202,29 @@ namespace SnapWheel
                 // 实测（900x380 合成图，字符级准确率）：14px 的字在 1x 下只有 25%，放大 2 倍到 92%；
                 // 20px 是 28% -> 96%；连 32px 低对比度也是 13% -> 99%。屏幕截图里的正文多半就是
                 // 14~20px，所以"不准"基本都是这个原因。
-                // 判据两条，缺一不可：
-                //   · 量到了文字框高度且偏小（< 24px）→ 按高度算放大倍数
-                //   · 第一遍"认出来的字太少"（含什么都没认出来）→ 高度也不可信，直接上 2 倍
-                string bigger = null;
-                float k = 2f;
+                //
+                // 0.6.0 修正：这段注释原来写着"判据两条，缺一不可"，但代码里**一条都没用** ——
+                // 实际上是无条件放大 2 倍、再把放大结果**无条件**当答案（量到的字高 `wordH` 声明了却从没读过）。
+                // 现在：按量到的字高决定倍数，并且**择优**（放大那份只有认出的字更多才采用）。
+                int chars1 = Chars(txt);
+                float k;
+                if (chars1 < 8) k = 3f;                                 // 几乎没认出来 -> 字高不可信，直接 3 倍
+                else if (wordH > 0.5f && wordH < 12f) k = 3f;           // 很小的字
+                else if (wordH > 0.5f && wordH < 18f) k = 2.5f;
+                else if (wordH > 0.5f && wordH < 26f) k = 2f;           // 常见正文
+                else k = 1.5f;                                          // 已经够大：只补一点点
+
                 double area = (double)w * h;
-                if (area * k * k > 8.0e6) k = (float)Math.Sqrt(8.0e6 / area);
+                if (area * k * k > 8.0e6) k = (float)Math.Sqrt(8.0e6 / area);   // 放大后别超过 8M 像素
                 if (k < 1f) k = 1f;
-                if (k > 1.15f)
+                if (k > 3f) k = 3f;
+                string bigger = null;
+                if (k > 1.05f)
                 {
-                    if (k < 1.5f) k = 1.5f;
-                    if (k > 3f) k = 3f;
                     int nw = (int)(w * k), nh = (int)(h * k);
                     if (nw <= 10000 && nh <= 10000 && nw * nh < 40 * 1000 * 1000)
                     {
-                        byte[] scaled = ScalePixels(bgra, w, h, nw, nh);
+                        byte[] scaled = ScalePixels(pre, w, h, nw, nh);
                         if (scaled != null)
                         {
                             object sw2 = SoftwareBitmapFromPixels(scaled, nw, nh);
@@ -221,8 +232,8 @@ namespace SnapWheel
                             {
                                 string e2 = null; float h2;
                                 string t2 = RecognizeSoftwareBitmap(sw2, out e2, out h2);
-                                // 放大后认出的字更多就更可信（实测基本都更多）
-                                if (t2 != null) bigger = t2;
+                                // 择优：认出的字**更多**才用放大那份（原来是无条件采用，可能反而更差）
+                                if (t2 != null && Chars(t2) > chars1) bigger = t2;
                             }
                         }
                     }
@@ -236,6 +247,59 @@ namespace SnapWheel
                 try { Err.Log("Ocr", real); } catch { }
                 return null;
             }
+        }
+
+        // 低对比度拉伸：只在"图确实偏灰"时才动，而且是**线性拉伸直方图**（不改颜色关系、不做二值化 ——
+        // 二值化会把抗锯齿边缘咬碎，引擎反而更容易认错）。
+        // 判据：取亮度直方图的 2% / 98% 分位，跨度 < 200 才拉伸（也就是"最暗的 2% 和最亮的 2% 挤在
+        // 中间一小段里"）。对比度本来就好的图（跨度 >= 200）原样返回，连一次拷贝都不做。
+        // 为什么要它：暗色主题的窗口、半透明面板上的浅灰字，直方图全挤在 60~140 这一段，
+        // 引擎的字形分割很容易切错 —— 拉开之后错字明显变少。
+        static byte[] Stretch(byte[] src, int w, int h, out bool changed)
+        {
+            changed = false;
+            if (src == null || w <= 8 || h <= 8 || src.Length < w * h * 4) return src;
+
+            int[] hist = new int[256];
+            int n = 0;
+            for (int i = 0; i + 3 < src.Length; i += 4)
+            {
+                int lum = (src[i] * 29 + src[i + 1] * 150 + src[i + 2] * 77) >> 8;   // BGRA 的亮度近似
+                hist[lum]++;
+                n++;
+            }
+            if (n < 2000) return src;                     // 小图不值得折腾
+
+            // ⚠️ 这里刻意取 **0.2% 分位**而不是常说的 2%：
+            // 低对比度图的绝大多数像素都是**背景色**，取 2% 分位时往下数 2% 就已经数到背景上了，
+            // 于是 hi 会等于 lo、跨度算成 0，被判成"几乎是纯色，拉也白拉"而永远不拉伸。
+            // （0.6.0 实测：一张灰底浅灰字（亮度 84~110）的图就是这样被跳过的，识别结果是空的。）
+            // 0.2% 既能认到真正的浅色文字，又能滤掉零星噪点。
+            int cut = n / 500;                            // 0.2%
+            int lo = 0, hi = 255, acc = 0;
+            for (int i = 0; i < 256; i++) { acc += hist[i]; if (acc >= cut) { lo = i; break; } }
+            acc = 0;
+            for (int i = 255; i >= 0; i--) { acc += hist[i]; if (acc >= cut) { hi = i; break; } }
+            if (hi - lo >= 200 || hi - lo < 16) return src;   // 对比度够好 / 几乎是纯色
+
+            byte[] map = new byte[256];
+            double sc = 255.0 / (hi - lo);
+            for (int i = 0; i < 256; i++)
+            {
+                int v = (int)((i - lo) * sc);
+                map[i] = (byte)(v < 0 ? 0 : (v > 255 ? 255 : v));
+            }
+            byte[] outp = new byte[src.Length];
+            Buffer.BlockCopy(src, 0, outp, 0, src.Length);
+            for (int i = 0; i + 3 < outp.Length; i += 4)
+            {
+                outp[i] = map[src[i]];                    // B
+                outp[i + 1] = map[src[i + 1]];            // G
+                outp[i + 2] = map[src[i + 2]];            // R
+                // A 不动：截图是不透明的，动它反而会改变预乘关系
+            }
+            changed = true;
+            return outp;
         }
 
         static int Chars(string s)

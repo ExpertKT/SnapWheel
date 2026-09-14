@@ -67,6 +67,13 @@ namespace SnapWheel
         // 用户拖过窗口之后在关闭时写回这里，下次打开就用他拖出来的大小（会夹进 [最小, 最大]）。
         // 省电模式（默认开）：**只在电池供电时**暂停毛玻璃定时刷新 + 重绘隔帧一次（见 12-Power.cs）。
         public bool PowerSave = true;
+        // ---- 翻译（0.6.0）：留空就走内置的免费引擎链（有道 → MyMemory 保底）----
+        // 填了就走你自己那套 OpenAI 兼容接口（DeepSeek / 豆包 / 通义 / 本地 Ollama 都行），
+        // 质量最好，也顺带把"机翻腔"消掉。URL 可以只填到 /v1，程序会自己补 /chat/completions。
+        // ⚠️ Key 是**明文**存在 %APPDATA%\SnapWheel\settings.ini 里的（本机文件，不会上传到任何地方）。
+        public string LlmUrl = "";
+        public string LlmKey = "";
+        public string LlmModel = "deepseek-chat";
         public int WinW = 0;
         public int WinH = 0;
         // 拖出时要不要同时给"文件"格式。
@@ -148,6 +155,11 @@ namespace SnapWheel
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
                         else if (k == "ResetScrollOnCapture") s.ResetScrollOnCapture = (v == "1");
                         else if (k == "PowerSave") s.PowerSave = (v == "1");
+                        // 翻译接口（0.6.0）：值里可能有 '='（URL 的 query、key 的 base64），
+                        // 所以读取那一侧必须只按**第一个** '=' 切分 —— 见本文件顶部解析处的注释
+                        else if (k == "LlmUrl") s.LlmUrl = v;
+                        else if (k == "LlmKey") s.LlmKey = v;
+                        else if (k == "LlmModel") s.LlmModel = v;
                         else if (k == "WinW") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinW = n; }
                         else if (k == "WinH") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 10000) s.WinH = n; }
                         else if (k == "DragOutAsFile") s.DragOutAsFile = (v == "1");
@@ -283,6 +295,9 @@ namespace SnapWheel
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 lines.Add("ResetScrollOnCapture=" + (ResetScrollOnCapture ? "1" : "0"));
                 lines.Add("PowerSave=" + (PowerSave ? "1" : "0"));
+                lines.Add("LlmUrl=" + LlmUrl);
+                lines.Add("LlmKey=" + LlmKey);
+                lines.Add("LlmModel=" + LlmModel);
                 lines.Add("WinW=" + WinW);
                 lines.Add("WinH=" + WinH);
                 lines.Add("DragOutAsFile=" + (DragOutAsFile ? "1" : "0"));

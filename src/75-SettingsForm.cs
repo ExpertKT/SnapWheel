@@ -51,6 +51,9 @@ namespace SnapWheel
         NumericUpDown _numGlass, _numRadius, _numShadow;
         TableLayoutPanel _advR;
         CheckBox _chkPower;                  // 省电模式（0.5.3）：只在电池供电时生效，见 12-Power.cs
+        // 翻译接口（0.6.0）：留空就走内置免费引擎链（有道 → MyMemory 保底）；
+        // 填上就是 OpenAI 兼容接口（DeepSeek / 豆包 / 通义 / 本地 Ollama），译文质量最好。
+        TextBox _txtLlmUrl, _txtLlmKey, _txtLlmModel;
 
         // 窗口出厂尺寸 = 允许缩到的最小尺寸（**逻辑像素**，实际会乘 DPI 系数 K）。
         // 这个数不能随手改小：四页内容是按 720px 宽（760 - 40 边距）排的。
@@ -792,7 +795,7 @@ namespace SnapWheel
         void BuildPage4()
         {
             TableLayoutPanel g = _pages[3];
-            SetupRows(g, 8);
+            SetupRows(g, 10);            // 0.6.0：多了两行翻译接口（URL/模型 一行、API Key 一行）
             Settings s = _s;
 
             g.Controls.Add(Section("万能键"), 0, 0);
@@ -872,6 +875,35 @@ namespace SnapWheel
             _chkPower.Checked = s.PowerSave;
             g.Controls.Add(_chkPower, 0, 6);
             g.Controls.Add(_advR, 0, 7);
+
+            // ---- 翻译接口（0.6.0）----
+            // 为什么放这一页：它是"高级"配置，普通用户留空即可（内置免费引擎链），
+            // 愿意填 key 的人自己会翻到这里。**不放进 _advR** —— 那个组默认是隐藏的。
+            _txtLlmUrl = new TextBox();
+            _txtLlmUrl.Text = s.LlmUrl;
+            _txtLlmUrl.Width = S(300);
+            _txtLlmUrl.Margin = new Padding(0, 5, 0, 0);
+            _txtLlmModel = new TextBox();
+            _txtLlmModel.Text = s.LlmModel;
+            _txtLlmModel.Width = S(150);
+            _txtLlmModel.Margin = new Padding(0, 5, 0, 0);
+            Control llmRow = Row(MkLabel("翻译接口"), _txtLlmUrl, Gap(10), MkLabel("模型"), _txtLlmModel);
+            g.Controls.Add(llmRow, 0, 8);
+            g.SetColumnSpan(llmRow, 2);
+
+            _txtLlmKey = new TextBox();
+            _txtLlmKey.UseSystemPasswordChar = true;      // 别在屏幕上明着显示 key
+            _txtLlmKey.Text = s.LlmKey;
+            _txtLlmKey.Width = S(300);
+            _txtLlmKey.Margin = new Padding(0, 5, 0, 0);
+            Label llmKeyHint = new Label();
+            llmKeyHint.AutoSize = true;
+            llmKeyHint.Text = "（留空就用内置免费接口；key 只存在本机配置文件里）";
+            llmKeyHint.ForeColor = Color.FromArgb(150, 152, 160);
+            llmKeyHint.Margin = new Padding(0, 10, 0, 0);
+            Control keyRow = Row(MkLabel("API Key"), _txtLlmKey, Gap(10), llmKeyHint);
+            g.Controls.Add(keyRow, 0, 9);
+            g.SetColumnSpan(keyRow, 2);
         }
 
         // ============================ 翻页 ============================
@@ -1119,6 +1151,11 @@ namespace SnapWheel
                 s.CardRadius = (int)_numRadius.Value;
                 s.ShadowPercent = (int)_numShadow.Value;
                 s.PowerSave = _chkPower.Checked;     // 0.5.3：省电模式（电池上才实际生效，见 12-Power.cs）
+                // 0.6.0：翻译接口（留空 = 用内置免费引擎链；填了 = 走你自己的 OpenAI 兼容接口）
+                s.LlmUrl = _txtLlmUrl.Text.Trim();
+                s.LlmKey = _txtLlmKey.Text.Trim();
+                s.LlmModel = _txtLlmModel.Text.Trim();
+                if (s.LlmModel.Length == 0) s.LlmModel = "deepseek-chat";   // 模型名空着会直接 400
                 // 保存万能键四分区。这里必须立刻 s.Save() 落盘：
                 // 否则下次打开设置窗口会从文件里读到旧值，一点确定就把刚改的打回原形
                 // （"圆盘上的动作名改完不变"的根因）。这条行为现在由 tests\behavior-test.cs 守着。
