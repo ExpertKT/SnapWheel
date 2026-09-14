@@ -21,7 +21,7 @@ namespace SnapWheel
     //   ② 每 200ms 抓一帧交给 LongShot.Push 去判：接得上就接，接不上就等下一帧。
     //      **不单独做"停稳检测"**：滚动中抓到的帧本来就匹配不上，判据交给拼接算法，逻辑只有一份。
     //   ③ 抓屏用一张复用的位图，不每 200ms 分配一次（选区大时那是十几 MB）。
-    class LongShotForm : Form
+    class LongShotForm : Form, IMessageFilter
     {
         public Bitmap Result;
 
@@ -68,6 +68,10 @@ namespace SnapWheel
             Bitmap first = Grab();
             bool ok = (first != null) && _ls.Start(first, out err);
             if (!ok) { _msg = err ?? "没能开始长截图"; _err = true; }
+
+            // Esc/Enter 用应用级消息过滤来收：提示条是无边框置顶窗口，焦点很容易被下面的
+            // 目标程序抢走（用户反馈 Esc 按了没用，只能用鼠标点提示条退出）。
+            Application.AddMessageFilter(this);
 
             _t = new Timer();
             _t.Interval = 300;      // 300ms 抓一帧：200ms 太密，会把目标程序的滚动拖得不平滑（用户反馈）
@@ -142,6 +146,19 @@ namespace SnapWheel
             if (e.Button == MouseButtons.Left) Finish();     // 在条上点一下也算结束
         }
 
+        // 全局按键过滤：不管焦点在哪个窗口，Esc 取消、Enter 出图
+        public bool PreFilterMessage(ref Message m)
+        {
+            const int WM_KEYDOWN = 0x0100;
+            if (m.Msg == WM_KEYDOWN)
+            {
+                int k = m.WParam.ToInt32();
+                if (k == 27) { Cancel(); return true; }        // Esc
+                if (k == 13) { Finish(); return true; }        // Enter
+            }
+            return false;
+        }
+
         protected override void OnKeyDown(KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter) { Finish(); return; }
@@ -194,7 +211,7 @@ namespace SnapWheel
             else if (_shots == 0) line = "还没接上：在那块区域里往下滚滚轮";
             else line = "已接 " + _shots + " 段 · 长图 " + _ls.Height + " px 高";
 
-            int rw = Ui.S(300);
+            int rw = Math.Max(Ui.S(200), ClientSize.Width - x - pad);   // 自适应：原来写死 300，长句子会被右边缘裁掉
             Rectangle rr = new Rectangle(ClientSize.Width - pad - rw, top, rw, Ui.S(36));
             TextRenderer.DrawText(g, line, Font, rr, lc,
                 TextFormatFlags.Right | TextFormatFlags.Top | TextFormatFlags.NoPadding);
@@ -212,6 +229,7 @@ namespace SnapWheel
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             // 定时器必须停 + 释放（之前项目里泄漏的 15ms 定时器把测试拖到 300 秒）
+            try { Application.RemoveMessageFilter(this); } catch { }
             try { if (_t != null) { _t.Stop(); _t.Dispose(); } } catch { }
             try { if (_scratch != null) _scratch.Dispose(); } catch { }
             base.OnFormClosed(e);

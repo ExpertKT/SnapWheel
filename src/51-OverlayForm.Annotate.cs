@@ -551,19 +551,6 @@ namespace SnapWheel
                             break;
                         }
                     case IdxSizeDown:   // A-
-                    case IdxLong:       // 长图：一页纸 + 上下箭头
-                    float lx = d2.Left + d2.Width / 2f, ly = d2.Top + d2.Height / 2f;
-                    using (Pen pl = new Pen(Color.FromArgb(226, 232, 240), 1.6f))
-                    {
-                        g.DrawRectangle(pl, lx - 5f * _k, ly - 8f * _k, 10f * _k, 16f * _k);
-                        g.DrawLine(pl, lx, ly - 9f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx - 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx + 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx, ly + 9f * _k, lx, ly + 14f * _k);
-                        g.DrawLine(pl, lx - 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
-                        g.DrawLine(pl, lx + 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
-                    }
-                    break;
                 case IdxSizeUp:     // A+
                         {
                             using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
@@ -577,6 +564,19 @@ namespace SnapWheel
                             }
                             break;
                         }
+                    case IdxLong:       // 长图：一页纸 + 上下箭头
+                    float lx = d2.Left + d2.Width / 2f, ly = d2.Top + d2.Height / 2f;
+                    using (Pen pl = new Pen(Color.FromArgb(226, 232, 240), 1.6f))
+                    {
+                        g.DrawRectangle(pl, lx - 5f * _k, ly - 8f * _k, 10f * _k, 16f * _k);
+                        g.DrawLine(pl, lx, ly - 9f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx - 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx + 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
+                        g.DrawLine(pl, lx, ly + 9f * _k, lx, ly + 14f * _k);
+                        g.DrawLine(pl, lx - 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
+                        g.DrawLine(pl, lx + 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
+                    }
+                    break;
                     case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb((int)(120 * a / 255f), 255, 255, 255)))

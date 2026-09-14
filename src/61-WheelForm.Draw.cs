@@ -1154,7 +1154,11 @@ namespace SnapWheel
                     using (SolidBrush db = new SolidBrush(Color.FromArgb((int)(245 * ac2 / 255f), acc.R, acc.G, acc.B)))
                         g.FillEllipse(db, left3 + 6f, ct3.Y - ip / 2f, ip, ip);
                     using (SolidBrush br = new SolidBrush(Color.FromArgb((int)(246 * ac2 / 255f), 255, 255, 255)))
-                        g.DrawString(idx, f, br, left3 + 6f + ip + 6f, ct3.Y - sz.Height / 2f);
+                    // 数字也沿弧排（用户要求跟胶囊同一条弧）：弧长按内容算足了，整串都在胶囊里
+                    {
+                        float step3 = needLen / r3 / (idx.Length + 1.2f);
+                        ArcUi.ArcText(g, idx, f, br, cc2, sx3, sy3, r3, mid3 + step3 * 0.9f, step3);
+                    }
                     }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
