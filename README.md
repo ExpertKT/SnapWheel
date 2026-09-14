@@ -15,21 +15,15 @@
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
-<p align="center">
   ![框选 → 图滑进角落的轮环 → 拖进聊天框](docs/demo.gif)
   <br><sub>框选 → 图自动滑进角落的环里 → 拖出去直接用（图还留在环上）</sub>
-</p>
 
-<p align="center">
   <a href="https://github.com/ExpertKT/SnapWheel/releases/latest"><b>⬇️ 下载最新版</b></a>
   &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">完整版</a>（含万能键，推荐）
   &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">无万能键版</a>（0.2 线，已定稿）
   <br><sub>解压双击 <code>SnapWheel.exe</code> 即用，不需要安装；两个 zip 在同一个 Release 里</sub>
-</p>
 
-<p align="center">
   ![SnapWheel](docs/wheel.png)
-</p>
 
 ---
 
@@ -72,10 +66,8 @@
 
 ### 上一个版本 v0.5.0：能拿图干的事变多了
 
-<p align="center">
   ![截图标注](docs/annotate.png)
   <br><sub>截图时直接标注：箭头 / 方框 / 马赛克 / 文字（画完能拖动、滚轮改大小）</sub>
-</p>
 
 | 新功能 | 怎么用 |
 |---|---|
@@ -83,10 +75,8 @@
 | **截图标注** | 工具条：**箭头 / 方框 / 马赛克 / 文字**，四色、`Ctrl+Z` 撤销；文字可拖动、滚轮改字号、可带/不带白底；确认时标注合成进图片 |
 | **贴图到屏幕（图钉）** | 缩略图上按**鼠标中键** → 把图钉在屏幕上对照看：滚轮缩放、拖动移动、双击 / `Esc` 关掉；托盘可一键收掉全部贴图 |
 
-<p align="center">
   ![取字 + 翻译](docs/ocr.png)
   <br><sub>取字窗口：原文可改、译文一键出、各自可复制</sub>
-</p>
 
 顺手修掉的老问题：**拖缩略图往外放不了**（v0.4.8 引入的回归）、**取字不准**（小字现在自动放大 2 倍再识别，25% → 90%+）、
 **截图界面的「分辨率/角度」面板跑到副屏**、**标注工具条压住截图内容**、**点开/收起轮盘卡一下**（毛玻璃抓屏挪到后台线程）、
@@ -120,17 +110,13 @@
 - **开启动画**：环像彩虹一样扫出 → 图片沿弧线排队滑落 → 万能键/按钮/文字从屏幕外滑入渐显
 - **新手引导**：**首次打开、以及每次升级到新版本都会自动弹一次**（跟着版本走，看过就不再弹），平时也能从托盘叫出来
 
-<p align="center">
   ![磨砂玻璃细节](docs/glass.png)
   &nbsp;&nbsp;
   ![万能键圆盘](docs/menu.png)
-</p>
 
-<p align="center">
   ![收起状态：屏幕边上的小把手](docs/collapsed.png)
   &nbsp;&nbsp;
   ![彩虹拉出 / 收起](docs/collapse-anim.png)
-</p>
 
 ## 快速开始
 
@@ -201,9 +187,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 ## 外观与适配
 
-<p align="center">
   ![设置](docs/settings.png)
-</p>
 
 | 设置项 | 可选值 |
 |---|---|
