@@ -251,7 +251,12 @@ namespace SnapWheel
             btnRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             btnRow.Controls.Add(guide, 0, 0);
             btnRow.Controls.Add(reset, 1, 0);
-            btnRow.Controls.Add(new Panel(), 2, 0);
+            // 中间只放个"撑宽"的空位（把确定/取消推到右边）。这里必须给它一个小尺寸：
+            // Panel 的默认尺寸是 200×100，放进 40px 高的按钮行里会顶出行高、被裁（渲染工具会报"被裁"）。
+            Panel btnSpacer = new Panel();
+            btnSpacer.Size = new Size(1, 1);
+            btnSpacer.Margin = new Padding(0);
+            btnRow.Controls.Add(btnSpacer, 2, 0);
             btnRow.Controls.Add(ok, 3, 0);
             btnRow.Controls.Add(cancel, 4, 0);
             root.Controls.Add(btnRow, 0, 3);
@@ -792,13 +797,33 @@ namespace SnapWheel
 
         static FlowLayoutPanel Row(params Control[] cs)
         {
-            FlowLayoutPanel f = new FlowLayoutPanel();
+            RowPanel f = new RowPanel();
             f.AutoSize = true;
             f.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             f.WrapContents = false;
             f.Margin = new Padding(0, 5, 0, 5);   // 行距：设置项变多了，压紧一点免得窗口太高
             for (int i = 0; i < cs.Length; i++) f.Controls.Add(cs[i]);
             return f;
+        }
+    }
+
+    // ============================ 一行控件（行容器） ============================
+    // 高度用**子控件的真实底边**兜底，不能只信 FlowLayoutPanel 自己算出来的数。
+    // 起因（v0.5.2 用户报的"控件被裁"）：ComboBox 继承窗口字体（9.5pt 雅黑）之后真实高度是 27px，
+    // 但它对外报的"首选高度"是 23px —— 于是 AutoSize 的行只有 29px 高，组合框的底边和下拉箭头
+    // 被整整裁掉 4px。数值框（24px）则是刚好贴边。四页 12 个组合框全中。
+    // 这里只在"算出来的比子控件实际需要的矮"时补高，其余行一个字都不动。
+    class RowPanel : FlowLayoutPanel
+    {
+        public override Size GetPreferredSize(Size proposed)
+        {
+            Size s = base.GetPreferredSize(proposed);
+            int need = 0;
+            foreach (Control c in Controls)
+                if (c.Visible) need = Math.Max(need, c.Bottom + c.Margin.Bottom);
+            need += Padding.Bottom;
+            if (need > s.Height) s.Height = need;     // 谁大听谁的：底边永远不被裁
+            return s;
         }
     }
 
