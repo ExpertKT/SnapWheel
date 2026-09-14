@@ -93,6 +93,14 @@ namespace SnapWheel
         public static void ArcText(Graphics g, string text, Font f, Brush br, PointF c, float sx, float sy,
                                    float r, float midPhi, float charStep)
         {
+            ArcText(g, text, f, br, c, sx, sy, r, midPhi, charStep, 1f);
+        }
+
+        // tilt = 每个字按比例跟随弧线倾斜：1 = 完全贴着弧（字会躺倒），0.45 左右 = 有弧度感但仍好读。
+        // 用户反馈：计数胶囊里的数字在 45 度方向上被转得太狠、看着就是显示异常。
+        public static void ArcText(Graphics g, string text, Font f, Brush br, PointF c, float sx, float sy,
+                                   float r, float midPhi, float charStep, float tilt)
+        {
             if (string.IsNullOrEmpty(text)) return;
             int n = text.Length;
             float start = midPhi - charStep * (n - 1) / 2f;
@@ -105,7 +113,7 @@ namespace SnapWheel
                 PointF d = Outward(c, sx, sy, a);
                 // 让"字的上方向"对齐向外法线：GDI+ 里字的上方向是 -Y，旋转 θ 后指向 (sinθ, -cosθ)，
                 // 令它等于 d 即得 θ = atan2(dx, -dy)
-                float deg = (float)(Math.Atan2(d.X, -d.Y) * 180.0 / Math.PI);
+                float deg = (float)(Math.Atan2(d.X, -d.Y) * 180.0 / Math.PI) * tilt;
                 GraphicsState st = g.Save();
                 try
                 {
