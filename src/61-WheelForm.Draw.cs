@@ -322,7 +322,7 @@ namespace SnapWheel
                 {
                     Color acc = _accentCur;   // 光色跟随当前 wheel 的主题色（切 wheel 会变）
                     halo.CenterPoint = new PointF(r.Left + r.Width / 2f, r.Top + r.Height / 2f);
-                    // 光色跟随当前 wheel 的主题色（切 wheel 会变），强度跟着淡入淡出进度走`r`n                    Color acc = _accentCur;`r`n                    halo.CenterColor = Gfx.A(acc, (int)(128 * hot));
+                    halo.CenterColor = Gfx.A(acc, (int)(128 * hot));
                     halo.SurroundColors = new Color[] { Gfx.A(acc, 0) };
                     g.FillPath(halo, gp);
                 }
