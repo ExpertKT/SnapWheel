@@ -77,6 +77,7 @@ namespace SnapWheel
             {
                 // 自己的定时器必须自己停（v0.5.1 的教训：窗口关了定时器还在跑，白烧 CPU）
                 if (_ptimer != null) { try { _ptimer.Stop(); _ptimer.Dispose(); } catch { } _ptimer = null; }
+                if (_pwatch != null) { try { _pwatch.Stop(); } catch { } _pwatch = null; }
                 if (_filterAdded)
                 {
                     try { Application.RemoveMessageFilter(this); } catch { }
@@ -637,8 +638,9 @@ namespace SnapWheel
         // 旧页朝反方向滑出去（Panel 没有透明度，所以只用位移 + 分页器高亮同步过渡，不跳变）。
         // 两页在动画期间**永远刚好拼满可视区** —— 一个在 [x, x+W]、另一个在 [x±W, x±W+W]
         // —— 所以既不重叠也不留缝。
-        const int PageAnimMs = 160;      // 140~200ms 档；15ms 一帧 = 11 帧，实测约 165ms
+        const int PageAnimMs = 160;      // 140~200ms 档；15ms 一帧 ≈ 11 帧
         System.Windows.Forms.Timer _ptimer;
+        System.Diagnostics.Stopwatch _pwatch;       // 进度按"真实过去了多少毫秒"算，不按帧数累加
         int _animFrom = -1, _animTo = -1;
         float _animT = 1f;
 
@@ -699,6 +701,7 @@ namespace SnapWheel
             _pages[from].Dock = DockStyle.None;      // 交给动画自己摆位置
             _pages[to].Dock = DockStyle.None;
             ApplySlide(0f);                          // 第 0 帧：新页整页在窗口外 —— 一帧都不许重叠
+            _pwatch = System.Diagnostics.Stopwatch.StartNew();
             if (_ptimer == null)
             {
                 _ptimer = new System.Windows.Forms.Timer();
@@ -728,7 +731,8 @@ namespace SnapWheel
         void AnimTick()
         {
             if (_animFrom < 0 || _animTo < 0) { if (_ptimer != null) _ptimer.Stop(); return; }
-            _animT += 15f / PageAnimMs;
+            // 进度看真实时间：这一帧画得慢（负载重/重绘多）时不会把整段动画拖长，总时长始终是 160ms 左右
+            _animT = _pwatch == null ? 1f : (float)(_pwatch.Elapsed.TotalMilliseconds / PageAnimMs);
             if (_animT >= 1f)
             {
                 _animT = 1f;                        // 收尾精确到 1，不留 1.03 这种余量
@@ -736,6 +740,7 @@ namespace SnapWheel
                 int to = _animTo;
                 _animFrom = -1;
                 if (_ptimer != null) _ptimer.Stop();
+                if (_pwatch != null) { _pwatch.Stop(); _pwatch = null; }
                 SnapTo(to);                         // 再交回布局引擎（Dock=Fill），保证和静态布局逐像素一致
                 _animTo = to;
                 return;
