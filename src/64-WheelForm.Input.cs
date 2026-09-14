@@ -146,7 +146,8 @@ namespace SnapWheel
             float kcx = k.X + k.Width / 2f, kcy = k.Y + k.Height / 2f;
             float rad = k.Width / 2f + s / 2f + 22f;      // 留出万能键那圈外发光的位置（用户反馈：贴太近把光盖住了）
             double baseA = Math.PI * 1.25;                               // 225° = 屏幕左上
-            double stepA = Math.PI * 40 / 180;
+            double stepA = (s + 8f) / rad;   // 角度间隔按弧长反推：按钮直径 + 8px 间隙
+                                              // （原来写死 40°，半径 83px 时弧长就有 107px，三个按钮散得脱节）
             double a = baseA + stepA * (order - 1);
             int x = (int)Math.Round(kcx + rad * Math.Cos(a));
             int y = (int)Math.Round(kcy + rad * Math.Sin(a));
