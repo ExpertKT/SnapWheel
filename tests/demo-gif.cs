@@ -342,6 +342,9 @@ namespace SnapWheel
             if (gif == null) throw new Exception("no gif encoder");
             Encoder delayEnc = new Encoder(new Guid("51000000-0000-0000-0000-000000000000"));
             Encoder loopEnc = new Encoder(new Guid("51010000-0000-0000-0000-000000000000"));
+            // 统一放慢 1.5 倍（用户反馈"还是太快"）：帧数不变 -> 体积不变，只是节奏更从容
+            for (int i = 0; i < delays.Count; i++) delays[i] = delays[i] * 3 / 2;
+
             EncoderParameters ep = new EncoderParameters(3);
             ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.SaveFlag, (long)EncoderValue.MultiFrame);
             ep.Param[1] = new EncoderParameter(delayEnc, (long)Math.Max(2, delays[0] / 10));
