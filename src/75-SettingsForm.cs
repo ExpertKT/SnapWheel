@@ -71,6 +71,41 @@ namespace SnapWheel
             if (!_filterAdded) { try { Application.AddMessageFilter(this); _filterAdded = true; } catch { } }
         }
 
+        // 双层缓冲 + 整窗合成：翻页滑动时子控件（文字）不会闪、不会重影。
+        // WS_EX_COMPOSITED 是这里的关键 —— WinForms 的 DoubleBuffered 只管控件自己那一块，
+        // 子控件（标签/勾选框/下拉框各自都是独立窗口）挪动时的重画它管不着，只有整窗合成能压住。
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x02000000;      // WS_EX_COMPOSITED
+                return cp;
+            }
+        }
+
+        // 滚轮：一格 = 一页。向上滚 = 往前一页（和主界面轮盘一致）；环跟着转一格，停手后吸附回正角度。
+        // 拖动中忽略；动画中允许接管（ShowPage 会先把上一段精确收尾，再从当前进度滑向新页，不跳回）。
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            if (e.Delta != 0) { WheelStep(e.Delta > 0 ? -1 : 1); return; }   // 自己吃掉，不再往上冒（免得翻两次）
+            base.OnMouseWheel(e);
+        }
+
+        // 滚一格：step = -1 往前一页、+1 往后一页
+        bool WheelStep(int step)
+        {
+            if (step == 0) return false;
+            if (_dial != null && _dial.Dragging) return false;        // 拖着转环的时候滚轮不参与
+            int want = _cur + step;
+            if (want < 0) want = 0;
+            if (want > _pages.Length - 1) want = _pages.Length - 1;
+            if (want == _cur) return false;                           // 顶到头了：什么都不做
+            if (_dial != null) _dial.Nudge(want > _cur ? 1 : -1);     // 环先跟着转一格（有动画，不是硬跳）
+            ShowPage(want);                                           // 内容页切过去（动画中直接接管）
+            return true;
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -78,6 +113,7 @@ namespace SnapWheel
                 // 自己的定时器必须自己停（v0.5.1 的教训：窗口关了定时器还在跑，白烧 CPU）
                 if (_ptimer != null) { try { _ptimer.Stop(); _ptimer.Dispose(); } catch { } _ptimer = null; }
                 if (_pwatch != null) { try { _pwatch.Stop(); } catch { } _pwatch = null; }
+                FreeSlide();
                 if (_filterAdded)
                 {
                     try { Application.RemoveMessageFilter(this); } catch { }
@@ -96,7 +132,7 @@ namespace SnapWheel
                 long w = m.WParam.ToInt64();
                 int delta = (int)((w >> 16) & 0xFFFF);
                 if (delta > 0x7FFF) delta -= 0x10000;
-                if (delta != 0) { TryGoto(_cur + (delta > 0 ? -1 : 1)); return true; }
+                if (delta != 0) { WheelStep(delta > 0 ? -1 : 1); return true; }
             }
             return false;
         }
@@ -132,6 +168,7 @@ namespace SnapWheel
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterScreen;
             AutoSize = false;                     // 固定大小：翻页代替滚动，窗口不再随内容长高长胖
+            DoubleBuffered = true;                // 滑动时整窗不闪（配合 CreateParams 里的 WS_EX_COMPOSITED）
             ClientSize = new Size(760, 560);
             Padding = new Padding(20, 14, 20, 12);
 
@@ -150,11 +187,17 @@ namespace SnapWheel
             _root = root;
 
             Label head = new Label();
-            head.AutoSize = true;
+            // 别信 AutoSize：标签的高度是按"字体行高"算的（13pt 粗体只给 22px），
+            // 但文字真正要占的格子是 25px —— 底下一排会被削掉（用户报的"标题被遮挡了一点"，
+            // 和上一轮 ComboBox"报 23px 实高 27px"是同一个坑）。这里改成自己量出真实宽高。
+            head.AutoSize = false;
             head.Text = AppInfo.Name + " 设置";
             head.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(32, 34, 38);
-            head.Margin = new Padding(0, 0, 0, 6);
+            head.TextAlign = ContentAlignment.MiddleLeft;
+            Size hsz = TextRenderer.MeasureText(head.Text, head.Font);
+            head.Size = new Size(hsz.Width + 2, hsz.Height + 1);        // 真实文字格 + 1px 余量
+            head.Margin = new Padding(0, 0, 0, 0);                      // 不靠 Margin 占位，行高 28 自己留白
             root.Controls.Add(head, 0, 0);
 
             // 分页器：顶部小圆弧，四个扇区 = 四页（点扇区 / 滚轮翻页），新拟态凸起 + 当前页高亮
@@ -170,7 +213,8 @@ namespace SnapWheel
             root.Controls.Add(_dial, 0, 1);
 
             // 四张页面格：先建好挂上（空白），内容懒建；非当前页 Visible=false
-            Panel body = new Panel();
+            Panel body = new BufferedPanel();     // 双缓冲：滑动时这一块整块重画
+            body.Paint += new PaintEventHandler(BodyPaint);   // 滑动期间由它贴两张页位图
             body.Dock = DockStyle.Fill;
             body.Margin = new Padding(0);
             _body = body;
@@ -646,7 +690,35 @@ namespace SnapWheel
         System.Diagnostics.Stopwatch _pwatch;       // 进度按"真实过去了多少毫秒"算，不按帧数累加
         int _animFrom = -1, _animTo = -1;
         int _dialFrom = -1;             // 分页器高亮过渡的起点（拖动时它和 _animFrom 可能不是同一页）
+        int _animDir = 1;               // 翻页方向：+1 = 新页从右边进来
         float _animT = 1f;
+
+        // ---------- 翻页用位图滑动（不是"挪真控件"）----------
+        // 页里的标签/勾选框/下拉框各自都是独立窗口，每帧挪一次就要重画一次 —— 屏幕上就是"字在闪/抖"
+        // （文字每帧被重新光栅化尤其明显，实测一次翻页里体内容器被重排 23 次、页容器 25 次）。
+        // 现在：切页时两页各拍一张位图，真控件全部藏起来，body 自己按整数偏移贴这两张图。
+        // 双缓冲面板贴图 = 一帧只画一次，文字是同一份光栅，不重排、不重画、不抖。
+        Bitmap _slideA, _slideB;        // A = 旧页（滑出）B = 新页（滑入）
+        int _slideAx, _slideBx;
+
+        Bitmap ShotPage(Control pg)
+        {
+            Bitmap b = new Bitmap(pg.Width, pg.Height, PixelFormat.Format32bppPArgb);
+            pg.DrawToBitmap(b, new Rectangle(0, 0, b.Width, b.Height));
+            return b;
+        }
+
+        void FreeSlide()
+        {
+            if (_slideA != null) { try { _slideA.Dispose(); } catch { } _slideA = null; }
+            if (_slideB != null) { try { _slideB.Dispose(); } catch { } _slideB = null; }
+        }
+
+        void BodyPaint(object o, PaintEventArgs pe)
+        {
+            if (_slideA != null) pe.Graphics.DrawImageUnscaled(_slideA, _slideAx, 0);
+            if (_slideB != null) pe.Graphics.DrawImageUnscaled(_slideB, _slideBx, 0);
+        }
 
         // "正在翻页"以动画状态为准，不看定时器 —— 定时器被别的东西停掉时防连点也不能失效
         bool Animating { get { return _animFrom >= 0 && _animTo >= 0 && _animT < 1f; } }
@@ -694,6 +766,7 @@ namespace SnapWheel
             _animT = 1f;
             _animFrom = -1;
             if (to >= 0) SnapTo(to);
+            else FreeSlide();
         }
 
         void BuildPage(int i)
@@ -708,17 +781,19 @@ namespace SnapWheel
         // 精确落位：Dock=Fill 由布局引擎给出整格矩形，动画结束绝不留下 1px 偏移
         void SnapTo(int i)
         {
+            // 先把真控件摆回来，再扔贴图 —— 任何一帧都不许出现"没内容"的空档
             for (int k = 0; k < _pages.Length; k++)
             {
                 _pages[k].Dock = DockStyle.Fill;
                 _pages[k].Visible = (k == i);
             }
+            FreeSlide();
             if (_dial != null)
             {
                 _dial.AnimFrom = i; _dial.AnimTo = i; _dial.AnimT = 1f;
                 _dial.Current = i; _dial.Invalidate();
             }
-            if (_body != null) _body.PerformLayout();
+            if (_body != null) { _body.PerformLayout(); _body.Invalidate(); }
         }
 
         void StartSlide(int from, int to, int dialFrom)
@@ -726,35 +801,50 @@ namespace SnapWheel
             BuildPage(from);
             _animFrom = from; _animTo = to; _animT = 0f;
             _dialFrom = dialFrom < 0 ? from : dialFrom;
-            for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = (k == from || k == to);
-            _pages[from].Dock = DockStyle.None;      // 交给动画自己摆位置
-            _pages[to].Dock = DockStyle.None;
-            ApplySlide(0f);                          // 第 0 帧：新页整页在窗口外 —— 一帧都不许重叠
+            int W = _body.ClientSize.Width, H = _body.ClientSize.Height;
+            // 先把两页摆好（Dock=Fill）并排一次版，才能拍到正确的图
+            for (int k = 0; k < _pages.Length; k++)
+            {
+                _pages[k].Dock = DockStyle.Fill;
+                _pages[k].Visible = (k == from || k == to);
+            }
+            _body.PerformLayout();
+            _pages[from].PerformLayout();
+            _pages[to].PerformLayout();
+            // 拍两张图：旧页滑出、新页滑入（各 4~9ms，一次切页只拍一次）
+            FreeSlide();
+            _slideA = ShotPage(_pages[from]);
+            _slideB = ShotPage(_pages[to]);
+            // 真控件全藏起来 —— 滑动期间 body 只贴这两张图，不挪窗口、不重排、不重画文字
+            for (int k = 0; k < _pages.Length; k++) _pages[k].Visible = false;
+            int dir = (to > from) ? 1 : -1;              // 往后翻：新页从右边进来
+            _slideAx = 0;
+            _slideBx = dir * W;
+            _animDir = dir;
             _pwatch = System.Diagnostics.Stopwatch.StartNew();
             if (_ptimer == null)
             {
                 _ptimer = new System.Windows.Forms.Timer();
-                _ptimer.Interval = 15;               // 和轮盘动画同一个节拍（~66fps）
+                _ptimer.Interval = 15;                   // 和轮盘动画同一个节拍（~66fps）
                 _ptimer.Tick += delegate(object o, EventArgs e2) { AnimTick(); };
             }
             _ptimer.Start();
+            ApplySlide(0f);                              // 第 0 帧：新页整页在窗口外 —— 一帧都不许重叠
         }
 
         void ApplySlide(float t)
         {
-            int W = _body.ClientSize.Width, H = _body.ClientSize.Height;
-            if (W <= 0 || H <= 0) return;
+            int W = _body == null ? 0 : _body.ClientSize.Width;
+            if (W <= 0 || _body.ClientSize.Height <= 0) return;
             float e = Gfx.EaseOut(t);                // 先快后慢、收尾稳（跟轮盘同一套缓动）
-            int dir = (_animTo > _animFrom) ? 1 : -1; // 往后翻：新页从右边进来、旧页往左走
-            int newX = (int)Math.Round(dir * W * (1f - e));    // ±W -> 0
-            int oldX = (int)Math.Round(-dir * W * e);          // 0 -> ∓W
-            _pages[_animTo].Bounds = new Rectangle(newX, 0, W, H);
-            if (_animFrom != _animTo) _pages[_animFrom].Bounds = new Rectangle(oldX, 0, W, H);
+            _slideBx = (int)Math.Round(_animDir * W * (1f - e));    // ±W -> 0
+            _slideAx = (int)Math.Round(-_animDir * W * e);          // 0 -> ∓W
             if (_dial != null)
             {
                 _dial.AnimFrom = _dialFrom; _dial.AnimTo = _animTo; _dial.AnimT = e;
                 _dial.Invalidate();                  // 扇区高亮/凸起跟着一起走过去
             }
+            if (_body != null) _body.Invalidate();   // 双缓冲面板：一帧只画一次，贴图不出闪
         }
 
         void AnimTick()
@@ -869,7 +959,7 @@ namespace SnapWheel
         // 新建一张格子：列样式先给全，行样式由各页 SetupRows 按自己的行数补
         static TableLayoutPanel NewGrid(int cols)
         {
-            TableLayoutPanel g = new TableLayoutPanel();
+            BufferedGrid g = new BufferedGrid();     // 双缓冲页容器：整页滑进滑出不会闪
             g.ColumnCount = cols;
             g.RowCount = 1;
             g.AutoSize = false;
@@ -939,6 +1029,29 @@ namespace SnapWheel
         }
     }
 
+    // ============================ 双缓冲容器 ============================
+    // 翻页是把整页容器在窗口里挪位置，单缓冲的话每次挪动都要"擦底再画"，
+    // 里面的文字看起来就在闪。Panel/TableLayoutPanel 默认都是单缓冲，这里统一开成双缓冲。
+    class BufferedPanel : Panel
+    {
+        public BufferedPanel()
+        {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+        }
+    }
+
+    class BufferedGrid : TableLayoutPanel
+    {
+        public BufferedGrid()
+        {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+        }
+    }
+
     // ============================ 一行控件（行容器） ============================
     // 高度用**子控件的真实底边**兜底，不能只信 FlowLayoutPanel 自己算出来的数。
     // 起因（v0.5.2 用户报的"控件被裁"）：ComboBox 继承窗口字体（9.5pt 雅黑）之后真实高度是 27px，
@@ -947,6 +1060,14 @@ namespace SnapWheel
     // 这里只在"算出来的比子控件实际需要的矮"时补高，其余行一个字都不动。
     class RowPanel : FlowLayoutPanel
     {
+        public RowPanel()
+        {
+            // 行容器也会跟着页容器一起挪，同样要双缓冲（用户报的"字在闪"）
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+        }
+
         public override Size GetPreferredSize(Size proposed)
         {
             Size s = base.GetPreferredSize(proposed);
@@ -1005,6 +1126,7 @@ namespace SnapWheel
         System.Windows.Forms.Timer _snapTimer;
         System.Diagnostics.Stopwatch _snapWatch;
         float _snapFrom;
+        int _wheelSteps;           // 滚轮从上次静止起累计转过的格数（停手后吸附回正角度时清零）
 
         public PageDial()
         {
@@ -1274,10 +1396,19 @@ namespace SnapWheel
             if (_hover != -1) { _hover = -1; Invalidate(); }
         }
 
-        // 松手：吸附到离当前角度最近的正角度（≡0 mod 150°，也就是每页都回到自己扇区位的那个角度）
-        void FinishDrag()
+        // 滚轮用：环往"翻到下一页/上一页"的方向转一格（有动画），停手后 SnapTick 会接着吸附回正角度。
+        // 方向和拖动一致：往后翻一页 = 环往负方向转（东西从右边转进来）。
+        public void Nudge(int pageDir)
         {
-            TargetAngle = (float)(Math.Round(Angle / 150.0) * 150.0);
+            if (_drag != 0) return;                                  // 拖着的时候滚轮不参与
+            _wheelSteps += pageDir;
+            AnimateRingTo(-(SweepTotal / Math.Max(1, Count)) * _wheelSteps);
+        }
+
+        // 让环从当前角度 ease-out 转到目标角度（拖动收尾和滚轮共用一套）
+        void AnimateRingTo(float target)
+        {
+            TargetAngle = target;
             _snapFrom = Angle;
             _snapWatch = System.Diagnostics.Stopwatch.StartNew();
             if (_snapTimer == null)
@@ -1287,8 +1418,15 @@ namespace SnapWheel
                 _snapTimer.Tick += delegate(object o, EventArgs e2) { SnapTick(); };
             }
             _snapTimer.Start();
-            if (PageDropped != null) PageDropped(this, EventArgs.Empty);
             Invalidate();
+        }
+
+        // 松手：吸附到离当前角度最近的正角度（≡0 mod 150°，也就是每页都回到自己扇区位的那个角度）
+        void FinishDrag()
+        {
+            _wheelSteps = 0;
+            AnimateRingTo((float)(Math.Round(Angle / SweepTotal) * SweepTotal));
+            if (PageDropped != null) PageDropped(this, EventArgs.Empty);
         }
 
         // 直接接管（用户按下时上一次吸附还没走完）：角度保持不动，从当前进度接着拖
@@ -1306,6 +1444,9 @@ namespace SnapWheel
                 Angle = TargetAngle;                // 精确落到目标角，不留偏差
                 CancelSnap();
                 Invalidate();
+                float home = (float)(Math.Round(Angle / SweepTotal) * SweepTotal);
+                if (Math.Abs(Angle - home) > 0.0001f) AnimateRingTo(home);   // 滚轮转出去的那一格：接着吸附回正角度
+                else _wheelSteps = 0;
                 return;
             }
             Angle = _snapFrom + (TargetAngle - _snapFrom) * Gfx.EaseOut(t);
