@@ -186,7 +186,7 @@ namespace SnapWheel
             }
 
             // (2) 截图飞进环里 12 帧 x 110ms
-            st.Add(shot1);
+            StoreItem item1 = st.Add(shot1);   // 全程就这一张图：截它、进环、再拖出去
             PointF c1 = cardCenter(0);
             float fx0 = sel.X + sel.Width / 2f, fy0 = sel.Y + sel.Height / 2f;
             for (int i = 0; i <= 11; i++)
@@ -220,7 +220,7 @@ namespace SnapWheel
             }
 
             // (3) 从环上拖进聊天窗口 14 帧 x 110ms
-            st.Add(shot2);
+
             Rectangle chat = ChatRect();
             for (int i = 0; i <= 13; i++)
             {
@@ -234,9 +234,11 @@ namespace SnapWheel
                     int dw = 190, dh = 118;
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(210, 0, 0, 0)))
                         g.FillRectangle(sb, cx - dw / 2 + 5, cy - dh / 2 + 6, dw, dh);
-                    g.DrawImage(shot2, new Rectangle((int)(cx - dw / 2), (int)(cy - dh / 2), dw, dh));
+                    g.DrawImage(shot1, new Rectangle((int)(cx - dw / 2), (int)(cy - dh / 2), dw, dh));
                     using (Pen p = new Pen(Color.FromArgb(110, 170, 255), 2f))
                         g.DrawRectangle(p, (int)(cx - dw / 2), (int)(cy - dh / 2), dw, dh);
+                    F(wf, "_dragOutItem", item1);          // 环上那张跟着缩小 —— 跟真程序一致
+                    F(wf, "_dragOutProg", i / 13f);
                     wheel(g, 1f, 1f);
                     Cursor(g, cx + dw / 2 - 10, cy + dh / 2 - 8, 1.1f);
                     Caption(g, "4) 要用的时候，缩略图直接拖进聊天框");
@@ -248,7 +250,9 @@ namespace SnapWheel
                 Bitmap fr = new Bitmap(desk);
                 using (Graphics g = Graphics.FromImage(fr))
                 {
-                    g.DrawImage(shot2, new Rectangle(chat.X + 40, chat.Y + 96, 190, 118));
+                    g.DrawImage(shot1, new Rectangle(chat.X + 40, chat.Y + 96, 190, 118));
+                    F(wf, "_dragOutItem", null);
+                    F(wf, "_dragOutProg", 0f);
                     wheel(g, 1f, 1f);
                     Cursor(g, chat.X + 150, chat.Y + 250, 1.1f);
                     Caption(g, "5) 拖出去就用 -- 图还留在环上");
