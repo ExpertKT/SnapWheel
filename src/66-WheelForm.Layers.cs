@@ -90,6 +90,8 @@ namespace SnapWheel
             h = Mix(h, (double)_closeHoldP); h = Mix(h, (double)_nubHov);
             h = Mix(h, (double)_nubAppearT); h = Mix(h, (double)_nubHintT);
             h = Mix(h, (double)_nubOutDist); h = Mix(h, (double)_nubInDist);
+            // 小按钮的发光进度：不进签名的话会一直贴旧层，光就动不起来
+            h = Mix(h, (double)_closeGlow); h = Mix(h, (double)_gearGlow); h = Mix(h, (double)_shootGlow);
             if (which == 0)
             {
                 h = Mix(h, (double)EffR());

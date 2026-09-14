@@ -312,17 +312,17 @@ namespace SnapWheel
         // 万能键：新拟态玻璃圆盘 —— 玻璃底 + 上亮下暗 + 主题色核心，按下时核心点亮并轻微放大
         // 小按钮悬停时的外发光：和万能键同款（PathGradientBrush 中心亮、外围透明）。
         // 抽成方法而不是内联三份：内联会和各自作用域里的局部变量重名（编译期才发现，很烦）。
-        void DrawBtnGlow(Graphics g, Rectangle r, bool hot)
+        void DrawBtnGlow(Graphics g, Rectangle r, float hot)
         {
-            if (!hot || !StyleNeu() || _settings.ShadowPercent <= 8) return;
+            if (hot <= 0.01f || !StyleNeu() || _settings.ShadowPercent <= 8) return;
             using (GraphicsPath gp = new GraphicsPath())
             {
                 gp.AddEllipse(r.Left - 11f, r.Top - 11f, r.Width + 22f, r.Height + 22f);
                 using (PathGradientBrush halo = new PathGradientBrush(gp))
                 {
                     halo.CenterPoint = new PointF(r.Left + r.Width / 2f, r.Top + r.Height / 2f);
-                    halo.CenterColor = Color.FromArgb(125, 255, 255, 255);
-                    halo.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                    // 光色跟随当前 wheel 的主题色（切 wheel 会变），强度跟着淡入淡出进度走`r`n                    Color acc = _accentCur;`r`n                    halo.CenterColor = Gfx.A(acc, (int)(128 * hot));
+                    halo.SurroundColors = new Color[] { Gfx.A(acc, 0) };
                     g.FillPath(halo, gp);
                 }
             }
@@ -834,7 +834,7 @@ namespace SnapWheel
             // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
             PointF c = Center();
             Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
-            DrawBtnGlow(g, cbr, _closeHover);
+            DrawBtnGlow(g, cbr, _closeGlow);
             Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
             PointF sh0 = IntroShift(pb0), sh1 = IntroShift(pb1), sh2 = IntroShift(pb2);
@@ -887,7 +887,7 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
-            DrawBtnGlow(g, gbr, _gearHover);
+            DrawBtnGlow(g, gbr, _gearGlow);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
                 Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
                     Gfx.A(acc, (int)(200 * ab1 / 255f)), false, false,
@@ -1051,7 +1051,7 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
-            DrawBtnGlow(g, sbr, _shootHover);
+            DrawBtnGlow(g, sbr, _shootGlow);
             if (pb2 > 0.01f)
             {
                 g.TranslateTransform(sh2.X, sh2.Y);

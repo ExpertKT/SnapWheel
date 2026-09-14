@@ -340,6 +340,14 @@ namespace SnapWheel
             // keep animating while a freshly captured image is still sliding in / a delete is running
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
+            // 小按钮的发光淡入淡出（0 或 1 之间平滑走，和别处的趋近写法一致）
+            {
+                float g1 = _closeGlow + ((_closeHover ? 1f : 0f) - _closeGlow) * 0.22f;
+                float g2 = _gearGlow + ((_gearHover ? 1f : 0f) - _gearGlow) * 0.22f;
+                float g3 = _shootGlow + ((_shootHover ? 1f : 0f) - _shootGlow) * 0.22f;
+                if (g1 < 0.004f) g1 = 0f; if (g2 < 0.004f) g2 = 0f; if (g3 < 0.004f) g3 = 0f;
+                if (g1 != _closeGlow || g2 != _gearGlow || g3 != _shootGlow) { _closeGlow = g1; _gearGlow = g2; _shootGlow = g3; need = true; }
+            }
             if (_deletingItem != null) need = true;
             // 持久置顶：图片查看器之类的窗口自己也是置顶的，它一关，Windows 就把我们排到
             // 非置顶带里去了 —— 只在唤出那一刻抢一次不够（用户反馈：一关图片窗口轮盘就沉下去）。
