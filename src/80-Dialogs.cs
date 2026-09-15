@@ -266,6 +266,7 @@ namespace SnapWheel
             ClientSize = new Size(winW, winH);
 
             int viewH = winH - btnRowH;                        // 内容区能露出来的高度
+            if (_scrollHost != null) _scrollHost.Size = new Size(winW, viewH);   // 宿主的可视高度：超出部分会被裁掉
             _sc.Finish(contentH, viewH);
             _scrollHint.Visible = _sc.Active;
 
@@ -276,10 +277,26 @@ namespace SnapWheel
             ResumeLayout();
         }
 
-        // 登记一个控件：既加入窗口，也告诉滚动器它的原始位置
+        // 滚动内容的宿主 Panel。
+        //
+        // 为什么必须有个 Panel：滚动是靠移动子控件的 Location 实现的，而 **WinForms 的窗体
+        // 不会裁剪子控件** —— 超出窗口的内容照样画出来。用户反馈的"字把开始使用按钮遮住"
+        // 就是这么来的：某个标签的 Y=773 压在了按钮的 Y=769 上。
+        // Panel 会裁剪自己的子控件，放进来的内容滚到边界就被切断，永远到不了按钮那一层。
+        Panel _scrollHost;
+
+        // 登记一个控件：加进滚动宿主（会被裁剪），也告诉滚动器它的原始位置
         void Add2(Control c)
         {
-            Controls.Add(c);
+            if (_scrollHost == null)
+            {
+                _scrollHost = new Panel();
+                _scrollHost.Location = new Point(0, 0);
+                _scrollHost.Size = new Size(Math.Max(1, ClientSize.Width), Math.Max(1, ClientSize.Height));
+                _scrollHost.BackColor = Color.FromArgb(252, 252, 254);   // 和窗体同色（不用 Transparent，避免重绘问题）
+                Controls.Add(_scrollHost);
+            }
+            _scrollHost.Controls.Add(c);
             _sc.Add(c);
         }
 
