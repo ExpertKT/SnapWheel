@@ -146,7 +146,7 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, "5 / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 Center(g, "快照轮环", 96, FontStyle.Bold, 300, Color.White);
-                Center(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", 28, FontStyle.Regular, 440, Sub);
+                Center(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", 28, FontStyle.Regular, 480, Sub);   // 96pt 大标题底约 428，原来 440 只差 12px
 
                 // 三个硬数据：一行三列，各自居中
                 string[] num = { "274 KB", "0", "1" };
