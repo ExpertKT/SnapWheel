@@ -177,22 +177,8 @@ namespace SnapWheel
                 Size sz = TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
                 TextRenderer.DrawText(g, text, f, new Point(cx - sz.Width / 2, y), col, TextFormatFlags.NoPadding);
             }
-        static void CenterArt(Graphics g, int cx, int cy, int R)
-        {
-            using (Pen p = new Pen(Color.FromArgb(130, 0, 138, 226), 12f))
-                g.DrawArc(p, cx - R, cy - R, R * 2, R * 2, 198, 144);
-            for (int i = 0; i < 3; i++)
-            {
-                double a = (214 + i * 52) * Math.PI / 180.0;
-                int x = (int)(cx + R * Math.Cos(a)), y = (int)(cy + R * Math.Sin(a));
-                using (SolidBrush sh = new SolidBrush(Color.FromArgb(60, 0, 0, 0)))
-                    g.FillRectangle(sh, x - 28, y - 19, 56, 42);
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(242, 250, 252, 255)))
-                    g.FillRectangle(b, x - 30, y - 22, 56, 42);
-            }
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(255, 236, 178, 60)))
-                g.FillEllipse(b, cx - 25, cy - 25, 50, 50);
         }
+
         static void Merge()
         {
             using (Bitmap b = new Bitmap(1080 * 3 / 2, 1080 * 3 / 2, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
