@@ -77,6 +77,14 @@ namespace SnapWheel
         public const uint MOUSEEVENTF_MOVE     = 0x0001;
         public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         public const uint MOUSEEVENTF_LEFTUP   = 0x0004;
+
+        // 把某个窗口拉到前台。传递模式"放下"时必须先做这一步 ——
+        // 轮盘现在是不激活窗口（当初为了不抢别人的焦点、让用户能 Alt+Tab 切过去），
+        // 而 Windows 有个规则：**非活动窗口的第一次点击会被系统用来"激活那个窗口"，应用收不到**。
+        // 我们的模拟点击正是那"第一次点击"，于是被白白消耗掉，轮盘永远等不到"按下"，
+        // OLE 拖放（DoDragDrop）也就永远不会启动。
+        // 用户实测的现象"鼠标从起点移到终点、然后什么都没发生"，根因就在这里。
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         public const int WM_HOTKEY = 0x0312;

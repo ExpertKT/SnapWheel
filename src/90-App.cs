@@ -362,6 +362,9 @@ namespace SnapWheel
                 : new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);   // 拿不到就退回中心
 
             CarryForm cf = new CarryForm(thumb, origin);
+            // 把轮盘句柄交给传递模式：模拟拖放前它要先把轮盘拉到前台，
+            // 否则轮盘作为"不激活窗口"会把第一次模拟点击用来激活自己、应用收不到（拖放永远不启动）。
+            CarryForm.WheelHandle = _wheel.Handle;
             // 传递期间不能让轮盘自动收起：用户要自己切屏过去，常常超过那 8 秒；
             // 轮盘一藏，"按下"的起点就变成空桌面，目标程序什么都不会发生。
             WheelForm.SuppressAutoHide++;

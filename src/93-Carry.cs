@@ -199,6 +199,12 @@ namespace SnapWheel
         }
 
         /// <summary>
+        /// 轮盘窗口的句柄，由 App 在进入传递模式时设置。
+        /// 模拟拖放前必须先把它拉到前台 —— 见下面 SimulateDrag 里的说明。
+        /// </summary>
+        public static IntPtr WheelHandle = IntPtr.Zero;
+
+        /// <summary>
         /// 模拟一次真实的拖放：光标移到起点 → 按下 → 分步移到终点 → 松开。
         /// 分步移动很重要：一步跳过去的话，多数程序不会把它当成拖放。
         /// </summary>
@@ -206,8 +212,20 @@ namespace SnapWheel
         {
             try
             {
+                // 关键的第一步：把轮盘拉到前台。
+                //
+                // 轮盘是"不激活窗口"（当初为了不抢焦点、让用户能 Alt+Tab 切过去），
+                // 而 Windows 的规则是：**非活动窗口的第一次点击会被系统用来激活它，应用收不到**。
+                // 我们的模拟点击正好就是那第一次点击 —— 被系统吃掉，轮盘没收到"按下"，
+                // 也就不会有 DoDragDrop。所以这里先显式把它带到前台，让后面的点击真正送达。
+                if (WheelHandle != IntPtr.Zero)
+                {
+                    Native.SetForegroundWindow(WheelHandle);
+                    Thread.Sleep(180);
+                }
+
                 Native.SetCursorPos(from.X, from.Y);
-                Thread.Sleep(60);
+                Thread.Sleep(100);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
 
                 int steps = 22;      // 步数多一些、每步慢一些，更像人手（一步跳过去多数程序不认）
@@ -217,7 +235,7 @@ namespace SnapWheel
                     Native.SetCursorPos(p.X, p.Y);
                     Thread.Sleep(20);
                 }
-                Thread.Sleep(80);
+                Thread.Sleep(120);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
                 Thread.Sleep(40);
             }
