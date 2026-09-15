@@ -120,7 +120,7 @@ namespace SnapWheel
                 asTask = mi;
                 break;
             }
-            if (asTask == null) throw new Exception(Lang.T("找不到 AsTask 桥接方法", "AsTask bridge method not found"));
+            if (asTask == null) throw new Exception("找不到 AsTask 桥接方法");
             System.Threading.Tasks.Task task = (System.Threading.Tasks.Task)asTask.MakeGenericMethod(resType).Invoke(null, new object[] { op });
             if (!task.Wait(timeoutMs)) throw new Exception(Lang.T("识别超时", "Recognition timed out"));
             return task.GetType().GetProperty("Result").GetValue(task, null);
@@ -130,9 +130,9 @@ namespace SnapWheel
         {
             // 同一程序集里的 WindowsRuntimeStreamExtensions（按程序集名 Type.GetType 解析不到，就直接从这个程序集里取）
             Type ext = typeof(System.WindowsRuntimeSystemExtensions).Assembly.GetType("System.IO.WindowsRuntimeStreamExtensions");
-            if (ext == null) throw new Exception(Lang.T("缺少 System.Runtime.WindowsRuntime", "System.Runtime.WindowsRuntime is missing"));
+            if (ext == null) throw new Exception("缺少 System.Runtime.WindowsRuntime");
             MethodInfo m = ext.GetMethod("AsRandomAccessStream", new Type[] { typeof(Stream) });
-            if (m == null) throw new Exception(Lang.T("找不到 AsRandomAccessStream", "AsRandomAccessStream not found"));
+            if (m == null) throw new Exception("找不到 AsRandomAccessStream");
             MemoryStream ms = new MemoryStream(bytes, false);
             return m.Invoke(null, new object[] { ms });
         }
@@ -193,7 +193,7 @@ namespace SnapWheel
                 bool stretched;
                 byte[] pre = Stretch(bgra, w, h, out stretched);
                 object sw = SoftwareBitmapFromPixels(pre, w, h);
-                if (sw == null) { error = Lang.T("这台系统不支持直接把像素交给 OCR", "This system cannot hand pixels directly to OCR"), "This system cannot hand pixels directly to OCR"); return null; }
+                if (sw == null) { error = Lang.T("这台系统不支持直接把像素交给 OCR", "This system cannot hand pixels directly to OCR"); return null; }
                 float wordH;
                 string txt = RecognizeSoftwareBitmap(sw, out error, out wordH);
                 if (txt == null) return null;
@@ -403,7 +403,7 @@ namespace SnapWheel
 
                 Type decT = WinRT("Windows.Graphics.Imaging.BitmapDecoder");
                 MethodInfo create = decT.GetMethod("CreateAsync", BindingFlags.Public | BindingFlags.Static, null, new Type[] { WinRT("Windows.Storage.Streams.IRandomAccessStream") }, null);
-                if (create == null) throw new Exception(Lang.T("找不到 BitmapDecoder.CreateAsync", "BitmapDecoder.CreateAsync not found"));
+                if (create == null) throw new Exception("找不到 BitmapDecoder.CreateAsync");
                 object decoder = Await(create.Invoke(null, new object[] { RandomAccessStreamOf(png) }), "Windows.Graphics.Imaging.BitmapDecoder", 15000);
                 MethodInfo getSb = decoder.GetType().GetMethod("GetSoftwareBitmapAsync", Type.EmptyTypes);   // 它有 4 个重载，必须指定"无参"那个
                 object sw = Await(getSb.Invoke(decoder, null), "Windows.Graphics.Imaging.SoftwareBitmap", 15000);
@@ -502,7 +502,7 @@ namespace SnapWheel
                                 g.Clear(Color.White);
                                 using (Font f = new Font("Microsoft YaHei UI", 14f))
                                 using (SolidBrush br = new SolidBrush(Color.Black))
-                                    g.DrawString(Lang.T("warm up 热身", "warm up"), f, br, 6, 6);
+                                    g.DrawString("warm up 热身", f, br, 6, 6);
                             }
                             string e;
                             Recognize(b, out e);

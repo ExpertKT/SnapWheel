@@ -21,7 +21,7 @@ namespace SnapWheel
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
-        public static readonly string CnName = Lang.T("快照轮环", "SnapWheel");        // 正式中文名（0.4.7 起）
+        public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
         public const string Repo = "ExpertKT/SnapWheel";  // 自动更新检查用
     }
 

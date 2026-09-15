@@ -128,8 +128,8 @@ namespace SnapWheel
             // 诊断：把每次判定的依据写进日志（真实屏幕上"接不上"时，这是唯一能看出卡在哪的东西）
             try
             {
-                Err.Log("LongShot", new Exception(Lang.T("帧 ", "Frame ") + _shotCount + " " + _w + "x" + _h + " -> "
-                    + (m.Ok ? (Lang.T("接上 ", "Stitched ") + m.NewRows + Lang.T(" 行", " rows"), " rows")) : "拒绝")
+                Err.Log("LongShot", new Exception("帧 " + _shotCount + " " + _w + "x" + _h + " -> "
+                    + (m.Ok ? ("接上 " + m.NewRows + Lang.T(" 行", " rows")) : "拒绝")
                     + " best=" + m.Score.ToString("0.00") + " second=" + m.Second.ToString("0.00")
                     + " bad=" + m.BadRatio.ToString("0.000") + " why=" + (m.Why == null ? "-" : m.Why)));
             }
@@ -161,7 +161,7 @@ namespace SnapWheel
             int take = addedRows;
             int srcY = _h - still - take;
             if (srcY < 0) { srcY = 0; take = _h - still; }
-            if (take <= 0) { _why = Lang.T("没有可拼的新内容", "No new content to stitch"); return false; }
+            if (take <= 0) { _why = "没有可拼的新内容"; return false; }
             using (Graphics g = Graphics.FromImage(_canvas))
             {
                 g.DrawImage(frame, new Rectangle(0, _canvasH, _w, addedRows),

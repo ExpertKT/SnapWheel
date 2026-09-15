@@ -33,7 +33,7 @@ namespace SnapWheel
                 if (i > 0) sb.Append(';');
                 sb.Append('*').Append(Exts[i]);
             }
-            return Lang.T("图片文件|", "Image files|") + sb.ToString() + "|所有文件|*.*";
+            return "图片文件|" + sb.ToString() + "|所有文件|*.*";
         }
 
         public static bool IsImageExt(string path)        {

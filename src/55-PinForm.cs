@@ -61,7 +61,7 @@ namespace SnapWheel
             // 小图会被撑到 136 宽、右边多出一条白边 —— 40x30 这种小截图就废了。
             // 16 是"远小于系统下限"的哨兵值，不是版面尺寸，所以不乘 K（乘成 24 也还是小于 136，没意义）
             MinimumSize = new Size(16, 16);
-            Text = Lang.T("SnapWheel 贴图", "SnapWheel pinned image");
+            Text = "SnapWheel 贴图";
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
 
             ApplyZoom(1f, false);
