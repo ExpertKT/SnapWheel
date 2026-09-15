@@ -148,6 +148,24 @@ namespace SnapWheel
             try { ff.Dispose(); } catch { }
         }
 
+        // 弹框/截图期间让轮盘退到后面。要点两个：
+        //   ① 用**计数**：多处嵌套（截图时又打开设置）时，谁也不会把对方的状态冲掉；
+        //   ② 必须**真的把 TopMost 关掉** —— 只抑制"周期置顶"是不够的：轮盘本来就已经在顶层，
+        //      不关掉它照样压在设置窗口/截图浮层上面（用户报的"设置跑到下面、以为没打开"）。
+        int _noTop = 0;
+        bool _noTopWasOn = false;
+
+        void PushNoTopMost()
+        {
+            if (_noTop == 0) { try { _noTopWasOn = _wheel.TopMost; _wheel.TopMost = false; } catch { } }
+            _noTop++;
+        }
+
+        void PopNoTopMost()
+        {
+            _noTop = Math.Max(0, _noTop - 1);
+            if (_noTop == 0) { try { _wheel.TopMost = _noTopWasOn; } catch { } }
+        }
         void OnGuide(object sender, EventArgs e)
         {
             try { GuideForm gf = new GuideForm(); gf.ShowDialog(); } catch { }
@@ -253,10 +271,10 @@ namespace SnapWheel
                 using (AdminForm af = new AdminForm())
                 {
                     bool wasTop = _wheel.TopMost;
-                    WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
+                    PushNoTopMost();
                     af.TopMost = true;
                     restart = (af.ShowDialog() == DialogResult.OK);
-                    WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
+                    PopNoTopMost();
                 }
             }
             catch { }
@@ -369,18 +387,18 @@ namespace SnapWheel
 
         void OnWheels(object sender, EventArgs e)
         {
-            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
+            PushNoTopMost();
             WheelsForm f = new WheelsForm(_wheels);
             f.ShowDialog();
             _wheels.ApplySettings();
-            WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
+            PopNoTopMost();
             _wheel.RefreshWheel();
         }
 
         void OnSettings(object sender, EventArgs e)
         {
             bool wasTop = _wheel.TopMost;
-            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
+            PushNoTopMost();
             SettingsForm f = new SettingsForm(_settings);
             DialogResult r = f.ShowDialog();
             if (r == DialogResult.OK)
@@ -393,7 +411,7 @@ namespace SnapWheel
             }
             else
             {
-                WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
+                PopNoTopMost();
             }
         }
 
@@ -429,9 +447,9 @@ namespace SnapWheel
             // 浮层必须是前台：轮盘每 2 秒的周期置顶会把它压下去（用户报的"截图时页面不在最顶层"），
             // 所以先让轮盘退出置顶，截完再恢复。
             // 截图/弹框期间抑制轮盘的周期置顶（见 WheelForm.SuppressTopMost）
-            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
+            PushNoTopMost();
             try { ov.ShowDialog(); }
-            finally { WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1); }
+            finally { PopNoTopMost(); }
             if (ov.WantLongShot)
             {
                 // 0.6.0：在截图浮层里点了「长图」—— 带着他框的那块区域去跑滚动长截图
