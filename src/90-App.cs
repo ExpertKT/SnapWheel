@@ -518,6 +518,7 @@ namespace SnapWheel
                     _carryKey = new HotkeyForm();
                     _carryKey.Hotkey += new EventHandler(delegate(object o, EventArgs e)
                     {
+                        Err.Log("Carry.Hotkey", new Exception("传递热键被按下"));   // 必定落盘：用来区分"注册成功但收不到消息"
                         try { StartCarry(); } catch (Exception ex) { Err.Log("Carry", ex); }
                     });
                 }
