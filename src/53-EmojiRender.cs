@@ -56,6 +56,11 @@ namespace SnapWheel
 
         static Bitmap Render(string glyph, int px)
         {
+            // ⚠️ 已知限制：这里用的是 FormattedText，它走低层文本路径，会把彩色 emoji 画成**单色剪影**
+            //    （形状是对的，但只有一种颜色）。彩色需要 TextBlock 那种完整排版管线，而那条路要引
+            //    PresentationFramework.dll + System.Xaml.dll，并且它自带的 Microsoft.Win32.OpenFileDialog
+            //    会和 WinForms 的同名类型撞车（90-App.cs 当场报二义性），牵动面太大，
+            //    所以这一版先保持单色，把彩色留给专门一轮处理。
             System.Windows.Media.FormattedText ft = new System.Windows.Media.FormattedText(
                 glyph, CultureInfo.InvariantCulture,
                 System.Windows.FlowDirection.LeftToRight,
@@ -75,7 +80,6 @@ namespace SnapWheel
                     w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
             rtb.Render(dv);
 
-            // Pbgra32 是预乘 alpha，正好对应 Format32bppPArgb，可以直接拷像素
             Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
             BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
             try { rtb.CopyPixels(new System.Windows.Int32Rect(0, 0, w, h), bd.Scan0, bd.Stride * h, bd.Stride); }
