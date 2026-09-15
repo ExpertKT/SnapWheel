@@ -319,6 +319,23 @@ namespace SnapWheel
         public static IntPtr WheelHandle = IntPtr.Zero;
 
         /// <summary>
+        /// 把光标移到某个点，**并且生成真实的鼠标移动消息**。
+        ///
+        /// 为什么不能只用 SetCursorPos：它只是把光标"瞬移"过去，**不产生鼠标移动消息**。
+        /// 而轮盘的拖出是靠"按下 + 鼠标移动"启动的（OLE 拖放的启动条件），收不到移动消息
+        /// 就永远不会开始拖 —— 用户实测的现象正是"真鼠标指针从起点移到了终点，然后什么都没发生"。
+        /// 补一个 MOUSEEVENTF_MOVE 就是在告诉系统"鼠标真的动了"（位移 0，只为了让消息发出去）。
+        ///
+        /// ⚠️ 这几行在代码回退时丢过一次，结果"放下"又变成同一个失败现象。
+        /// 改动这段时务必保留 —— 它看起来多余，其实是拖放能启动的关键。
+        /// </summary>
+        static void MoveTo(int x, int y)
+        {
+            Native.SetCursorPos(x, y);
+            Native.mouse_event(Native.MOUSEEVENTF_MOVE, 0, 0, 0, IntPtr.Zero);
+        }
+
+        /// <summary>
         /// 模拟一次真实的拖放：光标移到起点 → 按下 → 分步移到终点 → 松开。
         /// 分步移动很重要：一步跳过去的话，多数程序不会把它当成拖放。
         /// </summary>
@@ -344,13 +361,10 @@ namespace SnapWheel
                     Err.Log("Carry.Drag", new Exception("放下开始：WheelHandle 没拿到！起点=" + from.X + "," + from.Y));
                 }
 
-                Native.SetCursorPos(from.X, from.Y);
+                MoveTo(from.X, from.Y);
                 Thread.Sleep(100);
 
                 // 核对坐标：我们**以为**移到了起点，实际落在哪？
-                // 目的是判断坐标基准问题 —— 如果 WinForms 给的坐标和 SetCursorPos 用的不是同一套
-                // （150% 缩放下逻辑/物理差 1.5 倍），落点就会整体偏掉：鼠标看着动了，
-                // 但按下的地方根本不在缩略图上，拖放自然不会启动。
                 try
                 {
                     Point actual = Cursor.Position;
@@ -367,7 +381,7 @@ namespace SnapWheel
                 for (int i = 1; i <= steps; i++)
                 {
                     Point p = StepPoint(from, to, i, steps);
-                    Native.SetCursorPos(p.X, p.Y);
+                    MoveTo(p.X, p.Y);
                     Thread.Sleep(20);
                 }
                 Thread.Sleep(120);
