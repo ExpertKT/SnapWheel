@@ -90,7 +90,7 @@ namespace SnapWheel
                     }
                 }
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
-                    TextRenderer.DrawText(g, "SnapWheel 快照轮环", fb, new Point(72, 64), Accent, TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "SnapWheel 快照轮环", fb, new Point(180, 64), Accent, TextFormatFlags.NoPadding);
                 // 角标
                 using (Font fc = new Font(FONT, 26, FontStyle.Bold))
                 {
@@ -108,13 +108,13 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, "看一眼就懂", fc, new Point(r.X + 22, r.Y + 10), Color.FromArgb(240, 225, 240, 252), TextFormatFlags.NoPadding);
                 }
                 using (Font ft = new Font(FONT, 104, FontStyle.Bold))
-                    TextRenderer.DrawText(g, "截完图", ft, new Point(72, 246), Color.White, TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "截完图", ft, new Point(180, 246), Color.White, TextFormatFlags.NoPadding);
                 using (Font ft2 = new Font(FONT, 76, FontStyle.Bold))
-                    TextRenderer.DrawText(g, "拖一下就发出去了", ft2, new Point(72, 396), Color.White, TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "拖一下就发出去了", ft2, new Point(180, 396), Color.White, TextFormatFlags.NoPadding);
                 using (Font fs = new Font(FONT, 36))
-                    TextRenderer.DrawText(g, "不用保存、不用切窗口、不用翻文件夹", fs, new Point(72, 512), Sub, TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "不用保存、不用切窗口、不用翻文件夹", fs, new Point(180, 512), Sub, TextFormatFlags.NoPadding);
                 using (Font fd = new Font(FONT, 28))
-                    TextRenderer.DrawText(g, "免费 · 开源 · 单文件，双击就能用", fd, new Point(72, 1210), Color.FromArgb(200, 150, 165, 190), TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "免费 · 开源 · 单文件，双击就能用", fd, new Point(180, 1210), Color.FromArgb(200, 150, 165, 190), TextFormatFlags.NoPadding);
             }
             return b;
         }
