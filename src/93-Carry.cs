@@ -46,7 +46,7 @@ namespace SnapWheel
         // 不这么做会出事 —— 传递热键是 Ctrl+Alt+C，用户按完 C 键还按着不放，
         // 窗口一出现就检测到 C 是按下状态，立刻当成"复制到剪贴板"并关闭，
         // 表现就是"闪了一下就没了"（用户实测出来的）。
-        bool _prevEnter, _prevEsc, _prevC;
+        bool _prevEnter, _prevEsc, _prevC, _prevSpace;
 
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
@@ -154,7 +154,8 @@ namespace SnapWheel
                 bool warmed = (DateTime.Now - _started).TotalMilliseconds > 350;
                 if (warmed)
                 {
-                    if (Rising(ref _prevEnter, Keys.Enter) || Rising(ref _prevEnter, Keys.Space)) { DoDrop(); return; }
+                    // 空格是主要的「放下」键（用户要求：比 Enter 顺手）；Enter 保留作为等价键。
+                    if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter)) { DoDrop(); return; }
                     if (Rising(ref _prevC, Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
                 }
@@ -323,8 +324,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
-                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
+                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -349,8 +350,8 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
-                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
+                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
