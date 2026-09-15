@@ -864,6 +864,22 @@ namespace SnapWheel
             return crop;
         }
 
+        // 浮层显示后主动抢一次前台：光在构造里设 TopMost = true 是不够的 ——
+        // 若此时已有别的置顶窗口（或从托盘菜单/热键触发），浮层会落在下层，
+        // 用户看到的就是"点了截图，截图界面出现在下层"。
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            try
+            {
+                TopMost = true;
+                BringToFront();
+                Activate();
+                Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                    Native.SWP_NOMOVE | Native.SWP_NOSIZE);   // 注意：这里**不**带 NOACTIVATE，要真的激活
+            }
+            catch { }
+        }
         void Cancel() { Result = null; DialogResult = DialogResult.Cancel; Close(); }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
