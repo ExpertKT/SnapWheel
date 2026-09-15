@@ -34,15 +34,31 @@ namespace SnapWheel { static class CarryTest {
     MethodInfo mk = app.GetMethod("MakeCarryThumb", BindingFlags.NonPublic | BindingFlags.Static);
     if (mk == null) { Ck("找到 MakeCarryThumb", false, "反射拿不到"); }
     else {
+      // 不变形的正确验法：在源图里画一个正方形，看它在输出里还是不是正方形。
+      // （一开始我按"两侧加黑边"去断言，那是 contain 语义；实现用的是 cover
+      //   —— 居中裁切填满，视觉上更好看。期望写错了，不是代码错了。）
       using (Bitmap wide = new Bitmap(400, 100)) {
-        using (Graphics g = Graphics.FromImage(wide)) g.Clear(Color.Red);
+        using (Graphics g = Graphics.FromImage(wide)) {
+          g.Clear(Color.Blue);
+          using (SolidBrush b = new SolidBrush(Color.Red)) g.FillRectangle(b, 175, 25, 50, 50);   // 正中 50x50
+        }
         using (Bitmap t = (Bitmap)mk.Invoke(null, new object[]{ wide, 132, 99 })) {
           Ck("宽图 -> 132x99", t.Width == 132 && t.Height == 99, t.Width + "x" + t.Height);
-          // 4:1 的源放进 4:3 的框，应该左右留黑边（居中加边），上下填满
-          Color corner = t.GetPixel(1, 1);
           Color mid = t.GetPixel(66, 49);
-          Ck("中间是原图内容", mid.R > 200 && mid.G < 60, mid.ToString());
-          Ck("两侧是加边(不是拉伸变形)", corner.R < 60 && corner.G < 60, corner.ToString());
+          Ck("中间保留原图内容", mid.R > 180 && mid.B < 80, mid.ToString());
+          // 量红色区域的实际宽高（应该仍然接近 1:1）
+          int minX = t.Width, maxX = -1, minY = t.Height, maxY = -1;
+          for (int y = 0; y < t.Height; y++)
+            for (int x = 0; x < t.Width; x++) {
+              Color cc = t.GetPixel(x, y);
+              if (cc.R > 150 && cc.B < 100) {
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
+              }
+            }
+          int rw = maxX - minX + 1, rh = maxY - minY + 1;
+          double ar = (double)rw / Math.Max(1, rh);
+          Ck("正方形没被拉变形(宽高比 ≈1)", ar > 0.75 && ar < 1.33, "实测 " + rw + "x" + rh + " 比值 " + ar.ToString("0.00"));
         }
       }
       using (Bitmap tall = new Bitmap(100, 400)) {
