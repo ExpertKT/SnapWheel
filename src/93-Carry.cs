@@ -187,9 +187,8 @@ namespace SnapWheel
                 int steps = 14;
                 for (int i = 1; i <= steps; i++)
                 {
-                    int x = from.X + (to.X - from.X) * i / steps;
-                    int y = from.Y + (to.Y - from.Y) * i / steps;
-                    Native.SetCursorPos(x, y);
+                    Point p = StepPoint(from, to, i, steps);
+                    Native.SetCursorPos(p.X, p.Y);
                     Thread.Sleep(14);
                 }
                 Thread.Sleep(80);
@@ -263,7 +262,22 @@ namespace SnapWheel
             if (keyData == Keys.Enter || keyData == Keys.Space) { DoDrop(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
         }
+        /// <summary>
+        /// 拖放过程的第 i 步落在哪：在起点和终点之间按比例插值。
+        /// 抽成独立方法有两个原因：① 语义清楚（这正是"分步移动"的核心）；
+        /// ② **可测** —— 分步是否符合预期是能在离线环境验证的，不必真去动鼠标。
+        /// </summary>
+        public static Point StepPoint(Point from, Point to, int i, int steps)
+        {
+            if (steps < 1) steps = 1;
+            if (i < 0) i = 0;
+            if (i > steps) i = steps;
+            return new Point(from.X + (to.X - from.X) * i / steps,
+                             from.Y + (to.Y - from.Y) * i / steps);
+        }
+
     }
+
     /// <summary>
     /// 传递模式的操作提示条：贴在屏幕底部居中，只说明按什么键，不接受任何操作。
     /// 单独一个小窗而不是画在假光标窗口里 —— 假光标窗口只有光标那么大，
@@ -330,6 +344,6 @@ namespace SnapWheel
                     Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
             }
             catch { }
-        }
     }
+}
 }
