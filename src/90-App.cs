@@ -352,8 +352,15 @@ namespace SnapWheel
                 : new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);   // 拿不到就退回中心
 
             CarryForm cf = new CarryForm(thumb, origin);
+            // 传递期间不能让轮盘自动收起：用户要自己切屏过去，常常超过那 8 秒；
+            // 轮盘一藏，"按下"的起点就变成空桌面，目标程序什么都不会发生。
+            WheelForm.SuppressAutoHide++;
             try { cf.ShowDialog(_wheel); }
-            finally { try { thumb.Dispose(); } catch { } }
+            finally
+            {
+                WheelForm.SuppressAutoHide = Math.Max(0, WheelForm.SuppressAutoHide - 1);
+                try { thumb.Dispose(); } catch { }
+            }
         }
 
         // 生成"吸附在假光标上"的小图：按比例填满目标框、居中裁切，不变形
@@ -518,8 +525,15 @@ namespace SnapWheel
                     _carryKey = new HotkeyForm();
                     _carryKey.Hotkey += new EventHandler(delegate(object o, EventArgs e)
                     {
-                        Err.Log("Carry.Hotkey", new Exception("传递热键被按下"));   // 必定落盘：用来区分"注册成功但收不到消息"
+                    // 不要在这里直接调 StartCarry：这段代码是在 HotkeyForm.WndProc 里跑的，
+                    // 而 StartCarry 最后会开一个模态窗口（ShowDialog）。在消息处理中间去开模态窗口，
+                    // 等于套一层嵌套的消息循环，新窗口往往根本出不来 —— 这就是"托盘菜单能进、
+                    // 热键进不去"的原因（菜单走的是普通 Click 事件，不在 WndProc 里）。
+                    // 用 BeginInvoke 把它推迟到当前消息处理完之后再执行，就没有这个问题。
+                    _carryKey.BeginInvoke((MethodInvoker)delegate()
+                    {
                         try { StartCarry(); } catch (Exception ex) { Err.Log("Carry", ex); }
+                    });
                     });
                 }
                 // 依次尝试几个候选热键，用第一个注册成功的。
