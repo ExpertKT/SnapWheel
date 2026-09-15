@@ -178,12 +178,12 @@ namespace SnapWheel
                 Lang.T("先滚轮选好要发的那张，按 ", "Pick the image with the wheel first, then press ")
                 + AppCtx.CarryHotkeyName
                 + Lang.T(" 进入传递模式：屏幕上会出现一个「假光标」，右下角吸附着那张缩略图。"
-                       + "你自己 Alt+Tab 切到微信 / 文档，用 WASD（或方向键）把假光标移过去，按空格放下 —— 它会真的替你完成一次鼠标拖放，"
-                       + "所以任何支持拖放的窗口都适用。Q / E 换一张、Shift 加速、C 只复制不粘贴、Esc 取消。",
+                       + "你自己 Alt+Tab 切到微信 / 文档，用方向键（或 WASD）把假光标移过去，按空格放下 —— 它会真的替你完成一次鼠标拖放，"
+                       + "所以任何支持拖放的窗口都适用。[ ] 换一张、Shift 加速、C 只复制不粘贴、Esc 取消。",
                          " to enter carry mode: a fake cursor appears with that thumbnail attached to it. "
-                       + "Alt+Tab to your target window yourself, steer the cursor with WASD (or arrow keys) and press Space to drop - "
+                       + "Alt+Tab to your target window yourself, steer the cursor with the arrow keys (or WASD) and press Space to drop - "
                        + "it performs a real mouse drag for you, so it works with any window that accepts drops. "
-                       + "Q / E switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
+                       + "[ ] switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
             AddTip(mL, ref y, nw + Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
             AddTip(mL, ref y, Lang.T("反过来：拖回来", "Or the other way: drag it back"), Lang.T("从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。", "Drop an image from the desktop, a web page or a chat window onto the ring to keep it - drag it out again whenever you need it."));
             AddTip(mL, ref y, Lang.T("连拖都不用：复制即收纳", "Do not even drag: copy and it is collected"), Lang.T("在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。", "Copy an image anywhere (a screenshot tool, a web page, WeChat) and it slides into the ring. Turn this off in settings if you do not want it."));

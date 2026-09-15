@@ -189,9 +189,11 @@ namespace SnapWheel
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
 
                     // 换一张图（不想传这张了，不用退出去重来）。
-                    // 用 Q / E 而不是方向键：方向键已经在负责移动假光标了。
-                    if (Rising(ref _prevPrev, Keys.Q)) { RaiseSwitch(-1); return; }
-                    if (Rising(ref _prevNext, Keys.E)) { RaiseSwitch(1); return; }
+                    // 用 [ ] 而不是 Q/E：Q E 是会"打字"的字母键，按下去目标窗口里会留下字母、
+                    // 还可能把输入法叫出来；方括号不产生文字，也就没有这个问题。
+                    // （这也是为什么移动键推荐方向键 —— 同理不产生文字。）
+                    if (Rising(ref _prevPrev, Keys.OemOpenBrackets)) { RaiseSwitch(-1); return; }
+                    if (Rising(ref _prevNext, Keys.OemCloseBrackets)) { RaiseSwitch(1); return; }
                 }
             }
             catch { }
@@ -487,8 +489,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = _text ?? Lang.T("WASD 移动　·　Shift 加速　·　空格 放下　·　Q E 换一张　·　Esc 取消",
-                                       "WASD move  ·  Shift faster  ·  Space drop  ·  Q E switch  ·  Esc cancel");
+            string s = _text ?? Lang.T("方向键 移动　·　Shift 加速　·　空格 放下　·　[ ] 换一张　·　Esc 取消　（WASD 也能用，但会在目标窗口里留下字母）",
+                                       "Arrow keys move  ·  Shift faster  ·  Space drop  ·  [ ] switch  ·  Esc cancel   (WASD also works, but it types letters into the target window)");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -513,8 +515,8 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = _text ?? Lang.T("WASD 移动　·　Shift 加速　·　空格 放下　·　Q E 换一张　·　Esc 取消",
-                                       "WASD move  ·  Shift faster  ·  Space drop  ·  Q E switch  ·  Esc cancel");
+            string s = _text ?? Lang.T("方向键 移动　·　Shift 加速　·　空格 放下　·　[ ] 换一张　·　Esc 取消　（WASD 也能用，但会在目标窗口里留下字母）",
+                                       "Arrow keys move  ·  Shift faster  ·  Space drop  ·  [ ] switch  ·  Esc cancel   (WASD also works, but it types letters into the target window)");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
