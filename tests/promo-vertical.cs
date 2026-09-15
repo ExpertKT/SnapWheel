@@ -91,10 +91,10 @@ namespace SnapWheel
                     Bitmap im = Load(img);
                     if (im != null)
                     {
-                        const int bandH = 560;
+                        const int bandH = 470;   // 原来 560：卡片底会压住最下面那行召唤语
                         float s = Math.Min((float)(W - 160) / im.Width, (float)bandH / im.Height);
                         int dw = (int)(im.Width * s), dh = (int)(im.Height * s);
-                        int dx = (W - dw) / 2, dy = 800 + (bandH - dh) / 2;
+                        int dx = (W - dw) / 2, dy = 790 + (bandH - dh) / 2;
                         using (GraphicsPath card = Gfx.Round(new RectangleF(dx - 20, dy - 20, dw + 40, dh + 40), 24f))
                         {
                             using (LinearGradientBrush cb = new LinearGradientBrush(
