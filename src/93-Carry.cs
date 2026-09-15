@@ -220,6 +220,20 @@ namespace SnapWheel
         }
 
         /// <summary>
+        /// 把光标移到某个点，**并且生成真实的鼠标移动消息**。
+        ///
+        /// 为什么不能只用 SetCursorPos：它只是把光标"瞬移"过去，**不产生鼠标移动消息**。
+        /// 而轮盘的拖出是靠"按下 + 鼠标移动"启动的（OLE 拖放的启动条件），收不到移动消息
+        /// 就永远不会开始拖 —— 用户实测的现象正是"真鼠标指针从起点移到了终点，然后什么都没发生"。
+        /// 补一个 MOUSEEVENTF_MOVE 就是在告诉系统"鼠标真的动了"（位移 0，只为了让消息发出去）。
+        /// </summary>
+        static void MoveTo(int x, int y)
+        {
+            Native.SetCursorPos(x, y);
+            Native.mouse_event(Native.MOUSEEVENTF_MOVE, 0, 0, 0, IntPtr.Zero);
+        }
+
+        /// <summary>
         /// 模拟一次真实的拖放：光标移到起点 → 按下 → 分步移到终点 → 松开。
         /// 分步移动很重要：一步跳过去的话，多数程序不会把它当成拖放。
         /// </summary>
@@ -227,18 +241,18 @@ namespace SnapWheel
         {
             try
             {
-                Native.SetCursorPos(from.X, from.Y);
-                Thread.Sleep(60);
+                MoveTo(from.X, from.Y);
+                Thread.Sleep(120);      // 让光标停稳，有些程序要求按下时鼠标确实静止过
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
 
                 int steps = 22;      // 步数多一些、每步慢一些，更像人手（一步跳过去多数程序不认）
                 for (int i = 1; i <= steps; i++)
                 {
                     Point p = StepPoint(from, to, i, steps);
-                    Native.SetCursorPos(p.X, p.Y);
+                    MoveTo(p.X, p.Y);
                     Thread.Sleep(20);
                 }
-                Thread.Sleep(80);
+                Thread.Sleep(220);      // 到终点后再停一下，给目标程序时间响应"悬停"，然后再松手
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
                 Thread.Sleep(40);
             }
