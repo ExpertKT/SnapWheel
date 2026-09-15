@@ -91,6 +91,8 @@ namespace SnapWheel
         const int BtnH = 38;
 
         int _contentW;              // 已乘 K 的内容宽（= 窗口宽 - 左右边距）
+        int _tipCount;              // 已经加了几条说明（首次安装时只显示前 3 条，见 AddTip）
+        bool _markNew;              // true = 升级后的"这次多了什么"（它要展示全部，不受 3 条限制）
         readonly UiScroll _sc = new UiScroll();
         Label _scrollHint;
 
@@ -128,6 +130,7 @@ namespace SnapWheel
 
         GuideForm(string title, string subtitle, bool markNew)
         {
+            _markNew = markNew;
             Text = AppInfo.Name + " 新手上路";
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
@@ -171,6 +174,16 @@ namespace SnapWheel
             AddTip(mL, ref y, Lang.T("第 1 步：截一张", "Step 1: capture"), Lang.T("按 ", "Press ") + Settings.Load().Hotkey + Lang.T(" 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。", " drag to select; corners resize, the dial rotates, double-click / Enter confirms."));
             AddTip(mL, ref y, nw + Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
             AddTip(mL, ref y, Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
+            AddTip(mL, ref y, nw + Lang.T("不用鼠标也能把图送出去：传递模式", "Send an image without the mouse: carry mode"),
+                Lang.T("先滚轮选好要发的那张，按 ", "Pick the image with the wheel first, then press ")
+                + AppCtx.CarryHotkeyName
+                + Lang.T(" 进入传递模式：屏幕上会出现一个「假光标」，右下角吸附着那张缩略图。"
+                       + "你自己 Alt+Tab 切到微信 / 文档，用 WASD（或方向键）把假光标移过去，按空格放下 —— 它会真的替你完成一次鼠标拖放，"
+                       + "所以任何支持拖放的窗口都适用。Q / E 换一张、Shift 加速、C 只复制不粘贴、Esc 取消。",
+                         " to enter carry mode: a fake cursor appears with that thumbnail attached to it. "
+                       + "Alt+Tab to your target window yourself, steer the cursor with WASD (or arrow keys) and press Space to drop - "
+                       + "it performs a real mouse drag for you, so it works with any window that accepts drops. "
+                       + "Q / E switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
             AddTip(mL, ref y, nw + Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
             AddTip(mL, ref y, Lang.T("反过来：拖回来", "Or the other way: drag it back"), Lang.T("从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。", "Drop an image from the desktop, a web page or a chat window onto the ring to keep it - drag it out again whenever you need it."));
             AddTip(mL, ref y, Lang.T("连拖都不用：复制即收纳", "Do not even drag: copy and it is collected"), Lang.T("在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。", "Copy an image anywhere (a screenshot tool, a web page, WeChat) and it slides into the ring. Turn this off in settings if you do not want it."));
@@ -178,6 +191,33 @@ namespace SnapWheel
             AddTip(mL, ref y, Lang.T("万能键（可以改成你要的）", "Universal key (rebindable)"), Lang.T("长按环内侧那个圆盘会弹出四个方向，往哪个方向松手就执行哪个动作。默认：上=新建轮盘，右=下一个，下=删除，左=上一个 —— 四个动作都能在设置里换。", "Long-press the dial inside the ring and four directions appear; release towards one to run that action. Defaults: up = new wheel, right = next, down = delete, left = previous - all rebindable in settings."));
             AddTip(mL, ref y, Lang.T("收起态（默认关）", "Collapsed mode (off by default)"), Lang.T("打开后不用时会缩成屏幕边上的小把手，点一下用彩虹动画拉出来。想让桌面更干净再开。", "When idle it shrinks into a small pull-tab at the screen edge; click it and the ring slides back out. Turn on for a tidier desktop."));
             AddTip(mL, ref y, Lang.T("托盘", "Tray"), Lang.T("托盘右键还有：导入图片、新手引导、重播开启动画、设置、退出。", "The tray menu also has: import images, getting started, replay startup animation, settings, exit."));
+            AddTip(mL, ref y, nw + Lang.T("取字：把图里的文字抠出来", "OCR: pull the text out of an image"),
+                Lang.T("在截图浮层上选「取字」工具（或按 O），框住要识别的文字 —— 框得越紧越准。识别完可以直接一键翻译成中文或英文。"
+                       + "不走截图也行：托盘右键 →「取字：识别剪贴板里的图」。用的是 Windows 自带的识别引擎，不需要联网。",
+                         "In the capture overlay pick the OCR tool (or press O) and box the text - the tighter the box, the better. "
+                       + "The result window can translate to Chinese or English in one click. Without capturing: tray > OCR the clipboard image. "
+                       + "It uses the Windows built-in recognition engine, no network needed."));
+            AddTip(mL, ref y, Lang.T("滚动长截图：一整页长图", "Scrolling capture: one long image"),
+                Lang.T("截图浮层上点「长图」，然后自己慢慢往下滚页面，它会自动把各屏拼成一张完整的长图，"
+                       + "并且会自动避开底部那一条会变动的区域（比如任务栏、进度条）。",
+                         "In the capture overlay click the long-shot button, then scroll the page yourself; it stitches the screens "
+                       + "into one image and automatically avoids the changing strip at the bottom (taskbar, progress bars)."));
+            AddTip(mL, ref y, Lang.T("另存为 / 直接复制", "Save as / copy"),
+                Lang.T("缩略图上按 Ctrl+S 可以「另存为」（选路径和格式）；直接点一下缩略图则是把这张图复制到剪贴板。",
+                         "Ctrl+S on a thumbnail opens Save-as (path and format); a plain click copies that image to the clipboard."));
+            AddTip(mL, ref y, nw + Lang.T("符号标注：箭头 / 马赛克之外还有符号", "Symbols besides arrow / mosaic"),
+                Lang.T("标注工具条里还有一组「符号」，可以从三排符号里挑一个盖在图上（标记、箭头、编号），"
+                       + "符号的颜色和大小都能调，拖动可以挪位置。",
+                         "The annotate toolbar also has a Symbols panel: pick from three rows (markers, arrows, numbers) and stamp it "
+                       + "on the image. Colour and size are adjustable, and you can drag it around."));
+            AddTip(mL, ref y, nw + Lang.T("界面语言：中文 / English", "Interface language: Chinese / English"),
+                Lang.T("设置 → 第一页 →「界面语言」可以选跟随系统 / 中文 / English。选完重启一次生效。",
+                         "Settings > page 1 > Interface language: follow system / Chinese / English. Restart once to apply."));
+            AddTip(mL, ref y, nw + Lang.T("自动更新（免费、不用装任何东西）", "Auto update (free, nothing to install)"),
+                Lang.T("托盘右键 →「检查更新」会去读项目的发行版页面，有新版本会问你要不要下载并安装 —— 程序自己重启一次就换好了，"
+                       + "轮盘和设置都不会丢。设置里可以关掉「启动时检查」。",
+                         "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
+                       + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
 
             int tipW = _contentW - Ui.S(3);
             Label tip = new Label();
@@ -243,8 +283,16 @@ namespace SnapWheel
         static void W(Label l, int maxW) { Ui.Wrap(l, maxW); }
 
         // 一条说明：粗体小标题 + 一段正文，两行都自己折行、自己报高度
+        //
+        // 关于 _tipCount 这个上限：**全新安装时只显示前 3 条**（就是"三步上手"），
+        // 后面那一大串留到「设置 → 新手引导」里看。
+        // 原因很直接：第一次打开的人不会读一页长文（用户原话"开头一长串没人看的"），
+        // 而三步能让他立刻用起来。升级提示（markNew=true）不受这个限制。
         void AddTip(int x, ref int y, string title, string body)
         {
+            _tipCount++;
+            if (!_markNew && _tipCount > 3) return;      // 首次安装：只给头三步
+
             int mkW = _contentW - Ui.S(3);
             Label t = new Label();
             t.Text = "• " + title;
