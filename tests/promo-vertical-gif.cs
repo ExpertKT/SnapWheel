@@ -16,7 +16,7 @@ namespace SnapWheel
     static class PromoVGif
     {
         const int W = 1080, H = 1440;
-        const int WheelTop = 640;              // 轮盘区域贴在这个 y 上（下面留给它 658px）
+        const int WheelTop = 500;              // 上移：下面还要放一行小字，帧也会被裁紧
         const string FONT = "Microsoft YaHei UI";
         static readonly Color Accent = Color.FromArgb(0, 148, 240);
         static readonly Color Sub = Color.FromArgb(170, 182, 202);
@@ -114,7 +114,7 @@ namespace SnapWheel
                 using (Font fs = new Font(FONT, 36))
                     TextRenderer.DrawText(g, "不用保存、不用切窗口、不用翻文件夹", fs, new Point(72, 512), Sub, TextFormatFlags.NoPadding);
                 using (Font fd = new Font(FONT, 28))
-                    TextRenderer.DrawText(g, "免费 · 开源 · 单文件，双击就能用", fd, new Point(72, H - 86), Color.FromArgb(200, 150, 165, 190), TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, "免费 · 开源 · 单文件，双击就能用", fd, new Point(72, 1210), Color.FromArgb(200, 150, 165, 190), TextFormatFlags.NoPadding);
             }
             return b;
         }
@@ -149,12 +149,14 @@ namespace SnapWheel
             {
                 // 缩到 720x960 再入帧：1080x1440 x 43 帧要 18MB，微信/小红书发不出去。
                 // 手机上看 720 宽足够清晰，体积能压到三分之一。
+                // 裁紧再缩：原来整幅 1080x1440 里轮盘只占 61% 宽，主次反了。
+                Rectangle crop = new Rectangle(135, 190, 810, 1080);   // 轮盘占 81% 宽
                 Bitmap small = new Bitmap(720, 960, PixelFormat.Format32bppPArgb);
                 using (Graphics sg = Graphics.FromImage(small))
                 {
                     sg.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     sg.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                    sg.DrawImage(b, new Rectangle(0, 0, 720, 960));
+                    sg.DrawImage(b, new Rectangle(0, 0, 720, 960), crop, GraphicsUnit.Pixel);
                 }
                 b.Dispose();
                 frames.Add(small); delays.Add(ms);
@@ -202,7 +204,7 @@ namespace SnapWheel
                 {
                     wheel(g, 1f);
                     float cx = Lerp(from.X, c1.X, t), cy = Lerp(from.Y, c1.Y, t);
-                    float sw = Lerp(460, 150, t), sh = Lerp(274, 90, t);
+                    float sw = Lerp(300, 150, t), sh = Lerp(178, 90, t);   // 原来起始 460，太大抢戏
                     ColorMatrix cm = new ColorMatrix(); cm.Matrix33 = Math.Max(0f, 1f - t * 0.45f);
                     ImageAttributes ia = new ImageAttributes(); ia.SetColorMatrix(cm);
                     Rectangle d = new Rectangle((int)(cx - sw / 2), (int)(cy - sh / 2), (int)sw, (int)sh);
@@ -223,7 +225,7 @@ namespace SnapWheel
                 {
                     wheel(g, 1f);
                     float cx = Lerp(c1.X, W / 2f + 250, t), cy = Lerp(c1.Y, WheelTop + 300, t);
-                    float sw = Lerp(150, 470, t), sh = Lerp(90, 280, t);
+                    float sw = Lerp(150, 330, t), sh = Lerp(90, 196, t);
                     Rectangle d = new Rectangle((int)(cx - sw / 2), (int)(cy - sh / 2), (int)sw, (int)sh);
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb((int)(90 * (1 - t * 0.5f)), 0, 0, 0)))
                         g.FillRectangle(sb, d.X + 8, d.Y + 10, d.Width, d.Height);
