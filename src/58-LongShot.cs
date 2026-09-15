@@ -96,9 +96,9 @@ namespace SnapWheel
             error = null;
             _why = null;
             _shotCount = 0;
-            if (first == null) { error = "没有拿到第一屏"; return false; }
+            if (first == null) { error = Lang.T("没有拿到第一屏", "Did not get the first screen"); return false; }
             _w = first.Width; _h = first.Height;
-            if (_h < BandRows * 2 + MinNewRows) { error = "这一屏太矮，滚动长图用不了"; return false; }
+            if (_h < BandRows * 2 + MinNewRows) { error = Lang.T("这一屏太矮，滚动长图用不了", "This area is too short for a scrolling capture"); return false; }
 
             _canvasH = _h;
             if (_canvasH > MaxCanvasH) _canvasH = MaxCanvasH;
@@ -119,9 +119,9 @@ namespace SnapWheel
         {
             addedRows = 0;
             _why = null;
-            if (_canvas == null || frame == null) { _why = "还没开始长图"; return false; }
-            if (frame.Width != _w || frame.Height != _h) { _why = "画面尺寸变了（换了窗口/显示器？），这张长图到此为止"; return false; }
-            if (Full) { _why = "长图已经到最大高度了"; return false; }
+            if (_canvas == null || frame == null) { _why = Lang.T("还没开始长图", "Not started yet"); return false; }
+            if (frame.Width != _w || frame.Height != _h) { _why = Lang.T("画面尺寸变了（换了窗口/显示器？），这张长图到此为止", "The screen size changed (another window or monitor?), so this capture stops here"); return false; }
+            if (Full) { _why = Lang.T("长图已经到最大高度了", "The image reached its maximum height"); return false; }
 
             byte[] cur = Sample(frame);
             Match m = Find(_prev, cur, _w, _h, _sw, _sh);
@@ -129,7 +129,7 @@ namespace SnapWheel
             try
             {
                 Err.Log("LongShot", new Exception("帧 " + _shotCount + " " + _w + "x" + _h + " -> "
-                    + (m.Ok ? ("接上 " + m.NewRows + " 行") : "拒绝")
+                    + (m.Ok ? ("接上 " + m.NewRows + Lang.T(" 行", " rows")) : "拒绝")
                     + " best=" + m.Score.ToString("0.00") + " second=" + m.Second.ToString("0.00")
                     + " bad=" + m.BadRatio.ToString("0.000") + " why=" + (m.Why == null ? "-" : m.Why)));
             }
@@ -144,7 +144,7 @@ namespace SnapWheel
             addedRows = m.NewRows;
             int room = MaxCanvasH - _canvasH;
             if (addedRows > room) addedRows = room;
-            if (addedRows <= 0) { _why = "长图已经到最大高度了"; return false; }
+            if (addedRows <= 0) { _why = Lang.T("长图已经到最大高度了", "The image reached its maximum height"); return false; }
 
             // 把新屏的**最后 addedRows 行**贴到画布下方：这就是新露出来的内容
             // ⚠️ 取"新露出的内容"必须避开屏幕底部的**静止区**（典型就是任务栏）：它不随页面滚动移动，
@@ -285,7 +285,7 @@ namespace SnapWheel
             m.BadRatio = bestBad;
             if (bestD == 0)
             {
-                m.Why = "找不到重叠区（这一屏和上一屏对不上），再滚一下试试";
+                m.Why = Lang.T("找不到重叠区（这一屏和上一屏对不上），再滚一下试试", "No overlap found (this screen does not match the previous one) - try scrolling again");
                 return m;
             }
             // ① 主判据：差异像素比例。周期图案（表格线/列表项）对齐时线条能对上，
@@ -293,12 +293,12 @@ namespace SnapWheel
             //    实测（用例 2：一次滚过头）平均差只有 4 点几，单看平均差会放它过去。
             if (bestBad > MaxBadRatio)
             {
-                m.Why = "这一屏对不上（滚过头了，或者画面里在动），慢一点再滚一下";
+                m.Why = Lang.T("这一屏对不上（滚过头了，或者画面里在动），慢一点再滚一下", "No match (scrolled too far, or something is moving) - scroll more slowly");
                 return m;
             }
             if (best > MatchTol)
             {
-                m.Why = "这一屏没对上（画面变化太大或滚过头了），再滚一下试试";
+                m.Why = Lang.T("这一屏没对上（画面变化太大或滚过头了），再滚一下试试", "No match (the content changed too much, or scrolled too far) - try again");
                 return m;
             }
             // 置信度：次优不能和最优一样好 —— 否则说明"怎么对都对得上"（多半是纯色/重复内容），宁可让用户再滚

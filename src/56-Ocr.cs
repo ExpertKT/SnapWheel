@@ -41,7 +41,7 @@ namespace SnapWheel
             try
             {
                 Type t = WinRT("Windows.Media.Ocr.OcrEngine");
-                if (t == null) { _why = "这台系统没有 OCR 组件（需要 Windows 10 及以上）"; return; }
+                if (t == null) { _why = Lang.T("这台系统没有 OCR 组件（需要 Windows 10 及以上）", "This system has no OCR component (Windows 10 or newer required)"); return; }
 
                 // 1) 按系统/用户语言直接来一个
                 MethodInfo fromUser = t.GetMethod("TryCreateFromUserProfileLanguages", BindingFlags.Public | BindingFlags.Static);
@@ -55,7 +55,7 @@ namespace SnapWheel
                 object list = null;
                 PropertyInfo prop = t.GetProperty("AvailableRecognizerLanguages", BindingFlags.Public | BindingFlags.Static);
                 if (prop != null) { try { list = prop.GetValue(null, null); } catch { } }
-                if (list == null) { _why = "系统没有安装任何 OCR 识别语言（设置 → 时间和语言 → 语言 → 该语言的「可选功能」里勾选「光学字符识别」）"; return; }
+                if (list == null) { _why = Lang.T("系统没有安装任何 OCR 识别语言（设置 → 时间和语言 → 语言 → 该语言的「可选功能」里勾选「光学字符识别」）", "No OCR language is installed (Settings → Time & Language → Language → optional features → add \"Optical character recognition\")"); return; }
 
                 List<object> langs = new List<object>();
                 System.Collections.IEnumerable en = list as System.Collections.IEnumerable;
@@ -76,14 +76,14 @@ namespace SnapWheel
                 for (int i = 0; i < langs.Count; i++)
                     if (LangOf(langs[i]).StartsWith("zh")) { pick = langs[i]; break; }
                 if (pick == null && langs.Count > 0) pick = langs[0];
-                if (pick == null) { _why = "系统没有安装任何 OCR 识别语言"; return; }
+                if (pick == null) { _why = Lang.T("系统没有安装任何 OCR 识别语言", "No OCR language is installed"); return; }
                 if (fromLang != null) { try { _engine = fromLang.Invoke(null, new object[] { pick }); } catch { } }
                 if (_engine != null) _lang = LangOf(_engine);
-                else _why = "OCR 引擎创建失败（语言包可能不完整）";
+                else _why = Lang.T("OCR 引擎创建失败（语言包可能不完整）", "Could not create the OCR engine (the language pack may be incomplete)");
             }
             catch (Exception ex)
             {
-                _why = "OCR 不可用：" + ex.Message;
+                _why = Lang.T("OCR 不可用：", "OCR unavailable: ") + ex.Message;
             }
         }
 
@@ -122,7 +122,7 @@ namespace SnapWheel
             }
             if (asTask == null) throw new Exception("找不到 AsTask 桥接方法");
             System.Threading.Tasks.Task task = (System.Threading.Tasks.Task)asTask.MakeGenericMethod(resType).Invoke(null, new object[] { op });
-            if (!task.Wait(timeoutMs)) throw new Exception("识别超时");
+            if (!task.Wait(timeoutMs)) throw new Exception(Lang.T("识别超时", "Recognition timed out"));
             return task.GetType().GetProperty("Result").GetValue(task, null);
         }
 
@@ -193,7 +193,7 @@ namespace SnapWheel
                 bool stretched;
                 byte[] pre = Stretch(bgra, w, h, out stretched);
                 object sw = SoftwareBitmapFromPixels(pre, w, h);
-                if (sw == null) { error = "这台系统不支持直接把像素交给 OCR"; return null; }
+                if (sw == null) { error = Lang.T("这台系统不支持直接把像素交给 OCR", "This system cannot hand pixels directly to OCR"); return null; }
                 float wordH;
                 string txt = RecognizeSoftwareBitmap(sw, out error, out wordH);
                 if (txt == null) return null;
@@ -352,7 +352,7 @@ namespace SnapWheel
         public static string Recognize(Bitmap bmp, out string error)
         {
             error = null;
-            if (bmp == null) { error = "没有图"; return null; }
+            if (bmp == null) { error = Lang.T("没有图", "No image"); return null; }
             Probe();
             if (_engine == null) { error = _why; return null; }
             try

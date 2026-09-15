@@ -29,7 +29,7 @@ namespace SnapWheel
         readonly LongShot _ls = new LongShot();
         readonly Timer _t;
         readonly Bitmap _scratch;             // 复用的抓屏位图（选区尺寸）
-        string _msg = "滚到哪儿它接哪儿";
+        string _msg = Lang.T("滚到哪儿它接哪儿", "It stitches as it scrolls");
         bool _err = false;
         bool _busy = false;
         int _shots = 0;
@@ -72,7 +72,7 @@ namespace SnapWheel
             string err = null;
             Bitmap first = Grab();
             bool ok = (first != null) && _ls.Start(first, out err);
-            if (!ok) { _msg = err ?? "没能开始长截图"; _err = true; }
+            if (!ok) { _msg = err ?? Lang.T("没能开始长截图", "Could not start the scrolling capture"); _err = true; }
 
             // Esc/Enter 用应用级消息过滤来收：提示条是无边框置顶窗口，焦点很容易被下面的
             // 目标程序抢走（用户反馈 Esc 按了没用，只能用鼠标点提示条退出）。
@@ -123,15 +123,15 @@ namespace SnapWheel
             _busy = true;
             try
             {
-                if (_ls.Full) { _msg = "已经到最大高度了，按 Enter 出图"; Invalidate(); return; }
+                if (_ls.Full) { _msg = Lang.T("已经到最大高度了，按 Enter 出图", "Maximum height reached - press Enter to finish"); Invalidate(); return; }
 
                 Bitmap frame = Grab();
-                if (frame == null) { _msg = "抓屏失败（可能被安全软件拦了）"; _err = true; Invalidate(); return; }
+                if (frame == null) { _msg = Lang.T("抓屏失败（可能被安全软件拦了）", "Screen capture failed (possibly blocked by security software)"); _err = true; Invalidate(); return; }
 
                 byte[] g2 = LongShot.Sample(frame);
                 _tick++;
 
-                if (_tick == 1) { _prevGray = g2; ScrollNext(); _msg = "开始自动滚动…"; Invalidate(); return; }
+                if (_tick == 1) { _prevGray = g2; ScrollNext(); _msg = Lang.T("开始自动滚动…", "Auto-scrolling…"); Invalidate(); return; }
 
                 double diff = Diff(_prevGray, g2);
                 _prevGray = g2;
@@ -140,8 +140,8 @@ namespace SnapWheel
                 {
                     // 画面几乎没动：到底了，或者目标窗口不吃合成的滚轮消息
                     _stalls++;
-                    if (_stalls >= 2) { _msg = "到底了，正在出图"; Invalidate(); Finish(); return; }
-                    _msg = "画面没动（" + _stalls + "/2），再试一次";
+                    if (_stalls >= 2) { _msg = Lang.T("到底了，正在出图", "Reached the end, generating the image"); Invalidate(); Finish(); return; }
+                    _msg = Lang.T("画面没动（", "No movement (") + _stalls + Lang.T("/2），再试一次", "/2), trying again");
                     Invalidate();
                     ScrollNext();
                     return;
@@ -149,8 +149,8 @@ namespace SnapWheel
 
                 _stalls = 0;
                 int added = 0;
-                if (_ls.Push(frame, out added)) { _shots++; _err = false; _msg = "已接 " + added + " 行"; }
-                else { _err = true; _msg = (_ls.LastWhy == null ? "这一屏没对上" : _ls.LastWhy); }
+                if (_ls.Push(frame, out added)) { _shots++; _err = false; _msg = Lang.T("已接 ", "Stitched ") + added + Lang.T(" 行", " rows"); }
+                else { _err = true; _msg = (_ls.LastWhy == null ? Lang.T("这一屏没对上", "This screen does not line up") : _ls.LastWhy); }
                 Invalidate();
                 ScrollNext();
             }
@@ -247,17 +247,17 @@ namespace SnapWheel
 
             int x = icon.Right + Ui.S(12);
             int top = Ui.S(10);
-            TextRenderer.DrawText(g, "滚动长截图：自动滚动中，不用你操作", Font, new Point(x, top),
+            TextRenderer.DrawText(g, Lang.T("滚动长截图：自动滚动中，不用你操作", "Scrolling capture: auto-scrolling, no action needed"), Font, new Point(x, top),
                 Color.FromArgb(236, 238, 244), TextFormatFlags.NoPadding);
             using (Font fs = new Font("Microsoft YaHei UI", 8.5f))
-                TextRenderer.DrawText(g, "到底会自动停 · Enter 提前出图 · Esc 取消", fs, new Point(x, top + Ui.S(20)),
+                TextRenderer.DrawText(g, Lang.T("到底会自动停 · Enter 提前出图 · Esc 取消", "Stops at the end · Enter finishes early · Esc cancels"), fs, new Point(x, top + Ui.S(20)),
                     Color.FromArgb(150, 154, 164), TextFormatFlags.NoPadding);
 
             string line;
             Color lc = Color.FromArgb(150, 154, 164);
             if (_err) { line = _msg; lc = Color.FromArgb(240, 190, 120); }
-            else if (_shots == 0) line = "还没接上：在那块区域里往下滚滚轮";
-            else line = "已接 " + _shots + " 段 · 长图 " + _ls.Height + " px 高";
+            else if (_shots == 0) line = Lang.T("还没接上：在那块区域里往下滚滚轮", "Not stitched yet: scroll down inside that area");
+            else line = Lang.T("已接 ", "Stitched ") + _shots + Lang.T(" 段 · 长图 ", " sections · image ") + _ls.Height + Lang.T(" px 高", " px tall");
 
             int rw = Math.Max(Ui.S(200), ClientSize.Width - x - pad);   // 自适应：原来写死 300，长句子会被右边缘裁掉
             Rectangle rr = new Rectangle(ClientSize.Width - pad - rw, top, rw, Ui.S(36));

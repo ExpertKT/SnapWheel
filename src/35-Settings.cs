@@ -38,7 +38,7 @@ namespace SnapWheel
         public string Corner = "BL";    // BL / BR / TL / TR - which screen corner the ring docks to
         public bool AutoStart = false;  // launch at logon (HKCU Run)
         public string DeleteMode = "single";  // 0.6.0 起默认单击删除（用户习惯），右键删除请选 double
-        public string SwitchMode = "radial";  // "radial" (万能键圆盘) or "swipe" (长按滑动切换)
+        public string SwitchMode = "radial";  // "radialLang.T(" (万能键圆盘) or ", " (universal key dial) or ")swipe" (长按滑动切换)
         public int PeekPercent = 240;         // 长按放大：百分比（100 = 原大小）
         public bool IntroSeen = false;        // 是否看过新手引导
         public bool IntroAnim = true;         // 启动时播开启动画
@@ -55,7 +55,7 @@ namespace SnapWheel
         public bool ShowCountLabel = true;    // 显示图片计数药丸
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
-        public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得"复制一下就被抓走"）
+        public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy it and it is collected")）
         public bool CopyOnCapture = true;     // 截图确认时同时把图放进剪贴板（要立刻粘贴就直接 Ctrl+V）
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
         public bool ShowBalloon = false;      // 0.6.0 起默认关：不弹托盘气泡
@@ -86,7 +86,7 @@ namespace SnapWheel
         public bool DragOutAsFile = true;
         public bool CheckUpdate = true;       // 启动时检查 GitHub 有没有新版本
         public bool NubHintDone = false;      // 把手用途提示是否已经自动展示过
-        public bool UndoHintDone = false;     // 删除后"还能撤回"的首次提示是否已展示过
+        public bool UndoHintDone = false;     // 删除后Lang.T("还能撤回", "You can undo it")的首次提示是否已展示过
         public bool AnnotHintDone = false;    // 截图标注（工具条）的首次提示是否已展示过
         public bool PinHintDone = false;      // 贴图（中键）的首次提示是否已展示过
         public string GuideSeenVersion = "";  // 上一次自动弹出新手引导/更新说明时的版本号
@@ -221,17 +221,17 @@ namespace SnapWheel
         {
             switch (id)
             {
-                case "new": return "新建轮盘";
-                case "next": return "下一个轮盘";
-                case "prev": return "上一个轮盘";
-                case "delete": return "删除当前轮盘";
-                case "shot": return "截图";
-                case "collapse": return "收起轮盘";
-                case "folder": return "打开保存文件夹";
-                case "settings": return "打开设置";
-                case "paste": return "从剪贴板收一张";
-                case "clear": return "清空这一盘（保留轮盘）";
-                default: return "不设置";
+                case "new": return Lang.T("新建轮盘", "New wheel");
+                case "next": return Lang.T("下一个轮盘", "Next wheel");
+                case "prev": return Lang.T("上一个轮盘", "Previous wheel");
+                case "delete": return Lang.T("删除当前轮盘", "Delete current wheel");
+                case "shot": return Lang.T("截图", "Screenshot");
+                case "collapse": return Lang.T("收起轮盘", "Collapse ring");
+                case "folder": return Lang.T("打开保存文件夹", "Open save folder");
+                case "settings": return Lang.T("打开设置", "Open settings");
+                case "paste": return Lang.T("从剪贴板收一张", "Collect one from the clipboard");
+                case "clear": return Lang.T("清空这一盘（保留轮盘）", "Clear this wheel (keep the wheel)");
+                default: return Lang.T("不设置", "None");
             }
         }
 
