@@ -463,7 +463,7 @@ namespace SnapWheel
                 using (Font f0 = new Font("Microsoft YaHei UI", 10f))
                 using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f), 255, 255, 255)))
                 {
-                    string hint = "截图后会出现在这里";
+                    string hint = Lang.T("截图后会出现在这里", "Screenshots will appear here");
                     SizeF hs = g.MeasureString(hint, f0);
                     PointF hp = HintPos(hs);
                     g.DrawString(hint, f0, b0, hp.X, hp.Y);
@@ -630,7 +630,7 @@ namespace SnapWheel
         }
 
 
-        // ---- 贴边小把手：收起态画"拉出"、展开态画"收起" ----
+        // ---- 贴边小把手：收起态画"拉出"、展开态画Lang.T("收起", "Collapse") ----
         // 两个把手按环的进度交叉淡入淡出（并各自从屏幕边滑出来），不会"啪"地换一个
         void DrawNubs(Graphics g, int a)
         {
@@ -728,7 +728,7 @@ namespace SnapWheel
             float hintA = vis > 0.98f ? _nubHintT : 0f;
             if (hintA > 0.02f)
             {
-                string ht = willExpand ? "点我展开" : "点我收起";
+                string ht = willExpand ? Lang.T("点我展开", "Click to expand") : Lang.T("点我收起", "Click to collapse");
                 using (Font hf = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold))
                 {
                     SizeF ts = g.MeasureString(ht, hf);
@@ -959,16 +959,16 @@ namespace SnapWheel
                 {
                     using (SolidBrush tb = new SolidBrush(Color.FromArgb((int)(245 * a / 255f), 255, 255, 255)))
                     {
-                        SizeF s1 = g.MeasureString("取消", fh);
-                        g.DrawString("取消", fh, tb, kcx - krr / 2f - s1.Width / 2f, kcy - s1.Height / 2f);
-                        SizeF s2b = g.MeasureString("确认", fh);
-                        g.DrawString("确认", fh, tb, kcx + krr / 2f - s2b.Width / 2f, kcy - s2b.Height / 2f);
+                        SizeF s1 = g.MeasureString(Lang.T("取消", "Cancel"), fh);
+                        g.DrawString(Lang.T("取消", "Cancel"), fh, tb, kcx - krr / 2f - s1.Width / 2f, kcy - s1.Height / 2f);
+                        SizeF s2b = g.MeasureString(Lang.T("确认", "Confirm"), fh);
+                        g.DrawString(Lang.T("确认", "Confirm"), fh, tb, kcx + krr / 2f - s2b.Width / 2f, kcy - s2b.Height / 2f);
                     }
                 }
                 using (Font f3 = new Font("Microsoft YaHei UI", 9f))
                 using (SolidBrush b3 = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 255, 210, 210)))
                 {
-                    string t3 = "删除「" + FitName(_mgr.ActiveWheel.Name, 12) + "」？点左半取消 / 右半确认";
+                    string t3 = Lang.T("删除「", "Delete \"") + FitName(_mgr.ActiveWheel.Name, 12) + Lang.T("」？点左半取消 / 右半确认", "\"? Left half cancels / right half confirms");
                     SizeF s3 = g.MeasureString(t3, f3);
                     g.DrawString(t3, f3, b3, kcx - s3.Width / 2f, kr.Y - s3.Height - 4);
                 }
@@ -1013,12 +1013,12 @@ namespace SnapWheel
                         g.FillEllipse(db2, pill2.X + 11f, dy2 - dot / 2f, dot, dot);
                     using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
                         g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
-                    // 悬停时在右边补一句"点一下改名"
+                    // 悬停时在右边补一句Lang.T("点一下改名", "Click to rename")
                     if (_nameHover && an > 80)
                     {
                         using (Font ft = new Font("Microsoft YaHei UI", 9f))
                         using (SolidBrush bt = new SolidBrush(Color.FromArgb((int)(220 * an / 255f), 235, 238, 245)))
-                            g.DrawString("点一下改名", ft, bt, pill2.Right + 8f, dy2 - ft.Height / 2f + 1);
+                            g.DrawString(Lang.T("点一下改名", "Click to rename"), ft, bt, pill2.Right + 8f, dy2 - ft.Height / 2f + 1);
                     }
                 }
                 g.TranslateTransform(-sn.X, -sn.Y);
@@ -1030,7 +1030,7 @@ namespace SnapWheel
                 PointF kc = KeyCenter();
                 float R = 78f * (0.55f + 0.45f * _menuT);
                 int alpha = (int)(_menuT * 235);
-                string[] labels = { "新建", "下一个", "删除", "上一个" };
+                string[] labels = { Lang.T("新建", "New"), Lang.T("下一个", "Next"), Lang.T("删除", "Delete"), Lang.T("上一个", "Previous") };
                 for (int s2 = 0; s2 < 4; s2++)
                 {
                     bool sel = (_sector == s2);
@@ -1088,7 +1088,7 @@ namespace SnapWheel
             // 外部文件拖到轮盘上方：提示松手加入
             if (_dropActive && _dropExternal && a > 90)
             {
-                string tip = "松手把 " + _dropCount + " 张图片加入「" + FitName(_mgr.ActiveWheel.Name, 12) + "」";
+                string tip = Lang.T("松手把 ", "Release to add ") + _dropCount + Lang.T(" 张图片加入「", " item(s) to \"") + FitName(_mgr.ActiveWheel.Name, 12) + "」";
                 using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
                 {
                     SizeF sz = g.MeasureString(tip, f);
@@ -1114,7 +1114,7 @@ namespace SnapWheel
                 int ab8 = (int)(a * IntroP(0.30f));
                 if (ab8 < 8) ab8 = 8;
                 int ta = (int)(Math.Min(1f, (_closeHoldP - 0.10f) / 0.25f) * 240 * ab8 / 255f);
-                string tip2 = _closeLong ? "松手退出 · 移开取消" : "按住不放 · 移开可取消";
+                string tip2 = _closeLong ? Lang.T("松手退出 · 移开取消", "Release to exit · move away to cancel") : Lang.T("按住不放 · 移开可取消", "Hold · move away to cancel");
                 using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
                 using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
                 {
@@ -1137,7 +1137,7 @@ namespace SnapWheel
 
             DrawToast(g, a);
 
-            DrawNubs(g, a);      // 展开状态下也画一个"收起"把手（贴着另一条屏幕边）
+            DrawNubs(g, a);      // 展开状态下也画一个Lang.T("收起", "Collapse")把手（贴着另一条屏幕边）
         }
         // 计数胶囊「当前 / 总数」：跟着滚动位置变，所以每帧单独画（不进缓存层）
         void DrawCountPill(Graphics g, int a)

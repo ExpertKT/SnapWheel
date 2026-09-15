@@ -333,13 +333,13 @@ namespace SnapWheel
                 }
             }
             catch { bmp = null; }
-            if (bmp == null) { ShowToast("这张图读不出来"); Render(); return; }
+            if (bmp == null) { ShowToast(Lang.T("这张图读不出来", "This image could not be read")); Render(); return; }
             bmp = ImageIO.Fit(bmp, ImageIO.MaxDim);
             StoreItem it = _store.AddCore(bmp, ImageIO.ExtFor(bmp));
             _enterT0[it] = DateTime.Now;
             FollowNewest();                       // 视口跟到最新那张（设置里可关）
             _hover = -1; _enlarged = -1;
-            ShowToast("已加入 1 张图片");
+            ShowToast(Lang.T("已加入 1 张图片", "Added 1 image"));
             Render();
         }
 
@@ -389,8 +389,8 @@ namespace SnapWheel
                     _enterT0[it] = DateTime.Now;
                     FollowNewest();               // 视口跟到最新那张（设置里可关）
                     _hover = -1; _enlarged = -1;
-                    if (_collapsed && _settings.ShowBalloon) Err.Notify("已从剪贴板收进 1 张图");
-                    else ShowToast("已从剪贴板收进 1 张图");
+                    if (_collapsed && _settings.ShowBalloon) Err.Notify(Lang.T("已从剪贴板收进 1 张图", "Collected 1 image from the clipboard"));
+                    else ShowToast(Lang.T("已从剪贴板收进 1 张图", "Collected 1 image from the clipboard"));
                     if (Visible) Render();
                 }
             }
@@ -417,8 +417,8 @@ namespace SnapWheel
             }
             FollowNewest();                                           // 视口跟到最后一张（设置里可关）
             _hover = -1; _enlarged = -1;
-            if (ok > 0) ShowToast("已加入 " + ok + " 张图片" + (bad > 0 ? "（" + bad + " 张读不了）" : ""));
-            else ShowToast("这些文件读不出图片");
+            if (ok > 0) ShowToast(Lang.T("已加入 ", "Added ") + ok + Lang.T(" 张图片", " image(s)") + (bad > 0 ? "（" + bad + Lang.T(" 张读不了）", " unreadable)") : ""));
+            else ShowToast(Lang.T("这些文件读不出图片", "None of these files could be read as images"));
             Render();
         }
 
@@ -582,7 +582,7 @@ namespace SnapWheel
                 StoreItem it = _store.Items[hh];
                 if (it != null && it.Image != null && PinRequested != null)
                 {
-                    try { PinRequested(it.Image, PointToScreen(e.Location)); ShowToast("已贴到屏幕上（双击它或按 Esc 关掉）"); }
+                    try { PinRequested(it.Image, PointToScreen(e.Location)); ShowToast(Lang.T("已贴到屏幕上（双击它或按 Esc 关掉）", "Pinned on screen (double-click it or press Esc to close)")); }
                     catch (Exception ex) { Err.Log("PinRequested", ex); }
                 }
             }
@@ -611,7 +611,7 @@ namespace SnapWheel
                 try { Capture = false; } catch { }
                 bool wasLong = _closeLong || _closeHoldP >= 0.999f;
                 _closeHold = false; _closeLong = false; _closeHoldP = 0f;
-                if (wasLong) { ShowToast("正在退出 SnapWheel…"); Render(); if (ExitRequested != null) ExitRequested(this, EventArgs.Empty); return; }
+                if (wasLong) { ShowToast(Lang.T("正在退出 SnapWheel…", "Exiting SnapWheel…")); Render(); if (ExitRequested != null) ExitRequested(this, EventArgs.Empty); return; }
                 HideWheel();          // 短按：直接关掉轮盘（不是收起）
                 return;
             }
@@ -657,11 +657,11 @@ namespace SnapWheel
             if (!Elev.Is) return;
             if (_adminTipShown)
             {
-                ShowToast("管理员模式：拖拽被 Windows 拦着（托盘右键 → 管理员模式说明）");
+                ShowToast(Lang.T("管理员模式：拖拽被 Windows 拦着（托盘右键 → 管理员模式说明）", "Administrator mode: Windows blocks dragging (tray menu -> admin mode)"));
                 return;
             }
             _adminTipShown = true;
-            ShowToast("管理员模式：拖不出去，是 Windows 拦的");
+            ShowToast(Lang.T("管理员模式：拖不出去，是 Windows 拦的", "Administrator mode: cannot drag out - Windows blocks it"));
             // 拖拽结束后再弹：这一刻还在鼠标事件/DoDragDrop 的调用栈里，直接弹模态框容易打架
             if (AdminHelpRequested != null)
                 try { BeginInvoke(new MethodInvoker(delegate { try { AdminHelpRequested(this, EventArgs.Empty); } catch { } })); }
@@ -731,7 +731,7 @@ namespace SnapWheel
                 // 想要"拖出去即从环上移走"的话，设置第 1 页那个开关关掉即可。
                 if (_settings.KeepAfterDragOut)
                 {
-                    ShowToast("已拖出（环上还留着一份）");
+                    ShowToast(Lang.T("已拖出（环上还留着一份）", "Dragged out (a copy stays in the ring)"));
                 }
                 else
                 {
@@ -750,7 +750,7 @@ namespace SnapWheel
                 _scales.Remove(_store.Items.IndexOf(it));
                 MarkNew(it);
                 FollowNewest();
-                ShowToast("已放回「" + _mgr.ActiveWheel.Name + "」");
+                ShowToast(Lang.T("已放回「", "Put back into \"") + _mgr.ActiveWheel.Name + "」");
             }
             _hover = -1;
             Render();

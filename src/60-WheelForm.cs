@@ -101,7 +101,7 @@ namespace SnapWheel
 
         bool _keyHover = false;
 
-        bool _nameHover = false;       // 指针停在 Wheel 名药丸上（提示"点一下改名"）
+        bool _nameHover = false;       // 指针停在 Wheel 名药丸上（提示Lang.T("点一下改名", "Click to rename")）
 
         // 圆钮按下反馈：按下先变暗缩一下，过 ~110ms 再真正执行，这样"按下去"是看得见的
         float _closeDown = 0f, _gearDown = 0f, _shootDown = 0f;
@@ -136,11 +136,11 @@ namespace SnapWheel
         // ---------- 收起态（像贴边小球那样，只在屏幕边上留一个可点的小把手）----------
         bool _collapsed = false;       // 已完全收起：只画把手，不画环
 
-        bool _collapsing = false;      // 当前这次动画是"收起"方向
+        bool _collapsing = false;      // 当前这次动画是Lang.T("收起", "Collapse")方向
 
         bool _nubOutHover = false;     // 指针停在"拉出"把手上
 
-        bool _nubInHover = false;      // 指针停在"收起"把手上
+        bool _nubInHover = false;      // 指针停在Lang.T("收起", "Collapse")把手上
 
         float _nubHov = 0f;            // 把手悬停进度 0..1
 
@@ -150,7 +150,7 @@ namespace SnapWheel
 
         float _nubHintT = 0f;                            // 把手"点我展开/收起"提示的淡入进度
 
-        bool _adminTipShown = false;                     // 管理员"拖不动"的说明每次运行只弹一次
+        bool _adminTipShown = false;                     // 管理员Lang.T("拖不动", "Cannot drag")的说明每次运行只弹一次
 
         DateTime _firstRunHintUntil = DateTime.MinValue; // 首次运行自动亮提示的截止时刻
 
@@ -249,7 +249,7 @@ namespace SnapWheel
             _anim.Tick += new EventHandler(AnimTick);
             _anim.Start();
 
-            // 首次运行（展开状态）：让"点我收起"把手提示自动亮一次
+            // 首次运行（展开状态）：让Lang.T("点我收起", "Click to collapse")把手提示自动亮一次
             if (!_settings.NubHintDone)
             {
                 _firstRunHintUntil = DateTime.Now.AddSeconds(14);
@@ -633,7 +633,7 @@ namespace SnapWheel
                 {
                     _settings.UndoHintDone = true;
                     try { _settings.Save(); } catch { }
-                    ShowToast("已删掉这张 —— 托盘右键「撤销上一次删除」可以找回来");
+                    ShowToast(Lang.T("已删掉这张 —— 托盘右键「撤销上一次删除」可以找回来", "Deleted - use \"Undo last delete\" in the tray menu to bring it back"));
                 }
             }
             _hover = -1; _enlarged = -1; _peekIndex = -1;
@@ -671,7 +671,7 @@ namespace SnapWheel
                 _deletingItem = null; _deleteProg = 0f;
                 _rendered = false;
                 Render();
-                ShowToast(n > 0 ? ("已清空这一盘：" + n + " 张（托盘 → 撤销上一次删除 可以找回来）") : "这一盘本来就是空的");
+                ShowToast(n > 0 ? (Lang.T("已清空这一盘：", "Cleared this wheel: ") + n + Lang.T(" 张（托盘 → 撤销上一次删除 可以找回来）", " item(s) (tray -> Undo last delete to restore)")) : Lang.T("这一盘本来就是空的", "This wheel was already empty"));
             }
             catch (Exception ex) { Err.Log("ClearCurrentWheel", ex); }
         }
@@ -750,7 +750,7 @@ namespace SnapWheel
                     {
                         w.Name = nv;
                         _mgr.Save();
-                        ShowToast("已改名为「" + nv + "」");
+                        ShowToast(Lang.T("已改名为「", "Renamed to \"") + nv + "」");
                     }
                 }
             }
@@ -779,16 +779,16 @@ namespace SnapWheel
         {
             switch (id)
             {
-                case "new": return "新建";
-                case "next": return "下一个";
-                case "prev": return "上一个";
-                case "delete": return "删除";
-                case "shot": return "截图";
-                case "collapse": return "收起";
-                case "folder": return "文件夹";
-                case "settings": return "设置";
-                case "paste": return "收一张";
-                case "clear": return "清空";
+                case "new": return Lang.T("新建", "New");
+                case "next": return Lang.T("下一个", "Next");
+                case "prev": return Lang.T("上一个", "Previous");
+                case "delete": return Lang.T("删除", "Delete");
+                case "shot": return Lang.T("截图", "Screenshot");
+                case "collapse": return Lang.T("收起", "Collapse");
+                case "folder": return Lang.T("文件夹", "Folder");
+                case "settings": return Lang.T("设置", "Settings");
+                case "paste": return Lang.T("收一张", "Collect one");
+                case "clear": return Lang.T("清空", "Clear");
                 default: return "";
             }
         }

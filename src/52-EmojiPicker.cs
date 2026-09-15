@@ -16,7 +16,7 @@ namespace SnapWheel
     // 点一个符号 → 回调（符号 + 当前颜色）。非模态 Show(owner)，点到别处/按 Esc 都会关。
     class SymbolPicker : Form
     {
-        static readonly string[] GroupNames = { "标记", "箭头", "编号 / 其它" };
+        static readonly string[] GroupNames = { Lang.T("标记", "Marks"), Lang.T("箭头", "Arrows"), Lang.T("编号 / 其它", "Numbers / misc") };
         static readonly string[][] Sets = {
             new string[] {
                 "✓","✔","✗","✘","☑","☒","●","○","■","□","▲","△",
@@ -77,7 +77,7 @@ namespace SnapWheel
 
             // 顶部：颜色（与标注工具条同一组颜色）
             Label cl = new Label();
-            cl.Text = "颜色";
+            cl.Text = Lang.T("颜色", "Colour");
             cl.ForeColor = Color.FromArgb(155, 165, 182);
             cl.Font = new Font("Microsoft YaHei UI", 9f * (float)k);
             cl.AutoSize = false;
