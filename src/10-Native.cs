@@ -85,6 +85,27 @@ namespace SnapWheel
         // OLE 拖放（DoDragDrop）也就永远不会启动。
         // 用户实测的现象"鼠标从起点移到终点、然后什么都没发生"，根因就在这里。
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        // ==================== 低级键盘钩子（传递模式用） ====================
+        //
+        // 为什么必须用它：传递模式读按键用的是"轮询"（GetAsyncKeyState），轮询**只看状态、不拦截**，
+        // 所以用户按 WASD 时那些字母照常送给了前台窗口 —— 输入法弹出来、字母也被打进去了（用户实测）。
+        // 要拦下来只能在系统输入链上装钩子，把属于传递模式的那几个键吃掉。
+        //
+        // 注意：钩子必须**一定卸载**（放在 OnFormClosed 里），否则会一直挂在那里影响全局输入。
+        public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        public const int WH_KEYBOARD_LL = 13;
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         public const int WM_HOTKEY = 0x0312;

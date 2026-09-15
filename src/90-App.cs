@@ -393,8 +393,8 @@ namespace SnapWheel
 
                     if (st.Items[nx].Image == null)
                     {
-                        cf.SetHintText(Lang.T("这一张取不到内容，再用 , . 换一张",
-                                              "This one has no usable content - use , . to pick another"));
+                        cf.SetHintText(Lang.T("这一张取不到内容，再用 Q E 换一张",
+                                              "This one has no usable content - use Q E to pick another"));
                         return;
                     }
                     Bitmap nt = MakeCarryThumb(st.Items[nx].Image, 132, 99);
@@ -403,8 +403,8 @@ namespace SnapWheel
                     Rectangle ir2 = _wheel.ItemScreenRect(nx);
                     Point org2 = (ir2.Width > 2) ? new Point(ir2.X, ir2.Y) : origin;
                     cf.SetThumb(nt, org2);
-                    cf.SetHintText(Lang.T("第 " + (nx + 1) + " / " + cnt + " 张　·　空格 放下　·　, . 换一张　·　Esc 取消",
-                                          "Image " + (nx + 1) + " / " + cnt + "  ·  Space drop  ·  , . switch  ·  Esc cancel"));
+                    cf.SetHintText(Lang.T("第 " + (nx + 1) + " / " + cnt + " 张　·　空格 放下　·　Q E 换一张　·　Esc 取消",
+                                          "Image " + (nx + 1) + " / " + cnt + "  ·  Space drop  ·  Q E switch  ·  Esc cancel"));
                 }
                 catch (Exception ex) { Err.Log("Carry.Switch", ex); }
             });

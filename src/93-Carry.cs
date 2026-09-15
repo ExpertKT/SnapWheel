@@ -122,6 +122,7 @@ namespace SnapWheel
             }
             catch { }
             ApplyPos();
+            InstallHook();      // 装上键盘钩子：传递期间把 WASD 等键吃掉，别漏给前台窗口
         }
 
         static bool Down(Keys k)
@@ -185,9 +186,9 @@ namespace SnapWheel
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
 
                     // 换一张图（不想传这张了，不用退出去重来）。
-                    // 用逗号/句号而不是左右方向键：方向键已经在负责移动假光标了。
-                    if (Rising(ref _prevPrev, Keys.Oemcomma)) { RaiseSwitch(-1); return; }
-                    if (Rising(ref _prevNext, Keys.OemPeriod)) { RaiseSwitch(1); return; }
+                    // 用 Q / E 而不是方向键：方向键已经在负责移动假光标了。
+                    if (Rising(ref _prevPrev, Keys.Q)) { RaiseSwitch(-1); return; }
+                    if (Rising(ref _prevNext, Keys.E)) { RaiseSwitch(1); return; }
                 }
             }
             catch { }
@@ -233,6 +234,77 @@ namespace SnapWheel
         void RaiseSwitch(int delta)
         {
             try { if (SwitchRequested != null) SwitchRequested(delta); } catch { }
+        }
+
+        // ---------- 键盘钩子：把属于传递模式的按键"吃掉" ----------
+        //
+        // 不做这件事的话，用户按 WASD 时那些字母会照常送进前台窗口：
+        // 输入法弹出来、聊天框里被打进一堆字母（用户实测就是这个）。
+        // 轮询只能"读"按键，要"拦"就必须在系统输入链上装钩子。
+        IntPtr _hook = IntPtr.Zero;
+        Native.LowLevelKeyboardProc _hookProc;      // 必须保留引用：被 GC 回收的话钩子会失效甚至崩
+
+        void InstallHook()
+        {
+            try
+            {
+                if (_hook != IntPtr.Zero) return;
+                _hookProc = new Native.LowLevelKeyboardProc(HookCallback);
+                _hook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, _hookProc,
+                                                Native.GetModuleHandle(null), 0);
+                Err.Log("Carry.Hook", new Exception("键盘钩子已安装：" + (_hook != IntPtr.Zero)));
+            }
+            catch (Exception ex) { Err.Log("Carry.Hook", ex); }
+        }
+
+        void UninstallHook()
+        {
+            try
+            {
+                if (_hook != IntPtr.Zero)
+                {
+                    Native.UnhookWindowsHookEx(_hook);
+                    Err.Log("Carry.Hook", new Exception("键盘钩子已卸载"));
+                }
+            }
+            catch { }
+            _hook = IntPtr.Zero;
+            _hookProc = null;
+        }
+
+        IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            try
+            {
+                if (nCode >= 0)
+                {
+                    int vk = System.Runtime.InteropServices.Marshal.ReadInt32(lParam);
+                    if (IsCarryKey(vk)) return (IntPtr)1;   // 返回 1 = 吞掉，不让它继续传下去
+                }
+            }
+            catch { }
+            return Native.CallNextHookEx(_hook, nCode, wParam, lParam);
+        }
+
+        /// <summary>传递模式自己要用到的键（这些键在传递期间不该传给别人）。</summary>
+        static bool IsCarryKey(int vk)
+        {
+            switch (vk)
+            {
+                case 0x57:   // W
+                case 0x41:   // A
+                case 0x53:   // S
+                case 0x44:   // D
+                case 0x51:   // Q  上一张
+                case 0x45:   // E  下一张
+                case 0x20:   // 空格 放下
+                case 0x0D:   // Enter 放下
+                case 0x1B:   // Esc 取消
+                case 0x10:   // Shift 加速
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -331,6 +403,7 @@ namespace SnapWheel
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            UninstallHook();     // 一定要卸：钩子挂着不卸会影响全局键盘输入
             try { _tick.Stop(); _tick.Dispose(); } catch { }
             try { if (_hint != null) { _hint.Close(); _hint.Dispose(); _hint = null; } } catch { }
             base.OnFormClosed(e);
@@ -405,8 +478,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = _text ?? Lang.T("WASD / 方向键 移动　·　Shift 加速　·　空格/Enter 放下　·　, . 换一张　·　Esc 取消",
-                                       "WASD / Arrows move  ·  Shift faster  ·  Space/Enter drop  ·  , . switch  ·  Esc cancel");
+            string s = _text ?? Lang.T("WASD 移动　·　Shift 加速　·　空格 放下　·　Q E 换一张　·　Esc 取消",
+                                       "WASD move  ·  Shift faster  ·  Space drop  ·  Q E switch  ·  Esc cancel");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -431,8 +504,8 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = _text ?? Lang.T("WASD / 方向键 移动　·　Shift 加速　·　空格/Enter 放下　·　, . 换一张　·　Esc 取消",
-                                       "WASD / Arrows move  ·  Shift faster  ·  Space/Enter drop  ·  , . switch  ·  Esc cancel");
+            string s = _text ?? Lang.T("WASD 移动　·　Shift 加速　·　空格 放下　·　Q E 换一张　·　Esc 取消",
+                                       "WASD move  ·  Shift faster  ·  Space drop  ·  Q E switch  ·  Esc cancel");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
