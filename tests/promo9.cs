@@ -38,7 +38,7 @@ namespace SnapWheel
 
             try
             {
-                Shot(1, "快照轮环", "截图不落文件", "直接变成屏幕角上的一张卡，拖一下就发出去", "", true);
+                Shot(1, "快照轮环", "截图不落文件，直接挂在屏幕角上", "", "promo_wheel.png", true);
                 Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_bl.png", false);
                 Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "promo_drop.png", false);
                 Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停 · 0.6.0 新增", "wheel_empty.png", false);
@@ -46,7 +46,7 @@ namespace SnapWheel
                 Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口 · 0.6.0 强化", "ocr.png", false);
                 Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "promo_menu.png", false);
                 Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "promo_intro.png", false);
-                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "Windows 10 / 11 · 免安装 · 用系统自带运行库", "", false);
+                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "完整版 / 无万能键版两条线都在 Releases · Windows 10/11 免安装", "settings.png", false);
                 Merge();
                 Console.WriteLine("完成：9 张图 + 一张九宫格总览已输出到 " + outDir);
             }
