@@ -55,7 +55,7 @@ namespace SnapWheel
         public bool ShowCountLabel = true;    // 显示图片计数药丸
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
-        public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy it and it is collected")）
+        public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
         public bool CopyOnCapture = true;     // 截图确认时同时把图放进剪贴板（要立刻粘贴就直接 Ctrl+V）
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
         public bool ShowBalloon = false;      // 0.6.0 起默认关：不弹托盘气泡
@@ -229,8 +229,8 @@ namespace SnapWheel
                 case "collapse": return Lang.T("收起轮盘", "Collapse ring");
                 case "folder": return Lang.T("打开保存文件夹", "Open save folder");
                 case "settings": return Lang.T("打开设置", "Open settings");
-                case "paste": return Lang.T("从剪贴板收一张", "Collect one from the clipboard");
-                case "clear": return Lang.T("清空这一盘（保留轮盘）", "Clear this wheel (keep the wheel)");
+                case "paste": return Lang.T("从剪贴板收一张", "Collect from clipboard");
+                case "clear": return Lang.T("清空这一盘（保留轮盘）", "Clear items (keep wheel)");
                 default: return Lang.T("不设置", "None");
             }
         }

@@ -732,8 +732,8 @@ namespace SnapWheel
                 p.DashStyle = DashStyle.Dash;
                 g.DrawRectangle(p, r.X - 3 * _k, r.Y - 3 * _k, r.Width + 6 * _k, r.Height + 6 * _k);
             }
-            string hint = (_sel.Kind == AnnotKind.Text) ? Lang.T("拖动移动　·　滚轮 / A+/A- 改字号　·　Del 删除", "Drag to move · wheel or A+/A- to resize · Del to delete")
-                                                        : Lang.T("拖动移动　·　滚轮改粗细　·　Del 删除", "Drag to move · wheel to change thickness · Del to delete");
+            string hint = (_sel.Kind == AnnotKind.Text) ? Lang.T("拖动移动　·　滚轮 / A+/A- 改字号　·　Del 删除", "Drag · wheel or A+/A- resize · Del delete")
+                                                        : Lang.T("拖动移动　·　滚轮改粗细　·　Del 删除", "Drag · wheel thickness · Del delete");
             using (Font f = new Font("Microsoft YaHei UI", 9f * _k, FontStyle.Bold))
             {
                 SizeF sz = g.MeasureString(hint, f);

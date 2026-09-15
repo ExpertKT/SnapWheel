@@ -463,7 +463,7 @@ namespace SnapWheel
                 using (Font f0 = new Font("Microsoft YaHei UI", 10f))
                 using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f), 255, 255, 255)))
                 {
-                    string hint = Lang.T("截图后会出现在这里", "Screenshots will appear here");
+                    string hint = Lang.T("截图后会出现在这里", "No screenshots yet");
                     SizeF hs = g.MeasureString(hint, f0);
                     PointF hp = HintPos(hs);
                     g.DrawString(hint, f0, b0, hp.X, hp.Y);

@@ -418,7 +418,7 @@ namespace SnapWheel
                 using (GraphicsPath p2 = Gfx.Round(tr, 9f))
                 using (Pen pen = new Pen(Color.FromArgb(130, 255, 255, 255), 1.2f))
                     g.DrawPath(pen, p2);
-                TextRenderer.DrawText(g, _chipsOpen ? Lang.T("比例 ▼", "Ratio ▼") : Lang.T("比例 ▶", "Ratio ▶"), f, tr, Color.White,
+                TextRenderer.DrawText(g, _chipsOpen ? Lang.T("比例 ▼", "▼") : Lang.T("比例 ▶", "▶"), f, tr, Color.White,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
@@ -505,7 +505,7 @@ namespace SnapWheel
                     g.DrawString(txt, f, fg, tx + 5, ty + 1);
                 }
 
-                string hint = Lang.T("双击保存　·　拖角缩放　·　拖圆点旋转　·　Esc 取消", "Double-click to save · corners resize · dot rotates · Esc cancels");
+                string hint = Lang.T("双击保存　·　拖角缩放　·　拖圆点旋转　·　Esc 取消", "Double-click save · corners resize · dot rotate · Esc cancel");
                 using (Font f2 = new Font("Microsoft YaHei UI", 10f * _k))
                 using (SolidBrush fg2 = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
                 using (SolidBrush bg2 = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
