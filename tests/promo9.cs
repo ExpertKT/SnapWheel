@@ -87,10 +87,10 @@ namespace SnapWheel
                 int y = hero ? 416 : 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
                 using (Font fl = new Font(FONT, FitSize(g, line1, hero ? 40 : 36, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
-                { g.DrawString(line1, fl, sb, 84, y); }
+                { TextRenderer.DrawText(g, line1, fl, new Point(84, (int)y), Color.FromArgb(228, 236, 244, 252), TextFormatFlags.NoPadding); }
                 using (Font fs = new Font(FONT, FitSize(g, line2, 28, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Sub))
-                { g.DrawString(line2, fs, sb, 84, y + (hero ? 78 : 58)); }
+                { TextRenderer.DrawText(g, line2, fs, new Point(84, (int)(y + (hero ? 78 : 58))), Color.FromArgb(148, 158, 178), TextFormatFlags.NoPadding); }
 
                 // 右上角标（hero 打新，其它打卖点）
                 if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 1080 - 300, 122, 22);   // 右上角：原来贴在文案下，会压住第二行
@@ -239,9 +239,10 @@ namespace SnapWheel
             if (string.IsNullOrEmpty(text)) return pt;
             using (Font f = new Font(FONT, pt))
             {
-                float w = g.MeasureString(text, f).Width;
-                if (w <= maxW || w <= 0) return pt;
-                float np = pt * (maxW / w);
+                // 用 TextRenderer 量（GDI），和下面的 DrawText 同源 —— GDI+ 的 MeasureString 量出来比实际画出来的窄，之前就是被它骗了
+                float w = TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
+                if (w <= maxW * 0.94f || w <= 0) return pt;   // 再留 6% 余量
+                float np = pt * (maxW * 0.94f / w);
                 return np < 12f ? 12f : np;
             }
         }
