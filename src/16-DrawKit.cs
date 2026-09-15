@@ -128,6 +128,8 @@ namespace SnapWheel
                     if (next >= use) next = use - 1;
                     use = Math.Max(6, next);
                 }
+                DrawInternal(g, text, use, fontName, style, box, color, align);
+            }
             catch { }
         }
 
