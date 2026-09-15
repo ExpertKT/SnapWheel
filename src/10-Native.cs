@@ -77,18 +77,6 @@ namespace SnapWheel
         public const uint MOUSEEVENTF_MOVE     = 0x0001;
         public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         public const uint MOUSEEVENTF_LEFTUP   = 0x0004;
-
-        // 模拟键盘 —— 传递模式的"放下"最终走的是"写剪贴板 + 自动按一次 Ctrl+V"。
-        //
-        // 为什么不用模拟拖放：拖放要求**源窗口自己**去启动 OLE 拖放（DoDragDrop），
-        // 而我们的模拟点击始终没能让它启动 —— 试过改起点坐标、改步数、改时序、
-        // 补发真实的移动消息，用户实测都是"鼠标动了一下，然后什么都没发生"。
-        // 而"粘贴"是每个程序都支持的标准操作，只依赖键盘消息，可靠得多。
-        [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
-
-        public const uint KEYEVENTF_KEYUP = 0x0002;
-        public const byte VK_CONTROL = 0x11;
-        public const byte VK_V       = 0x56;
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         public const int WM_HOTKEY = 0x0312;

@@ -46,8 +46,7 @@ namespace SnapWheel
         // 不这么做会出事 —— 传递热键是 Ctrl+Alt+C，用户按完 C 键还按着不放，
         // 窗口一出现就检测到 C 是按下状态，立刻当成"复制到剪贴板"并关闭，
         // 表现就是"闪了一下就没了"（用户实测出来的）。
-        bool _prevEnter, _prevEsc, _prevC, _prevSpace;
-        bool _tickAlive;                // 只为了写一条"定时器在跑、保护期已过"的日志（诊断用）
+        bool _prevEnter, _prevEsc, _prevC;
 
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
@@ -57,8 +56,6 @@ namespace SnapWheel
         // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
         // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
         public bool UseClipboard;
-        /// <summary>true = 写完剪贴板后，再自动按一次 Ctrl+V（空格走这条；C 只复制不粘贴）。</summary>
-        public bool AutoPaste;
 
         public CarryForm(Bitmap thumb, Point origin)
         {
@@ -155,35 +152,10 @@ namespace SnapWheel
                 // 另外刚显示后的 350ms 里不响应按键 —— 用户刚按完热键，
                 // 手指还压在键上，那段窗口期不该被当成"用户操作"。
                 bool warmed = (DateTime.Now - _started).TotalMilliseconds > 350;
-                if (warmed && !_tickAlive)
-                {
-                    // 只写一条：确认定时器真的在跑、保护期也过了。
-                    // 之前"按 C 没反应"这种问题，缺的就是这个证据 —— 到底是没跑到这里，
-                    // 还是跑到了但按键判断没通过。
-                    _tickAlive = true;
-                    Err.Log("Carry.Tick", new Exception("定时器在跑，保护期已过（按键开始生效）"));
-                }
                 if (warmed)
                 {
-                    // 空格 = 放下：把图放进剪贴板，**并自动按一次 Ctrl+V**。
-                    // 这是"把图送进目标程序"最可靠的方式 —— 粘贴是所有程序都支持的标准操作。
-                    if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter))
-                    {
-                        Err.Log("Carry.Key", new Exception("空格 触发：复制并粘贴"));
-                        UseClipboard = true;
-                        AutoPaste = true;
-                        DoDrop();
-                        return;
-                    }
-                    // C = 只复制到剪贴板，不自动粘贴（需要自己控制粘贴时机时用）
-                    if (Rising(ref _prevC, Keys.C))
-                    {
-                        Err.Log("Carry.Key", new Exception("C 触发：只复制到剪贴板"));
-                        UseClipboard = true;
-                        AutoPaste = false;
-                        DoDrop();
-                        return;
-                    }
+                    if (Rising(ref _prevEnter, Keys.Enter) || Rising(ref _prevEnter, Keys.Space)) { DoDrop(); return; }
+                    if (Rising(ref _prevC, Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
                 }
             }
@@ -227,41 +199,6 @@ namespace SnapWheel
         }
 
         /// <summary>
-        /// 模拟一次 Ctrl+V。
-        /// 传递模式的"放下"最终就靠它：图已经写进剪贴板，再按一下粘贴，
-        /// 目标程序收到的就是标准操作，不依赖任何拖放协议的配合。
-        /// </summary>
-        public static void SimulatePaste()
-        {
-            try
-            {
-                Native.keybd_event(Native.VK_CONTROL, 0, 0, IntPtr.Zero);
-                Thread.Sleep(30);
-                Native.keybd_event(Native.VK_V, 0, 0, IntPtr.Zero);
-                Thread.Sleep(50);
-                Native.keybd_event(Native.VK_V, 0, Native.KEYEVENTF_KEYUP, IntPtr.Zero);
-                Thread.Sleep(30);
-                Native.keybd_event(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP, IntPtr.Zero);
-                Err.Log("Carry.Paste", new Exception("已模拟 Ctrl+V"));
-            }
-            catch (Exception ex) { Err.Log("Carry.Paste", ex); }
-        }
-
-        /// <summary>
-        /// 把光标移到某个点，**并且生成真实的鼠标移动消息**。
-        ///
-        /// 为什么不能只用 SetCursorPos：它只是把光标"瞬移"过去，**不产生鼠标移动消息**。
-        /// 而轮盘的拖出是靠"按下 + 鼠标移动"启动的（OLE 拖放的启动条件），收不到移动消息
-        /// 就永远不会开始拖 —— 用户实测的现象正是"真鼠标指针从起点移到了终点，然后什么都没发生"。
-        /// 补一个 MOUSEEVENTF_MOVE 就是在告诉系统"鼠标真的动了"（位移 0，只为了让消息发出去）。
-        /// </summary>
-        static void MoveTo(int x, int y)
-        {
-            Native.SetCursorPos(x, y);
-            Native.mouse_event(Native.MOUSEEVENTF_MOVE, 0, 0, 0, IntPtr.Zero);
-        }
-
-        /// <summary>
         /// 模拟一次真实的拖放：光标移到起点 → 按下 → 分步移到终点 → 松开。
         /// 分步移动很重要：一步跳过去的话，多数程序不会把它当成拖放。
         /// </summary>
@@ -269,18 +206,18 @@ namespace SnapWheel
         {
             try
             {
-                MoveTo(from.X, from.Y);
-                Thread.Sleep(120);      // 让光标停稳，有些程序要求按下时鼠标确实静止过
+                Native.SetCursorPos(from.X, from.Y);
+                Thread.Sleep(60);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
 
                 int steps = 22;      // 步数多一些、每步慢一些，更像人手（一步跳过去多数程序不认）
                 for (int i = 1; i <= steps; i++)
                 {
                     Point p = StepPoint(from, to, i, steps);
-                    MoveTo(p.X, p.Y);
+                    Native.SetCursorPos(p.X, p.Y);
                     Thread.Sleep(20);
                 }
-                Thread.Sleep(220);      // 到终点后再停一下，给目标程序时间响应"悬停"，然后再松手
+                Thread.Sleep(80);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
                 Thread.Sleep(40);
             }
@@ -386,8 +323,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
-                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
+            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
+                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -404,7 +341,7 @@ namespace SnapWheel
 
         static Font HintFont()
         {
-            try { return new Font(DrawKit.UI, 12f); }
+            try { return new Font(DrawKit.UI, 10.5f); }
             catch { return new Font(FontFamily.GenericSansSerif, 10.5f); }
         }
 
@@ -412,12 +349,12 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
-                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
+            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
+                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
-                                   b.Color, 13, ClientSize.Width - PadX * 2 + 12, DrawKit.UI, FontStyle.Regular, Align.Center);
+                                   b.Color, 11, ClientSize.Width - PadX * 2 + 12, DrawKit.UI, FontStyle.Regular, Align.Center);
         }
 
         // 不抢焦点：不然用户按 Alt+Tab 切窗口时提示条会把焦点抢回来

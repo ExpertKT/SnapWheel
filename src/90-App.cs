@@ -57,6 +57,16 @@ namespace SnapWheel
             Lang.Init(string.IsNullOrEmpty(_settings.UiLanguage) ? Lang.Guess() : _settings.UiLanguage);   // 界面语言：没选过就按系统语言，切换后重启生效
 
             ContextMenuStrip menu = new ContextMenuStrip();
+
+            // 菜单最上面放一行「版本 + 这个 exe 的编译时间」，灰色不可点。
+            // 目的很直接：一眼确认"现在跑的到底是哪一版"。
+            // 之前反复出现"我改了但你看不出变化"，双方各说各话 —— 有这一行就不会了。
+            ToolStripMenuItem verItem = new ToolStripMenuItem(
+                AppInfo.Name + "  v" + AppInfo.Version + "   ·   " + BuiltAt());
+            verItem.Enabled = false;
+            menu.Items.Add(verItem);
+            menu.Items.Add(new ToolStripSeparator());
+
             menu.Items.Add(Lang.T("截图", "Screenshot"), null, new EventHandler(OnHotkey));
             menu.Items.Add(Lang.T("导入图片…", "Import images…"), null, new EventHandler(OnImport));
             menu.Items.Add(Lang.T("新手引导", "Getting started"), null, new EventHandler(OnGuide));
@@ -366,37 +376,10 @@ namespace SnapWheel
                     if (cf.UseClipboard)
                     {
                         // 用户选的是「复制到剪贴板」：不走模拟拖放，直接把图写进剪贴板。
-                        //
-                        // 关键：**一次放多种格式**。
-                        // 之前只放了位图（Clipboard.SetImage），日志证明确实写进去了，
-                        // 但很多程序（尤其微信）粘贴不出来 —— 它们更认「文件」而不是「位图」。
-                        // 所以现在同时放两样：① 文件路径（FileDrop）② 位图，让目标程序挑它能用的。
                         // 先登记"这张剪贴板是我们自己写的"，否则"复制即收纳"会把刚复制的图又收一遍。
                         SelfClipboard.Note(item.Image);
-                        try
-                        {
-                            DataObject dob = new DataObject();
-                            dob.SetData(DataFormats.Bitmap, item.Image);
-                            string file = st.EnsureFile(item);
-                            if (!string.IsNullOrEmpty(file))
-                            {
-                                System.Collections.Specialized.StringCollection files = new System.Collections.Specialized.StringCollection();
-                                files.Add(file);
-                                dob.SetFileDropList(files);
-                            }
-                            Clipboard.SetDataObject(dob, true);
-                            SelfClipboard.NoteSequence();
-                            Err.Log("Carry.Clipboard", new Exception("已写入剪贴板：位图 + 文件[" + file + "]"));
-
-                            // 空格走的是"放下"：写完之后自动按一次 Ctrl+V，把图直接粘到目标窗口里。
-                            // 等一小会儿是让剪贴板数据真正就位（立刻粘贴偶尔会粘到上一次的内容）。
-                            if (cf.AutoPaste)
-                            {
-                                System.Threading.Thread.Sleep(180);
-                                CarryForm.SimulatePaste();
-                            }
-                        }
-                        catch (Exception cex) { Err.Log("Carry.Clipboard", cex); }
+                        Clipboard.SetImage(item.Image);
+                        SelfClipboard.NoteSequence();
                         if (_settings.ShowBalloon) _tray.ShowBalloonTip(6000,
                             Lang.T("已复制到剪贴板", "Copied to clipboard"),
                             Lang.T("切到目标窗口按 Ctrl+V 就能粘贴。", "Switch to the target window and press Ctrl+V."),
@@ -642,6 +625,19 @@ namespace SnapWheel
                     _tray.ShowBalloonTip(3000, Lang.T("SnapWheel 快照轮环", "SnapWheel"), tip, ToolTipIcon.Info);
             }
             catch { }
+        }
+
+        /// <summary>
+        /// 这个 exe 是什么时候编译的（用来确认"现在跑的到底是哪一版"）。
+        /// 显示在托盘菜单最上面那一行。
+        /// </summary>
+        static string BuiltAt()
+        {
+            try
+            {
+                return System.IO.File.GetLastWriteTime(Application.ExecutablePath).ToString("MM-dd HH:mm");
+            }
+            catch { return "?"; }
         }
 
         void OnWheels(object sender, EventArgs e)
