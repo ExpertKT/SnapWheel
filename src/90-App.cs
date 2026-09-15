@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -66,6 +67,7 @@ namespace SnapWheel
             menu.Items.Add(Lang.T("管理 Wheel…", "Manage wheels…"), null, new EventHandler(OnWheels));
             menu.Items.Add(Lang.T("反馈 / 报告问题…", "Feedback / report a problem…"), null, new EventHandler(OnFeedback));
             menu.Items.Add(Lang.T("设置…", "Settings…"), null, new EventHandler(OnSettings));
+            menu.Items.Add(Lang.T("检查更新", "Check for updates"), null, new EventHandler(delegate(object o, EventArgs e2)             {                 try { CheckUpdate(true); } catch { }             }));             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(Lang.T("打开项目主页", "Open project page"), null, new EventHandler(delegate(object o, EventArgs e) {
                 try { System.Diagnostics.Process.Start("https://github.com/" + AppInfo.Repo); } catch { }
             }));
@@ -79,7 +81,7 @@ namespace SnapWheel
             // 启动后到后台检查有没有新版本（不挡启动；设置里可以关）
             if (_settings.CheckUpdate)
             {
-                System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(CheckUpdate));
+                System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate() { CheckUpdate(false); }));
                 th.IsBackground = true;
                 th.Start();
             }
@@ -294,37 +296,103 @@ namespace SnapWheel
 
         // 托盘「导入图片…」：不想拖的时候也能从任意位置选图加进当前 wheel
         // 检查 GitHub Releases 有没有新版本：只提示，绝不自动下载/替换
-        void CheckUpdate()
+        // 检查更新。
+        // manual=true：用户点了托盘菜单 —— 必须有反馈（已是最新 / 发现新版 / 下载 / 失败）。
+        // manual=false：启动时的静默检查 —— 只在真有新版时提一句，其余一律不打扰。
+        // 检查、下载都在后台线程，界面操作统一切回 UI 线程（Ui()）。
+        void CheckUpdate(bool manual)
         {
             try
             {
-                // .NET 4.0 默认只开 TLS 1.0，GitHub 会直接拒绝 —— 必须显式开 TLS 1.2
-                System.Net.ServicePointManager.SecurityProtocol = (System.Net.SecurityProtocolType)3072;
-                System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
-                    "https://api.github.com/repos/" + AppInfo.Repo + "/releases/latest");
-                req.UserAgent = AppInfo.Name + "/" + AppInfo.Version;
-                req.Timeout = 8000;
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)req.GetResponse())
-                using (StreamReader sr = new StreamReader(resp.GetResponseStream()))
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate(object st)
                 {
-                    string body = sr.ReadToEnd();
-                    System.Text.RegularExpressions.Match m =
-                        System.Text.RegularExpressions.Regex.Match(body, "\"tag_name\"\\s*:\\s*\"v?([0-9.]+)\"");
-                    if (!m.Success) return;
-                    string remote = m.Groups[1].Value;
-                    if (!NewerVersion(remote, AppInfo.Version)) return;
-                    string msg = Lang.T("有新版本 v", "New version available: v") + remote + Lang.T("（当前 v", " (current v") + AppInfo.Version + Lang.T("）。右键托盘图标 →「打开项目主页」可以下载。", "). Right-click the tray icon and choose \"Open project page\" to download.");
+                    Update.Found f = Update.Check();
+                    if (f == null)
+                    {
+                        if (manual) Ui(delegate
+                        {
+                            MessageBox.Show(_wheel,
+                                Lang.T("已经是最新版本（v", "You are up to date (v") + AppInfo.Version + Lang.T("）。", ")."),
+                                AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        });
+                        return;
+                    }
+
+                    // 后台静默检查：只提醒，把决定权留给用户
+                    if (!manual)
+                    {
+                        Ui(delegate { BalloonUpdate(f.Version); });
+                        return;
+                    }
+
+                    // 手动检查：问要不要现在下载
+                    bool go = false;
+                    Ui(delegate
+                    {
+                        go = MessageBox.Show(_wheel,
+                            Lang.T("发现新版本 v", "New version found: v") + f.Version +
+                            Lang.T("（当前 v", " (current v") + AppInfo.Version + Lang.T("）。", ").") + "\\r\\n\\r\\n" +
+                            Lang.T("现在下载并安装吗？程序会自动重启一次，你的轮盘和设置都不会丢。",
+                                   "Download and install now? The app restarts once; your ring and settings are kept."),
+                            AppInfo.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                    });
+                    if (!go) return;
+
+                    string dir = Update.Download(f, null);
+                    if (dir == null)
+                    {
+                        Ui(delegate
+                        {
+                            MessageBox.Show(_wheel,
+                                Lang.T("下载失败。可能是网络问题，也可以右键托盘 →「打开项目主页」手动下载。",
+                                       "Download failed. This may be a network issue; you can also use tray > Open project page to download manually."),
+                                AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        });
+                        return;
+                    }
+
+                    bool apply = false;
+                    Ui(delegate
+                    {
+                        apply = MessageBox.Show(_wheel,
+                            Lang.T("下载完成，现在重启并安装 v", "Downloaded. Restart and install v") + f.Version + Lang.T("？", "?"),
+                            AppInfo.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                    });
+                    if (!apply) return;
+
+                    // 启动"更新器模式"的自己，然后把当前进程关掉 —— 由它覆盖文件并重新启动
                     try
                     {
-                        _wheel.BeginInvoke((MethodInvoker)delegate
-                        {
-                            try { if (_settings.ShowBalloon) _tray.ShowBalloonTip(8000, Lang.T("SnapWheel 快照轮环 有新版本", "SnapWheel has an update"), msg, ToolTipIcon.Info); } catch { }
-                        });
+                        ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath,
+                            "--apply-update \"" + dir + "\" " + Process.GetCurrentProcess().Id);
+                        psi.UseShellExecute = false;
+                        Process.Start(psi);
                     }
                     catch { }
-                }
+                    Ui(delegate { Application.Exit(); });
+                });
             }
-            catch { }   // 没网 / 超时 / 被拦，都静默失败，绝不打扰使用
+            catch { }   // 没网 / 超时 / 被拦，一律静默，绝不打扰使用
+        }
+
+        // 把一段界面操作切回 UI 线程执行（后台线程不能直接碰控件）
+        void Ui(MethodInvoker a)
+        {
+            try { _wheel.Invoke(a); } catch { }
+        }
+
+        // 有新版时的提示气泡
+        void BalloonUpdate(string ver)
+        {
+            try
+            {
+                if (!_settings.ShowBalloon) return;
+                string msg = Lang.T("有新版本 v", "New version available: v") + ver +
+                             Lang.T("。右键托盘图标 →「检查更新」可以下载并安装（程序会重启一次，轮盘和设置都保留）。",
+                                    ". Right-click the tray icon and choose \"Check for updates\" to download and install (the app restarts once; your ring and settings are kept).");
+                _tray.ShowBalloonTip(9000, Lang.T("SnapWheel 快照轮环 有新版本", "SnapWheel has an update"), msg, ToolTipIcon.Info);
+            }
+            catch { }
         }
 
         static bool NewerVersion(string a, string b)
@@ -548,7 +616,8 @@ namespace SnapWheel
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
+            // 更新器模式：由"下载更新"启动的第二个自己。等主进程退出后覆盖文件、再把人重新拉起来。             // 走这条路就完全不碰界面和轮盘，做完就退出。             if (Update.IsApplyMode(args)) { Update.RunApply(args); return; } 
         {
             bool createdNew;
             System.Threading.Mutex mtx = new System.Threading.Mutex(true, "SnapWheel_SingleInstance", out createdNew);
