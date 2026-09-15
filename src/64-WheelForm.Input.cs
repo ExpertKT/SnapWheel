@@ -727,10 +727,22 @@ namespace SnapWheel
             _dragOutProg = 0f;
             if (taken)
             {
-                // 0.6.0 紧急修订：拖出去是 **Copy** 语义（上面 DoDragDrop 用的就是 DragDropEffects.Copy），
-                // 目标程序拿到的是副本，环上这份**必须留着** —— 想再拖一次、或者拖给第二个窗口都要用。
-                // 以前这里把图从环上移除（等于当成 Move），于是"拖出去后就没了、不能再拖一次"。
-                ShowToast("已拖出（环上还留着一份）");
+                // 拖出去是 Copy 语义：默认**留一份**在环上（随时能再拖一次，或拖给第二个窗口）。
+                // 想要"拖出去即从环上移走"的话，设置第 1 页那个开关关掉即可。
+                if (_settings.KeepAfterDragOut)
+                {
+                    ShowToast("已拖出（环上还留着一份）");
+                }
+                else
+                {
+                    _store.Items.Remove(it);
+                    _thumbCache.Remove(it);
+                    _enterT0.Remove(it);
+                    _scales.Clear();
+                    if (_targetOffset > MaxOffset()) _targetOffset = MaxOffset();
+                    if (_targetOffset < MinOffset()) _targetOffset = MinOffset();
+                    if (_offset > _targetOffset) _offset = _targetOffset;
+                }
             }
             else if (returned)
             {

@@ -63,6 +63,8 @@ namespace SnapWheel
         // 收进新图（截图 / 剪贴板 / 导入）之后要不要把滚动位置重置到最新那张。
         // 开（默认）：视口跟到最新那张 —— 滑入动画看得见；关：完全不碰用户的滚动位置。
         public bool ResetScrollOnCapture = true;
+        // 缩略图拖出去之后，环上要不要**留一份**（默认留：拖出是 Copy 语义，随时能再拖一次、或拖给第二个窗口）
+        public bool KeepAfterDragOut = true;
         // 设置窗口的客户区尺寸（像素）。0 = 没设过 → 按"内容首选尺寸 × DPI"算默认值。
         // 用户拖过窗口之后在关闭时写回这里，下次打开就用他拖出来的大小（会夹进 [最小, 最大]）。
         // 省电模式（默认开）：**只在电池供电时**暂停毛玻璃定时刷新 + 重绘隔帧一次（见 12-Power.cs）。
@@ -154,6 +156,7 @@ namespace SnapWheel
                         else if (k == "RingSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) { s.ExpandSpeed = n; s.CollapseSpeed = n; } }   // 兼容旧配置
                         else if (k == "NubSingle") s.NubSingle = (v == "1");
                         else if (k == "ResetScrollOnCapture") s.ResetScrollOnCapture = (v == "1");
+                        else if (k == "KeepAfterDragOut") s.KeepAfterDragOut = (v == "1");
                         else if (k == "PowerSave") s.PowerSave = (v == "1");
                         // 翻译接口（0.6.0）：值里可能有 '='（URL 的 query、key 的 base64），
                         // 所以读取那一侧必须只按**第一个** '=' 切分 —— 见本文件顶部解析处的注释
@@ -294,6 +297,7 @@ namespace SnapWheel
                 lines.Add("CollapseSpeed=" + CollapseSpeed);
                 lines.Add("NubSingle=" + (NubSingle ? "1" : "0"));
                 lines.Add("ResetScrollOnCapture=" + (ResetScrollOnCapture ? "1" : "0"));
+                lines.Add("KeepAfterDragOut=" + (KeepAfterDragOut ? "1" : "0"));
                 lines.Add("PowerSave=" + (PowerSave ? "1" : "0"));
                 lines.Add("LlmUrl=" + LlmUrl);
                 lines.Add("LlmKey=" + LlmKey);

@@ -36,6 +36,7 @@ namespace SnapWheel
 
         // ---- 第 1 页「行为与快捷键」 ----
         CheckBox _chkDisk, _chkAutoStart, _chkAuto, _chkTop, _chkClip, _chkCopy, _chkBalloon, _chkUpdate, _chkDragFile;
+        CheckBox _chkKeep;                   // 拖出后是否在环上留一份（0.6.0）
         TextBox _txtDir;
         NumericUpDown _numSec;
         ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch;
@@ -499,7 +500,7 @@ namespace SnapWheel
         void BuildPage1()
         {
             TableLayoutPanel g = _pages[0];
-            SetupRows(g, 8);
+            SetupRows(g, 9);   // 0.6.0：多了"拖出后保留一份"
             Settings s = _s;
 
             g.Controls.Add(Section("行为"), 0, 0);
@@ -616,6 +617,13 @@ namespace SnapWheel
             _chkUpdate.Text = "启动时检查有没有新版本（只提示，不自动安装）";
             _chkUpdate.Checked = s.CheckUpdate;
             g.Controls.Add(Row(_chkUpdate), 0, 7);
+
+            // 拖出之后要不要在环上留一份（默认留）：拖出是 Copy 语义，留着才能再拖给别的窗口
+            _chkKeep = new CheckBox();
+            _chkKeep.AutoSize = true;
+            _chkKeep.Text = "缩略图拖出去后，环上保留一份（关掉就是拖出去即从环上移走）";
+            _chkKeep.Checked = s.KeepAfterDragOut;
+            g.Controls.Add(Row(_chkKeep), 0, 8);
 
             _chkDragFile = new CheckBox();
             _chkDragFile.AutoSize = true;
@@ -1138,6 +1146,7 @@ namespace SnapWheel
                 s.ShowBalloon = _chkBalloon.Checked;
                 s.CheckUpdate = _chkUpdate.Checked;
                 s.DragOutAsFile = _chkDragFile.Checked;
+                s.KeepAfterDragOut = _chkKeep.Checked;   // 0.6.0：拖出后是否留一份
             }
             if (_built[1])
             {
