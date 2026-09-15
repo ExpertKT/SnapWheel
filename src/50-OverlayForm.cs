@@ -233,6 +233,7 @@ namespace SnapWheel
             // 只重绘胶囊那一小块。原来这里是 Invalidate() —— 全窗体重绘，而浮层是**全屏大小**
             // （2560x1440），比例展开动画每帧重画整个屏幕，用户反馈的"比例动画卡顿"就是它。
             Rectangle dirty = _panelBounds;
+            if (_toggleRect.Width > 0) dirty = Rectangle.Union(dirty, _toggleRect);   // 并上按钮那块，否则展开/收起留残影
             dirty.Inflate(60, 60);                 // 展开时两侧还有位移，留点余量
             if (dirty.Width <= 0 || dirty.Height <= 0) dirty = ClientRectangle;
 
@@ -409,6 +410,8 @@ namespace SnapWheel
 
         void DrawChips(Graphics g)
         {
+            // 没框选就没有比例可设：不显示胶囊，免得按钮悬在半空（原来按展开后的总宽居中，收起时按钮偏左）
+            if (!_hasSel) { _toggleRect = Rectangle.Empty; _panelBounds = Rectangle.Empty; return; }
             PlaceChips();
             PlaceInfoPanel();
             if (_chips == null) return;
