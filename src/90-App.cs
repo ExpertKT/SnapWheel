@@ -366,11 +366,29 @@ namespace SnapWheel
                     if (cf.UseClipboard)
                     {
                         // 用户选的是「复制到剪贴板」：不走模拟拖放，直接把图写进剪贴板。
+                        //
+                        // 关键：**一次放多种格式**。
+                        // 之前只放了位图（Clipboard.SetImage），日志证明确实写进去了，
+                        // 但很多程序（尤其微信）粘贴不出来 —— 它们更认「文件」而不是「位图」。
+                        // 所以现在同时放两样：① 文件路径（FileDrop）② 位图，让目标程序挑它能用的。
                         // 先登记"这张剪贴板是我们自己写的"，否则"复制即收纳"会把刚复制的图又收一遍。
                         SelfClipboard.Note(item.Image);
-                        Clipboard.SetImage(item.Image);
-                        SelfClipboard.NoteSequence();
-                        Err.Log("Carry.Clipboard", new Exception("已把图写入剪贴板（Image 非空=" + (item.Image != null) + "）"));
+                        try
+                        {
+                            DataObject dob = new DataObject();
+                            dob.SetData(DataFormats.Bitmap, item.Image);
+                            string file = st.EnsureFile(item);
+                            if (!string.IsNullOrEmpty(file))
+                            {
+                                System.Collections.Specialized.StringCollection files = new System.Collections.Specialized.StringCollection();
+                                files.Add(file);
+                                dob.SetFileDropList(files);
+                            }
+                            Clipboard.SetDataObject(dob, true);
+                            SelfClipboard.NoteSequence();
+                            Err.Log("Carry.Clipboard", new Exception("已写入剪贴板：位图 + 文件[" + file + "]"));
+                        }
+                        catch (Exception cex) { Err.Log("Carry.Clipboard", cex); }
                         if (_settings.ShowBalloon) _tray.ShowBalloonTip(6000,
                             Lang.T("已复制到剪贴板", "Copied to clipboard"),
                             Lang.T("切到目标窗口按 Ctrl+V 就能粘贴。", "Switch to the target window and press Ctrl+V."),
