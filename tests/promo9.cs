@@ -79,18 +79,18 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, no + " / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 // 标题（hero 那张更大）
-                float ts = hero ? 72 : 62;   // 主图 96 太大（压住副文案），收到 72 与其余统一      // 统一 62：76 太大（长标题会被右边缘裁），62 既齐又放得下 11 字
+                float ts = 62;                                  // 全统一：不再给主图单独放大（那会让它和图5 对齐）   // 主图 96 太大（压住副文案），收到 72 与其余统一      // 统一 62：76 太大（长标题会被右边缘裁），62 既齐又放得下 11 字
                 using (Font ft = new Font(FONT, ts, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Color.White))
-                    TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, title, ft, new Point(80, 216), Color.White, TextFormatFlags.NoPadding);
 
-                int y = hero ? 416 : 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
-                using (Font fl = new Font(FONT, FitSize(g, line1, hero ? 40 : 36, 1080 - 168)))
+                int y = 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
+                using (Font fl = new Font(FONT, FitSize(g, line1, 36, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { TextRenderer.DrawText(g, line1, fl, new Point(84, (int)y), Color.FromArgb(228, 236, 244, 252), TextFormatFlags.NoPadding); }
                 using (Font fs = new Font(FONT, FitSize(g, line2, 28, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Sub))
-                { TextRenderer.DrawText(g, line2, fs, new Point(84, (int)(y + (hero ? 78 : 58))), Color.FromArgb(148, 158, 178), TextFormatFlags.NoPadding); }
+                { TextRenderer.DrawText(g, line2, fs, new Point(84, (int)(y + 58)), Color.FromArgb(148, 158, 178), TextFormatFlags.NoPadding); }
 
                 // 右上角标（hero 打新，其它打卖点）
                 if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 1080 - 300, 122, 22);   // 右上角：原来贴在文案下，会压住第二行
