@@ -45,7 +45,7 @@ namespace SnapWheel
         // ---- 外观风格（新拟态 + 扁平化 + 毛玻璃）----
         public string UiStyle = "neu";        // neu=新拟态+毛玻璃(默认) / flat=纯扁平 / solid=高对比不透明
         // 界面语言："zh" / "en"（0.6.0 第一轮 i18n；切换后重启生效）
-        public string UiLanguage = "zh";
+        public string UiLanguage = "";           // ""=跟随系统语言（默认）/ "zh" / "en"
         public int GlassPercent = 40;         // 玻璃面板不透明度 20..100
         public int CardRadius = 14;           // 卡片圆角（占最小边的百分比）0..30
         public int ShadowPercent = 55;        // 阴影强度 0..100

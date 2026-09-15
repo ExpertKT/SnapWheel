@@ -50,7 +50,7 @@ namespace SnapWheel
                 try { _tray.ShowBalloonTip(4000, "SnapWheel 快照轮环遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
                 catch { }
             };
-            Lang.Init(_settings.UiLanguage);   // 界面语言：启动时定，切换后重启生效
+            Lang.Init(string.IsNullOrEmpty(_settings.UiLanguage) ? Lang.Guess() : _settings.UiLanguage);   // 界面语言：没选过就按系统语言，切换后重启生效
 
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add(Lang.T("截图", "Screenshot"), null, new EventHandler(OnHotkey));
