@@ -42,6 +42,11 @@ namespace SnapWheel
         CarryHintForm _hint;            // 屏幕底部的操作提示（独立小窗，不抢焦点）
         DateTime _started;
         bool _busy;                      // 正在执行"放下"的模拟，别让定时器再插一脚
+        // 一次性动作键要用"边沿"判断：只在"刚才没按、现在按下"那一刻触发。
+        // 不这么做会出事 —— 传递热键是 Ctrl+Alt+C，用户按完 C 键还按着不放，
+        // 窗口一出现就检测到 C 是按下状态，立刻当成"复制到剪贴板"并关闭，
+        // 表现就是"闪了一下就没了"（用户实测出来的）。
+        bool _prevEnter, _prevEsc, _prevC;
 
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
@@ -102,6 +107,15 @@ namespace SnapWheel
             catch { return false; }
         }
 
+        /// <summary>只在"刚才没按、现在按下"的那一刻返回 true（上升沿）。</summary>
+        static bool Rising(ref bool prev, Keys k)
+        {
+            bool now = Down(k);
+            bool edge = now && !prev;
+            prev = now;
+            return edge;
+        }
+
         void OnTick(object sender, EventArgs e)
         {
             if (_busy) return;
@@ -134,9 +148,16 @@ namespace SnapWheel
                     ApplyPos();
                 }
 
-                if (Down(Keys.Enter) || Down(Keys.Space)) { DoDrop(); return; }
-                if (Down(Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板（不模拟拖放）
-                if (Down(Keys.Escape)) { Cancel(); return; }
+                // 一次性动作：必须用上升沿（见 _prev* 字段的注释）。
+                // 另外刚显示后的 350ms 里不响应按键 —— 用户刚按完热键，
+                // 手指还压在键上，那段窗口期不该被当成"用户操作"。
+                bool warmed = (DateTime.Now - _started).TotalMilliseconds > 350;
+                if (warmed)
+                {
+                    if (Rising(ref _prevEnter, Keys.Enter) || Rising(ref _prevEnter, Keys.Space)) { DoDrop(); return; }
+                    if (Rising(ref _prevC, Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板
+                    if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
+                }
             }
             catch { }
         }
