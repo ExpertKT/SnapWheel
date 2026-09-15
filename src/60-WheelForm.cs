@@ -34,6 +34,7 @@ namespace SnapWheel
         // 置顶抑制计数：>0 时不做周期置顶（截图/设置/打赏/引导期间）。用计数而不是布尔，
         // 这样多处嵌套也不会互相把对方的状态冲掉。
         public static int SuppressTopMost = 0;
+        static int _suppressSeen = 0;      // 安全阀：抑制计数开始 > 0 的时刻
         // 三个小按钮的发光进度（0..1 平滑趋近）：悬停时光是淡进来的，不是啪一下亮（用户反馈）
         float _closeGlow = 0f, _gearGlow = 0f, _shootGlow = 0f;   // 上一次校验置顶的时间（见 AnimTick）        // 只给被删那张及其上方的图加补偿：下面的图本来就不该动
         // ---- 省电模式（见 12-Power.cs）----

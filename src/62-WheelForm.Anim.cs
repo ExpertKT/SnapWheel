@@ -354,6 +354,15 @@ namespace SnapWheel
             // 这里每 2 秒校验一次，被排下去了就重新抢回来。窗口本来就在顶上时这次调用几乎无成本。
             // 用**抑制计数**而不是改 TopMost 属性：多处嵌套调用时（截图时设 false、期间又打开设置）
             // 恢复出来的会是 false，状态就永久丢了（用户报的"snapwheel 和设置窗口莫名不在顶层"）。
+            // 安全阀：正常使用不可能抑制置顶超过 60 秒。超时就说明有地方 ++ 之后没能 --,
+            // （比如 ShowDialog 抛异常跳过了收尾），强制清零自愈，不然轮盘会永远不再置顶。
+            if (SuppressTopMost > 0)
+            {
+                if (_suppressSeen == 0) _suppressSeen = Environment.TickCount;
+                else if (Environment.TickCount - _suppressSeen > 60000) { SuppressTopMost = 0; _suppressSeen = 0; }
+            }
+            else _suppressSeen = 0;
+            // 安全阀用的时间戳（第一次看到抑制计数 > 0 的时刻）
             if (Visible && _settings.AlwaysOnTop && SuppressTopMost == 0 && (DateTime.Now - _topMostAt).TotalSeconds > 2.0)
             {
                 _topMostAt = DateTime.Now;
