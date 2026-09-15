@@ -39,6 +39,7 @@ namespace SnapWheel
         Point _pos;                      // 假光标的屏幕坐标
         float _fx, _fy;                  // 亚像素累积（不然慢速移动会卡顿或跳格）
         System.Windows.Forms.Timer _tick;
+        CarryHintForm _hint;            // 屏幕底部的操作提示（独立小窗，不抢焦点）
         DateTime _started;
         bool _busy;                      // 正在执行"放下"的模拟，别让定时器再插一脚
 
@@ -70,6 +71,9 @@ namespace SnapWheel
             _tick.Interval = TickMs;
             _tick.Tick += new EventHandler(OnTick);
             _tick.Start();
+
+            // 操作提示条：第一次用传递模式的人不可能知道按什么键，所以必须写在屏幕上。
+            try { _hint = new CarryHintForm(); _hint.Show(); } catch { }
         }
 
         protected override void OnShown(EventArgs e)
@@ -141,6 +145,7 @@ namespace SnapWheel
         {
             try { _tick.Stop(); } catch { }
             Confirmed = false;
+            try { if (_hint != null) _hint.Close(); } catch { }
             try { Close(); } catch { }
         }
 
@@ -153,6 +158,7 @@ namespace SnapWheel
             DropPoint = _pos;
 
             // 先在屏幕上把假光标藏起来，接下来的动作交给真实光标
+            try { if (_hint != null) _hint.Close(); } catch { }
             try { Opacity = 0; } catch { }
             try { Hide(); } catch { }
             Application.DoEvents();
@@ -246,6 +252,7 @@ namespace SnapWheel
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             try { _tick.Stop(); _tick.Dispose(); } catch { }
+            try { if (_hint != null) { _hint.Close(); _hint.Dispose(); _hint = null; } } catch { }
             base.OnFormClosed(e);
         }
 
@@ -255,6 +262,74 @@ namespace SnapWheel
             if (keyData == Keys.Escape) { Cancel(); return true; }
             if (keyData == Keys.Enter || keyData == Keys.Space) { DoDrop(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+    }
+    /// <summary>
+    /// 传递模式的操作提示条：贴在屏幕底部居中，只说明按什么键，不接受任何操作。
+    /// 单独一个小窗而不是画在假光标窗口里 —— 假光标窗口只有光标那么大，
+    /// 而且它跟着光标到处跑，提示条会一直晃。
+    /// </summary>
+    class CarryHintForm : Form
+    {
+        const int PadX = 22, PadY = 12;
+
+        public CarryHintForm()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            TopMost = true;
+            BackColor = Color.FromArgb(198, 20, 22, 26);
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+
+            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
+                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            using (Font f = HintFont())
+            {
+                SizeF sz;
+                using (Bitmap b = new Bitmap(1, 1))
+                using (Graphics g = Graphics.FromImage(b))
+                    sz = g.MeasureString(s, f, new PointF(0, 0), StringFormat.GenericTypographic);
+                ClientSize = new Size((int)Math.Ceiling((double)sz.Width) + PadX * 2, (int)Math.Ceiling((double)sz.Height) + PadY * 2);
+            }
+
+            // 贴在"光标所在那块屏幕"的底部居中
+            Rectangle scr = Screen.FromPoint(Cursor.Position).WorkingArea;
+            Location = new Point(scr.Left + (scr.Width - Width) / 2, scr.Bottom - Height - 40);
+        }
+
+        static Font HintFont()
+        {
+            try { return new Font(DrawKit.UI, 10.5f); }
+            catch { return new Font(FontFamily.GenericSansSerif, 10.5f); }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
+                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            using (Font f = HintFont())
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
+                DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
+                                   b.Color, 11, ClientSize.Width - PadX * 2 + 12, DrawKit.UI, FontStyle.Regular, Align.Center);
+        }
+
+        // 不抢焦点：不然用户按 Alt+Tab 切窗口时提示条会把焦点抢回来
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            try
+            {
+                TopMost = true;
+                Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                    Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            }
+            catch { }
         }
     }
 }

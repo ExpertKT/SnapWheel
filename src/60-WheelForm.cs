@@ -31,6 +31,7 @@ namespace SnapWheel
         // 注意用的是 _targetOffset（用户意图）而不是 _offset（动画当前值）：
         // 滚轮刚滚完那一下，动画还在追，但用户心里已经是新那张了。
         public int CurrentIndex
+
         {
             get
             {
@@ -45,6 +46,23 @@ namespace SnapWheel
                 }
                 catch { return -1; }
             }
+        }
+
+        // 第 i 张缩略图在**屏幕**上的位置（返回矩形，X/Y 存的是中心点）。
+        // 传递模式用它当「按下」的起点：传递模式是真的去动鼠标模拟拖放，
+        // 起点必须落在那张缩略图真正所在的地方 —— 用窗口中心当起点，
+        // 有些程序不会认（它们要求按下点确实在某张图上）。
+        public Rectangle ItemScreenRect(int i)
+        {
+            try
+            {
+                RectangleF r = DrawnRect(i);
+                if (r.Width < 2 || r.Height < 2) return Rectangle.Empty;
+                Point tl = PointToScreen(new Point((int)Math.Round(r.X), (int)Math.Round(r.Y)));
+                int w = (int)Math.Round(r.Width), h = (int)Math.Round(r.Height);
+                return new Rectangle(tl.X + w / 2, tl.Y + h / 2, w, h);
+            }
+            catch { return Rectangle.Empty; }
         }
         // 删除后让上面的图滑下来用的过渡量：删除瞬间设成 -一个步距（抵消刚发生的那格下移），
         // 再由 AnimTick 每帧衰减回 0 —— 图从旧位置平滑滑到新位置，而不是瞬间跳过去。

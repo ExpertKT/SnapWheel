@@ -20,6 +20,7 @@ namespace SnapWheel
         WheelManager _wheels;
         NotifyIcon _tray;
         HotkeyForm _hotkey;
+        HotkeyForm _carryKey;      // 传递模式的全局热键（轮盘是「不激活」窗口，收不到键盘，只能靠热键）
         WheelForm _wheel;
         // 贴在屏幕上的那些图钉（中键点缩略图产生），退出时一起收掉
         readonly System.Collections.Generic.List<PinForm> _pins = new System.Collections.Generic.List<PinForm>();
@@ -81,6 +82,7 @@ namespace SnapWheel
             _tray.DoubleClick += new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); });
 
             RegisterHotkeyAndNotify();
+            RegisterCarryHotkey();
 
             // 启动后到后台检查有没有新版本（不挡启动；设置里可以关）
             if (_settings.CheckUpdate)
@@ -325,7 +327,12 @@ namespace SnapWheel
 
             // 起点：轮盘上那张缩略图大致所在的位置。模拟拖放时要从这里"按下"，
             // 目标程序才会认为图是从轮盘里拖出来的。
-            Point origin = new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);
+            // 起点：那张缩略图在屏幕上的真实位置。模拟拖放要从这里「按下」——
+            // 有些程序要求按下点确实落在图上，用窗口中心当起点它们不认。
+            Rectangle itemRect = _wheel.ItemScreenRect(idx);
+            Point origin = (itemRect.Width > 2)
+                ? new Point(itemRect.X, itemRect.Y)                                            // Rectangle.X/Y 存的是中心
+                : new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);   // 拿不到就退回中心
 
             CarryForm cf = new CarryForm(thumb, origin);
             try { cf.ShowDialog(_wheel); }
@@ -482,6 +489,26 @@ namespace SnapWheel
             }
         }
 
+        // 传递模式的全局热键：Ctrl+Alt+C。
+        // 为什么必须有它：轮盘窗口是用 SWP_NOACTIVATE 显示的（为了不抢走别的程序的焦点），
+        // 所以它**收不到键盘输入** —— 想在轮盘上用键盘选图、进传递模式，只能靠全局热键。
+        void RegisterCarryHotkey()
+        {
+            try
+            {
+                if (_carryKey == null)
+                {
+                    _carryKey = new HotkeyForm();
+                    _carryKey.Hotkey += new EventHandler(delegate(object o, EventArgs e)
+                    {
+                        try { StartCarry(); } catch (Exception ex) { Err.Log("Carry", ex); }
+                    });
+                }
+                _carryKey.Register(Native.MOD_CONTROL | Native.MOD_ALT, (uint)Keys.C);
+            }
+            catch { }
+        }
+
         void RegisterHotkeyAndNotify()
         {
             uint m, v;
@@ -527,6 +554,7 @@ namespace SnapWheel
             {
                 _wheels.ApplySettings();
                 RegisterHotkeyAndNotify();
+            RegisterCarryHotkey();
                 // 界面侧收尾都在这里：以前这句里还夹着一句 HideWheel()，
                 // 结果每次点设置里的确定，轮盘都当场消失（详见 WheelForm.AfterSettingsApplied）
                 _wheel.AfterSettingsApplied();
