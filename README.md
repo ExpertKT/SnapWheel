@@ -1,5 +1,7 @@
 # SnapWheel 快照轮环
 
+> **English?** See [README.en.md](README.en.md) for the English version.
+
 > **截完图还要先保存、再切窗口、再去文件夹里翻出来 —— 其实你只是想把这张图粘进微信。**
 
 **SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
