@@ -354,38 +354,26 @@ namespace SnapWheel
             finally { bmp.Dispose(); }
         }
 
-        // 0.7.0：贴 emoji —— 弹出面板选一个，插到选区中心；之后和文字一样可拖动、可缩放、可删除
+        // 0.7.0：贴 emoji —— 弹面板选一个，插到选区中心；之后和文字一样可拖动、可缩放、可删除。
+        // 面板是**非模态**的：模态窗口不会失去激活，"点到外面就关"那条就永远不触发（第一版栽在这）。
         void PickEmoji()
         {
-            using (EmojiPicker pk = new EmojiPicker((int)Math.Round(_k * 100)))
+            Rectangle r = _toolBtns[IdxEmoji];
+            Point sp = PointToScreen(new Point(r.Left, r.Bottom + 6));
+            EmojiPicker.Popup(this, sp, _k, delegate(string g)
             {
-                try
-                {
-                    Rectangle r = _toolBtns[IdxEmoji];
-                    Point sp = PointToScreen(new Point(r.Left, r.Bottom + 4));
-                    Rectangle scr = Screen.FromPoint(sp).WorkingArea;
-                    if (sp.X + pk.Width > scr.Right) sp.X = Math.Max(scr.Left, scr.Right - pk.Width);
-                    if (sp.Y + pk.Height > scr.Bottom) sp.Y = Math.Max(scr.Top, r.Top - pk.Height - 4);
-                    pk.Location = sp;
-                }
-                catch { }
-                pk.ShowDialog(this);
-                if (pk.Picked != null)
-                {
-                    Shape s = new Shape();
-                    s.Kind = AnnotKind.Emoji;
-                    s.Text = pk.Picked;
-                    s.Size = Math.Max(24f, _textSize * 1.5f);     // emoji 通常要比文字大一点才好看
-                    s.Color = _annotColor;
-                    float cx = _hasSel ? _c.X : _vs.Width / 2f;
-                    float cy = _hasSel ? _c.Y : _vs.Height / 2f;
-                    s.A = new PointF(cx, cy);
-                    s.B = s.A;
-                    _shapes.Add(s);
-                    _sel = s;
-                    _tool = AnnotKind.Select;
-                }
-            }
+                Shape s = new Shape();
+                s.Kind = AnnotKind.Emoji;
+                s.Text = g;
+                s.Size = Math.Max(28f, _textSize * 1.5f);     // emoji 通常比文字大一点才好看
+                s.Color = _annotColor;
+                s.A = new PointF(_hasSel ? _c.X : _vs.Width / 2f, _hasSel ? _c.Y : _vs.Height / 2f);
+                s.B = s.A;
+                _shapes.Add(s);
+                _sel = s;
+                _tool = AnnotKind.Select;
+                Invalidate();
+            });
         }
         void DrawOne(Graphics g, Shape s)
         {
@@ -393,16 +381,15 @@ namespace SnapWheel
             g.SmoothingMode = SmoothingMode.AntiAlias;
             switch (s.Kind)
             {
-                case AnnotKind.Emoji:
+                    case AnnotKind.Emoji:
                     {
-                        // 用 TextRenderer（GDI）画：GDI+ 会把 Windows 的彩色 emoji 画成黑白
-                        float ef = Math.Max(8f, s.Size * _k);
-                        using (Font f = new Font("Segoe UI Emoji", ef))
+                        // 贴 EmojiRender 渲染好的彩色位图（GDI/GDI+ 只会画黑白）
+                        int epx = (int)Math.Max(8f, s.Size * _k);
+                        Bitmap eb = EmojiRender.Get(s.Text, epx);
+                        if (eb != null)
                         {
-                            Size esz = TextRenderer.MeasureText(s.Text, f);
-                            TextRenderer.DrawText(g, s.Text, f,
-                                new Point((int)(s.A.X - esz.Width / 2f), (int)(s.A.Y - esz.Height / 2f)),
-                                Color.White, TextFormatFlags.NoPadding);
+                            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            g.DrawImage(eb, s.A.X - eb.Width / 2f, s.A.Y - eb.Height / 2f, eb.Width, eb.Height);
                         }
                         break;
                     }
