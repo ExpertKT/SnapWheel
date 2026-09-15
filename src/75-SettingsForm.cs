@@ -525,7 +525,7 @@ namespace SnapWheel
 
             _chkAutoStart = new CheckBox();
             _chkAutoStart.AutoSize = true;
-            _chkAutoStart.Text = Lang.T("开机自动启动（登录后自动在后台运行）", "Start with Windows (runs in background after sign-in)");
+            _chkAutoStart.Text = Lang.T("开机自动启动（登录后自动在后台运行）", "Start with Windows\n(runs in background after sign-in)");
             _chkAutoStart.Checked = AutoRun.IsEnabled();
             _chkAutoStart.Margin = new Padding(0, 4, 0, 4);
             g.Controls.Add(_chkAutoStart, 0, 2);
@@ -599,7 +599,7 @@ namespace SnapWheel
             // （留着的话整行 762 > 720，右列会挨着裁）—— Lang.T("显示托盘气泡提示", "Show tray balloon tips")这个名字本身已经说明它是什么。
             _chkCopy = new CheckBox();
             _chkCopy.AutoSize = true;
-            _chkCopy.Text = Lang.T("截图后同时复制到剪贴板（要立刻粘贴时直接 Ctrl+V）", "Also copy to the clipboard on capture (so Ctrl+V just works)");
+            _chkCopy.Text = Lang.T("截图后同时复制到剪贴板（要立刻粘贴时直接 Ctrl+V）", "Also copy to the clipboard on capture\n(so Ctrl+V just works)");
             _chkCopy.Checked = s.CopyOnCapture;
             _chkCopy.Margin = new Padding(S(6), 3, 0, 3);
 
@@ -615,14 +615,14 @@ namespace SnapWheel
 
             _chkUpdate = new CheckBox();
             _chkUpdate.AutoSize = true;
-            _chkUpdate.Text = Lang.T("启动时检查有没有新版本（只提示，不自动安装）", "Check for updates on start (notify only, never auto-install)");
+            _chkUpdate.Text = Lang.T("启动时检查有没有新版本（只提示，不自动安装）", "Check for updates on start\n(notify only, never auto-install)");
             _chkUpdate.Checked = s.CheckUpdate;
             g.Controls.Add(Row(_chkUpdate), 0, 7);
 
             // 拖出之后要不要在环上留一份（默认留）：拖出是 Copy 语义，留着才能再拖给别的窗口
             _chkKeep = new CheckBox();
             _chkKeep.AutoSize = true;
-            _chkKeep.Text = Lang.T("缩略图拖出去后，环上保留一份（关掉就是拖出去即从环上移走）", "Keep a copy in the ring after dragging a thumbnail out (turn off to move it out of the ring)");
+            _chkKeep.Text = Lang.T("缩略图拖出去后，环上保留一份（关掉就是拖出去即从环上移走）", "Keep a copy in the ring after\ndragging a thumbnail out");
             _chkKeep.Checked = s.KeepAfterDragOut;
             g.Controls.Add(Row(_chkKeep), 0, 8);
 
@@ -674,7 +674,7 @@ namespace SnapWheel
 
             _chkCollapse = new CheckBox();
             _chkCollapse.AutoSize = true;
-            _chkCollapse.Text = Lang.T("收起状态：缩到屏幕边上留个小把手", "Collapse into a small pull-tab at the screen edge");
+            _chkCollapse.Text = Lang.T("收起状态：缩到屏幕边上留个小把手", "Collapse into a small pull-tab\nat the screen edge");
             _chkCollapse.Checked = s.CollapseMode;
             g.Controls.Add(Row(_chkCollapse), 1, 1);
 
@@ -684,7 +684,7 @@ namespace SnapWheel
             // 760×574（窗口允许缩到的最小尺寸）下页面格只有 346px、内容已经要 324px，加一行就顶出去被裁了。
             _chkScrollReset = new CheckBox();
             _chkScrollReset.AutoSize = true;
-            _chkScrollReset.Text = Lang.T("截图后把滚动位置重置到最新那张（好让滑入动画看得见）", "Reset scroll to the newest item after capture (so the slide-in animation is visible)");
+            _chkScrollReset.Text = Lang.T("截图后把滚动位置重置到最新那张（好让滑入动画看得见）", "Reset scroll to the newest item\nafter capture");
             _chkScrollReset.Checked = s.ResetScrollOnCapture;
             _chkScrollReset.Margin = new Padding(S(30), 4, 0, 4);
             Control peekRow = Row(MkLabel(Lang.T("长按放大(%)", "Hold-to-zoom (%)")), _numPeek, _chkScrollReset);
@@ -755,7 +755,7 @@ namespace SnapWheel
 
             _chkSingle = new CheckBox();
             _chkSingle.AutoSize = true;
-            _chkSingle.Text = Lang.T("只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）", "Single handle: click the left one to expand, click again to collapse (handy with an auto-hidden taskbar)");
+            _chkSingle.Text = Lang.T("只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）", "Single handle: click to expand,\nclick again to collapse");
             _chkSingle.Checked = s.NubSingle;
             Control singleRow = Row(_chkSingle);
             g.Controls.Add(singleRow, 0, 7);
@@ -815,7 +815,7 @@ namespace SnapWheel
 
             _chkGlassRefresh = new CheckBox();
             _chkGlassRefresh.AutoSize = true;
-            _chkGlassRefresh.Text = Lang.T("毛玻璃定时刷新（轮盘挂久了背景也是新的）", "Refresh frosted glass periodically (background stays current)");
+            _chkGlassRefresh.Text = Lang.T("毛玻璃定时刷新（轮盘挂久了背景也是新的）", "Refresh frosted glass periodically\n(background stays current)");
             _chkGlassRefresh.Checked = s.GlassRefresh;
             g.Controls.Add(Row(_chkGlassRefresh), 0, 3);
 
@@ -890,7 +890,7 @@ namespace SnapWheel
 
             CheckBox chkAdv = new CheckBox();
             chkAdv.AutoSize = true;
-            chkAdv.Text = Lang.T("显示高级选项（外观微调：玻璃 / 圆角 / 阴影）", "Show advanced options (fine-tune glass / corners / shadow)");
+            chkAdv.Text = Lang.T("显示高级选项（外观微调：玻璃 / 圆角 / 阴影）", "Show advanced options\n(fine-tune glass / corners / shadow)");
             chkAdv.Margin = new Padding(0, 10, 0, 0);
             chkAdv.CheckedChanged += new EventHandler(delegate(object o, EventArgs e2) {
                 _advR.Visible = chkAdv.Checked;
@@ -905,7 +905,7 @@ namespace SnapWheel
             // EnsureFit 会在翻到它时把窗口补够（只长大不裁切），不会切掉这一行。
             _chkPower = new CheckBox();
             _chkPower.AutoSize = true;
-            _chkPower.Text = Lang.T("省电模式：用电池时停掉定时毛玻璃刷新、重绘减半（插电自动恢复）", "Power saving: on battery, stop glass refresh and halve redraws (auto-restores on AC)");
+            _chkPower.Text = Lang.T("省电模式：用电池时停掉定时毛玻璃刷新、重绘减半（插电自动恢复）", "Power saving: on battery, stop glass refresh\nand halve redraws (auto-restores on AC)");
             _chkPower.Margin = new Padding(0, 10, 0, 0);
             _chkPower.Checked = s.PowerSave;
             g.Controls.Add(_chkPower, 0, 6);
