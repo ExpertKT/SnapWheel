@@ -356,17 +356,19 @@ namespace SnapWheel
 
         // 0.7.0：贴 emoji —— 弹面板选一个，插到选区中心；之后和文字一样可拖动、可缩放、可删除。
         // 面板是**非模态**的：模态窗口不会失去激活，"点到外面就关"那条就永远不触发（第一版栽在这）。
+        // 0.7.0：贴符号 —— 弹面板选一个（面板顶部可选颜色）；之后和文字一样可拖动、可缩放、可删除。
+        // 面板是非模态的：模态窗口不会失去激活，"点到外面就关"那条就永远不触发。
         void PickEmoji()
         {
             Rectangle r = _toolBtns[IdxEmoji];
             Point sp = PointToScreen(new Point(r.Left, r.Bottom + 6));
-            EmojiPicker.Popup(this, sp, _k, delegate(string g)
+            SymbolPicker.Popup(this, sp, _k, _annotColor, delegate(string g, Color c)
             {
                 Shape s = new Shape();
                 s.Kind = AnnotKind.Emoji;
                 s.Text = g;
-                s.Size = Math.Max(28f, _textSize * 1.5f);     // emoji 通常比文字大一点才好看
-                s.Color = _annotColor;
+                s.Color = c;                                   // 面板里选的颜色
+                s.Size = Math.Max(24f, _textSize * 1.4f);
                 s.A = new PointF(_hasSel ? _c.X : _vs.Width / 2f, _hasSel ? _c.Y : _vs.Height / 2f);
                 s.B = s.A;
                 _shapes.Add(s);
@@ -383,13 +385,17 @@ namespace SnapWheel
             {
                     case AnnotKind.Emoji:
                     {
-                        // 贴 EmojiRender 渲染好的彩色位图（GDI/GDI+ 只会画黑白）
-                        int epx = (int)Math.Max(8f, s.Size * _k);
-                        Bitmap eb = EmojiRender.Get(s.Text, epx);
-                        if (eb != null)
+                        // 矢量符号（以前的 emoji 在 .NET Framework 里只能画出黑色剪影）：
+                        // 字体自带字形，单色、可上色、放大不糊，和箭头/方框/文字是同一套画法
+                        float sf2 = Math.Max(10f, s.Size * _k);
+                        using (Font f = new Font("Segoe UI Symbol", sf2))
+                        using (SolidBrush b = new SolidBrush(s.Color))
                         {
-                            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                            g.DrawImage(eb, s.A.X - eb.Width / 2f, s.A.Y - eb.Height / 2f, eb.Width, eb.Height);
+                            StringFormat fmt = new StringFormat();
+                            fmt.Alignment = StringAlignment.Center;
+                            fmt.LineAlignment = StringAlignment.Center;
+                            g.DrawString(s.Text, f, b,
+                                new RectangleF(s.A.X - sf2, s.A.Y - sf2 * 0.85f, sf2 * 2f, sf2 * 1.7f), fmt);
                         }
                         break;
                     }

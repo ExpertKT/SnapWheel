@@ -45,13 +45,6 @@ foreach ($cand in @(
     if (Test-Path $cand) { $winrtRefs = @("/r:$cand"); break }
 }
 
-# 彩色 emoji：Windows 的彩色靠 COLR/CPAL 表，GDI/GDI+ 都不认，只有 WPF(DirectWrite) 能渲染。
-# 这两个是 .NET Framework 自带的程序集（在 Framework64\v4.0.30319\WPF 下），不算第三方依赖。
-$wpfDir = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\WPF"
-foreach ($w in @("WindowsBase.dll", "PresentationCore.dll")) {
-  $wp = Join-Path $wpfDir $w
-  if (Test-Path $wp) { $winrtRefs += "/r:$wp" }
-}
 if ($winrtRefs.Count -eq 0) { Write-Host "  [i] 没找到 System.Runtime.WindowsRuntime.dll —— OCR 会编译不进去" -ForegroundColor Yellow }
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
