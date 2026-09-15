@@ -117,13 +117,13 @@ namespace SnapWheel
             base.OnMouseWheel(e);
         }
 
-        public GuideForm() : this(AppInfo.Name + " 快照轮环 · 使用说明", "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", false) { }
+        public GuideForm() : this(AppInfo.Name + " 快照轮环 · 使用说明", Lang.T("轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", "The ring sits in a screen corner; scroll the mouse wheel over it to browse."), false) { }
 
         // firstEver=true：全新安装的欢迎引导；false：升级后自动弹的"这次多了什么"
         public GuideForm(bool firstEver) : this(
-            firstEver ? "欢迎用 SnapWheel 快照轮环" : ("SnapWheel 更新到 v" + AppInfo.Version),
-            firstEver ? "轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。"
-                      : "这次加了新东西 —— 下面标了「新」的两条就是，一分钟看完就能用上。",
+            firstEver ? Lang.T("欢迎用 SnapWheel 快照轮环", "Welcome to SnapWheel") : (Lang.T("SnapWheel 更新到 v", "SnapWheel updated to v") + AppInfo.Version),
+            firstEver ? Lang.T("轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", "The ring sits in a screen corner; scroll the mouse wheel over it to browse.")
+                      : Lang.T("这次加了新东西 —— 下面标了「新」的两条就是，一分钟看完就能用上。", "Something new in this version - the two items marked [NEW] below; a minute to read and you are using them."),
             !firstEver) { }
 
         GuideForm(string title, string subtitle, bool markNew)
@@ -167,21 +167,21 @@ namespace SnapWheel
 
             y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
 
-            string nw = markNew ? "【新】" : "";
-            AddTip(mL, ref y, "第 1 步：截一张", "按 " + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
-            AddTip(mL, ref y, nw + "截完直接标注", "浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。");
-            AddTip(mL, ref y, "第 2 步：拖出去（最常用）", "把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。");
-            AddTip(mL, ref y, nw + "要对照着看：贴到屏幕上", "缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。");
-            AddTip(mL, ref y, "反过来：拖回来", "从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。");
-            AddTip(mL, ref y, "连拖都不用：复制即收纳", "在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。");
-            AddTip(mL, ref y, "按住看大图", "缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。");
-            AddTip(mL, ref y, "万能键（可以改成你要的）", "长按环内侧那个圆盘会弹出四个方向，往哪个方向松手就执行哪个动作。默认：上=新建轮盘，右=下一个，下=删除，左=上一个 —— 四个动作都能在设置里换。");
-            AddTip(mL, ref y, "收起态（默认关）", "打开后不用时会缩成屏幕边上的小把手，点一下用彩虹动画拉出来。想让桌面更干净再开。");
-            AddTip(mL, ref y, "托盘", "托盘右键还有：导入图片、新手引导、重播开启动画、设置、退出。");
+            string nw = markNew ? Lang.T("【新】", "[NEW]") : "";
+            AddTip(mL, ref y, Lang.T("第 1 步：截一张", "Step 1: capture"), "按 " + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
+            AddTip(mL, ref y, nw + Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
+            AddTip(mL, ref y, Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
+            AddTip(mL, ref y, nw + Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
+            AddTip(mL, ref y, Lang.T("反过来：拖回来", "Or the other way: drag it back"), Lang.T("从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。", "Drop an image from the desktop, a web page or a chat window onto the ring to keep it - drag it out again whenever you need it."));
+            AddTip(mL, ref y, Lang.T("连拖都不用：复制即收纳", "Do not even drag: copy and it is collected"), Lang.T("在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。", "Copy an image anywhere (a screenshot tool, a web page, WeChat) and it slides into the ring. Turn this off in settings if you do not want it."));
+            AddTip(mL, ref y, Lang.T("按住看大图", "Hold to zoom"), Lang.T("缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。", "Hold a thumbnail for ~0.3 s to preview it enlarged; the zoom factor is adjustable in settings."));
+            AddTip(mL, ref y, Lang.T("万能键（可以改成你要的）", "Universal key (rebindable)"), Lang.T("长按环内侧那个圆盘会弹出四个方向，往哪个方向松手就执行哪个动作。默认：上=新建轮盘，右=下一个，下=删除，左=上一个 —— 四个动作都能在设置里换。", "Long-press the dial inside the ring and four directions appear; release towards one to run that action. Defaults: up = new wheel, right = next, down = delete, left = previous - all rebindable in settings."));
+            AddTip(mL, ref y, Lang.T("收起态（默认关）", "Collapsed mode (off by default)"), Lang.T("打开后不用时会缩成屏幕边上的小把手，点一下用彩虹动画拉出来。想让桌面更干净再开。", "When idle it shrinks into a small pull-tab at the screen edge; click it and the ring slides back out. Turn on for a tidier desktop."));
+            AddTip(mL, ref y, Lang.T("托盘", "Tray"), Lang.T("托盘右键还有：导入图片、新手引导、重播开启动画、设置、退出。", "The tray menu also has: import images, getting started, replay startup animation, settings, exit."));
 
             int tipW = _contentW - Ui.S(3);
             Label tip = new Label();
-            tip.Text = "小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。";
+            tip.Text = Lang.T("小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。", "Tip: if you cannot drag images in, check whether SnapWheel was started as administrator (Windows blocks cross-privilege dragging).");
             tip.ForeColor = Color.FromArgb(168, 122, 36);
             tip.Location = new Point(mL + Ui.S(3), y);
             W(tip, tipW);
@@ -193,7 +193,7 @@ namespace SnapWheel
 
             int btnY = contentH + Ui.S(10);                    // 按钮的"内容坐标"
             RoundButton go = new RoundButton();
-            go.Text = "开始使用";
+            go.Text = Lang.T("开始使用", "Get started");
             go.Size = Ui.Sz(124, BtnH);
             go.Fill = Color.FromArgb(0, 122, 204);
             go.FillHover = Color.FromArgb(0, 140, 232);
@@ -205,7 +205,7 @@ namespace SnapWheel
             AcceptButton = go;
 
             _scrollHint = new Label();
-            _scrollHint.Text = "（内容较多，鼠标滚轮可上下翻看）";
+            _scrollHint.Text = Lang.T("（内容较多，鼠标滚轮可上下翻看）", "(long page - use the mouse wheel to scroll)");
             _scrollHint.ForeColor = Color.FromArgb(150, 152, 160);
             _scrollHint.AutoSize = true;
             _scrollHint.Location = new Point(mL, btnY + (go.Height - _scrollHint.Font.Height) / 2);
@@ -343,7 +343,7 @@ namespace SnapWheel
             _contentW = winW - mL - mR;
 
             Label head = new Label();
-            head.Text = "管理员模式下，拖拽会被 Windows 拦住";
+            head.Text = Lang.T("管理员模式下，拖拽会被 Windows 拦住", "In administrator mode Windows blocks dragging");
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.Location = new Point(mL, Ui.S(PadT));
@@ -352,16 +352,16 @@ namespace SnapWheel
             int y = head.Top + head.PreferredSize.Height + Ui.S(8);
 
             Label sub = new Label();
-            sub.Text = "不是 SnapWheel 的毛病，是系统的安全限制（UIPI）：管理员进程和普通程序（资源管理器、微信、浏览器）之间不允许互相拖拽。";
+            sub.Text = Lang.T("不是 SnapWheel 的毛病，是系统的安全限制（UIPI）：管理员进程和普通程序（资源管理器、微信、浏览器）之间不允许互相拖拽。", "This is not SnapWheel's fault - it is a Windows security rule (UIPI): dragging between an elevated process and normal programs (Explorer, WeChat, browsers) is blocked.");
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             sub.Location = new Point(mL + Ui.S(3), y);
             Add2(sub, _contentW - Ui.S(3));
 
             y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
 
-            AddTip(mL, ref y, "想拖拽 → 换普通权限", "点下面那个按钮：SnapWheel 会先退出，再由资源管理器用普通权限重新启动。设置、轮盘、存的图片都不受影响。");
-            AddTip(mL, ref y, "不换权限也能用", "托盘右键「导入图片…」能直接选文件收进轮盘；在任何地方「复制」一张图，它也会自动滑进来 —— 这两个都不受权限影响。");
-            AddTip(mL, ref y, "什么时候才需要管理员", "只有要截「管理员窗口」（任务管理器、某些安装程序）时才需要；平时用普通权限最省事，拖拽也正常。");
+            AddTip(mL, ref y, Lang.T("想拖拽 → 换普通权限", "Want dragging? Switch to normal permissions"), Lang.T("点下面那个按钮：SnapWheel 会先退出，再由资源管理器用普通权限重新启动。设置、轮盘、存的图片都不受影响。", "Click the button below: SnapWheel exits, then Explorer restarts it with normal permissions. Settings, wheels and saved images are untouched."));
+            AddTip(mL, ref y, Lang.T("不换权限也能用", "Works without changing permissions"), Lang.T("托盘右键「导入图片…」能直接选文件收进轮盘；在任何地方「复制」一张图，它也会自动滑进来 —— 这两个都不受权限影响。", "Tray -> Import images... puts files straight into the ring; and copying an image anywhere slides it in automatically. Neither is affected by permissions."));
+            AddTip(mL, ref y, Lang.T("什么时候才需要管理员", "When do you actually need administrator?"), Lang.T("只有要截「管理员窗口」（任务管理器、某些安装程序）时才需要；平时用普通权限最省事，拖拽也正常。", "Only needed to capture elevated windows (Task Manager, some installers). Normal permissions are simpler day to day and dragging works."));
 
             int contentH = y;
             int btnRowH = Ui.S(10) + Ui.S(BtnH) + Ui.S(22);
@@ -369,7 +369,7 @@ namespace SnapWheel
             int btnY = contentH + Ui.S(10);
 
             RoundButton go = new RoundButton();
-            go.Text = "以普通权限重启";
+            go.Text = Lang.T("以普通权限重启", "Restart with normal permissions");
             go.Size = Ui.Sz(150, BtnH);
             go.Fill = Color.FromArgb(0, 122, 204);
             go.FillHover = Color.FromArgb(0, 140, 232);
@@ -381,7 +381,7 @@ namespace SnapWheel
             AcceptButton = go;
 
             RoundButton no = new RoundButton();
-            no.Text = "知道了";
+            no.Text = Lang.T("知道了", "Got it");
             no.Size = Ui.Sz(104, BtnH);
             no.Fill = Color.FromArgb(238, 240, 245);
             no.FillHover = Color.FromArgb(226, 230, 238);

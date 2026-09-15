@@ -627,19 +627,27 @@ namespace SnapWheel
             g.Controls.Add(Row(_chkKeep), 0, 8);
 
             // 界面语言（0.6.0 第一轮 i18n）：启动时生效，切换后要重启
+            // 界面语言（0.6.0 第一轮 i18n）：启动时生效，切换后要重启
+            // 用 FlowLayoutPanel 自动排：原来手工算 x 坐标（lbLang.PreferredWidth + 10），
+            // PreferredWidth 一旦不准，标签就会压住下拉框（用户反馈的"有遮挡"）。
             Label lbLang = new Label();
             lbLang.AutoSize = true;
             lbLang.Text = Lang.T("界面语言（切换后重启生效）", "Language (restart to apply)");
             lbLang.ForeColor = Color.FromArgb(60, 64, 74);
+            lbLang.Margin = new Padding(0, 6, 10, 0);
             _cbLang = new ComboBox();
             _cbLang.DropDownStyle = ComboBoxStyle.DropDownList;
             _cbLang.Items.AddRange(new object[] { Lang.T("跟随系统", "Follow system"), "中文", "English" });
             _cbLang.SelectedIndex = (s.UiLanguage == "en") ? 2 : (s.UiLanguage == "zh" ? 1 : 0);
-            _cbLang.Width = S(150);
-            Panel langRow = new Panel();
+            _cbLang.Width = S(160);
+            _cbLang.Margin = new Padding(0);
+            FlowLayoutPanel langRow = new FlowLayoutPanel();
             langRow.AutoSize = true;
-            lbLang.Location = new Point(0, S(4));
-            _cbLang.Location = new Point(lbLang.PreferredWidth + S(10), S(1));
+            langRow.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            langRow.FlowDirection = FlowDirection.LeftToRight;
+            langRow.WrapContents = false;
+            langRow.Margin = new Padding(0);
+            langRow.Padding = new Padding(0);
             langRow.Controls.Add(lbLang);
             langRow.Controls.Add(_cbLang);
             g.Controls.Add(Row(langRow), 0, 9);
