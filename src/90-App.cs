@@ -253,10 +253,10 @@ namespace SnapWheel
                 using (AdminForm af = new AdminForm())
                 {
                     bool wasTop = _wheel.TopMost;
-                    _wheel.TopMost = false;              // 轮盘别盖在弹框上面
+                    WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
                     af.TopMost = true;
                     restart = (af.ShowDialog() == DialogResult.OK);
-                    _wheel.TopMost = wasTop;
+                    WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
                 }
             }
             catch { }
@@ -369,18 +369,18 @@ namespace SnapWheel
 
         void OnWheels(object sender, EventArgs e)
         {
-            _wheel.TopMost = false;
+            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
             WheelsForm f = new WheelsForm(_wheels);
             f.ShowDialog();
             _wheels.ApplySettings();
-            _wheel.TopMost = _settings.AlwaysOnTop;
+            WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
             _wheel.RefreshWheel();
         }
 
         void OnSettings(object sender, EventArgs e)
         {
             bool wasTop = _wheel.TopMost;
-            _wheel.TopMost = false;            // don't float above the settings dialog
+            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
             SettingsForm f = new SettingsForm(_settings);
             DialogResult r = f.ShowDialog();
             if (r == DialogResult.OK)
@@ -393,7 +393,7 @@ namespace SnapWheel
             }
             else
             {
-                _wheel.TopMost = wasTop;
+                WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1);
             }
         }
 
@@ -428,10 +428,10 @@ namespace SnapWheel
             OverlayForm ov = new OverlayForm(vs, shot, _settings);
             // 浮层必须是前台：轮盘每 2 秒的周期置顶会把它压下去（用户报的"截图时页面不在最顶层"），
             // 所以先让轮盘退出置顶，截完再恢复。
-            bool wtWas = _wheel.TopMost;
-            _wheel.TopMost = false;
+            // 截图/弹框期间抑制轮盘的周期置顶（见 WheelForm.SuppressTopMost）
+            WheelForm.SuppressTopMost++;   // 用抑制计数，别改 TopMost 属性
             try { ov.ShowDialog(); }
-            finally { try { _wheel.TopMost = wtWas; } catch { } }
+            finally { WheelForm.SuppressTopMost = Math.Max(0, WheelForm.SuppressTopMost - 1); }
             if (ov.WantLongShot)
             {
                 // 0.6.0：在截图浮层里点了「长图」—— 带着他框的那块区域去跑滚动长截图
