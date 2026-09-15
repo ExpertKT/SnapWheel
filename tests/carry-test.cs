@@ -10,9 +10,9 @@ namespace SnapWheel { static class CarryTest {
       return null;
     };
     Type cf = find("CarryForm");
-    Type app = find("App");
+    Type app = find("AppCtx");      // 承载托盘与入口的类叫 AppCtx（ApplicationContext）
     Ck("找到 CarryForm 类型", cf != null, "");
-    Ck("找到 App 类型", app != null, "");
+    Ck("找到 AppCtx 类型", app != null, "");
     if (cf == null || app == null) { Console.WriteLine("类型都找不到，后面的测不了"); return; }
     // ---- 1) 拖放分步插值 ----
     MethodInfo sp = cf.GetMethod("StepPoint", BindingFlags.Public | BindingFlags.Static);
