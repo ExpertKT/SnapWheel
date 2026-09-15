@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>从一个小程序学 Java · 手机版</title>
+<style>
+  :root{--bg:#fff;--fg:#1c1f24;--muted:#5f6672;--card:#f5f6f8;--line:#e3e6ea;--brand:#007acc;--warn:#b45309;--bad:#c0392b;--good:#1a7f4b;--code-bg:#f0f2f5;--code-fg:#24292f}
+  @media (prefers-color-scheme: dark){:root{--bg:#0f1216;--fg:#e6e8ec;--muted:#98a0ad;--card:#171c22;--line:#232a33;--brand:#5cb8ff;--warn:#f0b429;--bad:#ff7b72;--good:#56d364;--code-bg:#0b0f14;--code-fg:#c9d1d9}}
+  *{box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);font:16px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI",sans-serif;max-width:820px;margin-inline:auto}
+  h1{font-size:1.42rem;line-height:1.4;margin:0 0 6px}
+  h2{font-size:1.16rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:1.02rem;margin:22px 0 8px}
+  p,li{margin:8px 0}
+  small,.muted{color:var(--muted);font-size:.9rem}
+  a{color:var(--brand);text-decoration:none}
+  code{background:var(--code-bg);color:var(--code-fg);padding:2px 5px;border-radius:4px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:12px;border-radius:8px;overflow-x:auto;font-size:.82rem;line-height:1.65;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-overflow-scrolling:touch}
+  pre code{background:none;padding:0}
+  .lead{background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;padding:10px 12px;margin:12px 0}
+  .bad{border-color:var(--bad)}.good{border-color:var(--good)}.tip{border-color:var(--warn)}
+  .toc{background:var(--card);border-radius:10px;padding:12px 14px;margin:16px 0}
+  .toc ol{margin:6px 0 0;padding-left:22px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.88rem}
+  th,td{border:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  details{background:var(--card);border-radius:10px;margin:12px 0;overflow:hidden}
+  details[open]{padding-bottom:10px}
+  summary{padding:12px 14px;cursor:pointer;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--brand)}
+  details[open] summary::before{content:"▾ "}
+  details > *:not(summary){margin-left:14px;margin-right:14px}
+  .analogy{background:var(--card);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:.94rem}
+  .analogy b{color:var(--brand)}
+  .num{display:inline-block;min-width:1.5em;color:var(--brand);font-weight:700}
+  hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+</style>
+</head>
+<body>
+
+<h1>从一个小程序学 Java</h1>
+<p class="muted">手机离线版 ｜ 写给刚接触编程的你 ｜ 不需要任何基础</p>
+
+<div class="lead">
+  这是一个真实的小程序，叫 <b>SnapWheel</b>：Windows 上截图用的工具。截完图不用保存，图会直接变成屏幕角上的一张小卡片，要用的时候把它拖进聊天窗口就发出去了。<br><br>
+  它<b>不是</b> Java 写的（是 C#），但 <b>C# 和 Java 长得非常像</b> —— 像到你可以把它的代码当成"另一个方言的 Java"来读。<br><br>
+  这本册子做的事：<b>借这个真实项目，把 Java 里那些抽象的概念讲成你能看懂的东西</b>。
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#p1">先看懂几个词（零基础必读）</a></li>
+    <li><a href="#p2">C# 和 Java 是什么关系</a></li>
+    <li><a href="#p3">从项目里看六个概念（配生活类比）</a></li>
+    <li><a href="#p4">五个能直接学走的故事（不用写代码也能懂）</a></li>
+    <li><a href="#p5">这个项目是怎么组织的（Java 也一样）</a></li>
+    <li><a href="#p6">给你的练习建议</a></li>
+  </ol>
+</div>
+
+<h2 id="p1">1 · 先看懂几个词</h2>
+<p>后面会一直用到，先花两分钟认识它们。<b>看不懂没关系，往下读，看到例子就懂了。</b></p>
+<table>
+  <tr><th>词</th><th>大白话</th><th>生活类比</th></tr>
+  <tr><td><b>类</b> (class)</td><td>一张"设计图"，规定了某种东西长什么样、能做什么</td><td>"户型图"</td></tr>
+  <tr><td><b>对象</b> (object)</td><td>按那张图造出来的一个具体东西</td><td>按户型图盖出的"一套房"</td></tr>
+  <tr><td><b>方法</b> (method)</td><td>这个东西会做的一件事</td><td>"开灯"这个动作</td></tr>
+  <tr><td><b>属性/字段</b></td><td>这个东西身上记着的信息</td><td>房子的"面积、楼层"</td></tr>
+  <tr><td><b>继承</b></td><td>在别人的设计图上加点新东西，不用从头画</td><td>在"住宅图"上改出"带车库的住宅"</td></tr>
+  <tr><td><b>接口</b></td><td>一份"承诺清单"：说好要实现哪几件事，但不管你怎么做</td><td>"能开"这个承诺：汽车、门、罐头都承诺，但方式各不同</td></tr>
+  <tr><td><b>异常</b></td><td>程序运行中出的岔子，可以被"接住"处理</td><td>做饭糊了 → 有应对方案，而不是整桌报废</td></tr>
+  <tr><td><b>GC</b>（垃圾回收）</td><td>程序用过的内存，系统自动帮你清理，不用手动释放</td><td>餐厅有服务员收盘子，不用自己洗</td></tr>
+  <tr><td><b>编译</b></td><td>把写好的代码"翻译"成机器能跑的形式</td><td>把菜谱翻译成厨师看得懂的标准单</td></tr>
+  <tr><td><b>调试</b></td><td>程序不对时，一步步找出哪里错了</td><td>菜太咸 → 逐项排查是盐、酱油还是高汤</td></tr>
+</table>
+
+<h2 id="p2">2 · C# 和 Java 是什么关系</h2>
+<p>一句话：<b>它们是两家公司做的、思路几乎一样的两种语言。</b></p>
+
+<div class="analogy">
+<b>类比</b>：Java 和 C# 就像"同一套教学大纲下、两所学校出的教材" —— 章节顺序、知识点几乎一样，只是用词和个别写法有差别。<b>学会一个，另一个能直接看懂七八成。</b>
+</div>
+
+<p>它们的共同点（这些也是 Java 的核心特征）：</p>
+<ul>
+  <li>都是<b>静态类型</b>：写代码时就要说清"这个变量装的是整数还是文字"；</li>
+  <li>都是<b>面向对象</b>：程序由"类"和"对象"搭起来；</li>
+  <li>都有<b>垃圾回收</b>：不用手动管内存；</li>
+  <li>都跑在<b>虚拟机</b>上（Java 是 JVM，C# 是 .NET 的运行时）—— 所以"写一次，很多地方能跑"。</li>
+</ul>
+
+<h3>同一个东西，两种写法</h3>
+<p>下面左边是这个项目的写法（C#），右边是 Java 的等价写法。<b>你会发现它们几乎一模一样：</b></p>
+
+<table>
+  <tr><th>想做的事</th><th>C#（项目里）</th><th>Java</th></tr>
+  <tr><td>定义一个东西</td><td><code>class Pic { }</code></td><td><code>class Pic { }</code> ✅ 一样</td></tr>
+  <tr><td>继承</td><td><code>class A : B { }</code></td><td><code>class A extends B { }</code> ⚠️ 符号不同</td></tr>
+  <tr><td>实现接口</td><td><code>class A : IFace { }</code></td><td><code>class A implements IFace { }</code> ⚠️</td></tr>
+  <tr><td>打印一行</td><td><code>Console.WriteLine("hi");</code></td><td><code>System.out.println("hi");</code> ⚠️</td></tr>
+  <tr><td>一个列表</td><td><code>List&lt;int&gt; a = new List&lt;int&gt;();</code></td><td><code>List&lt;Integer&gt; a = new ArrayList&lt;&gt;();</code> ⚠️ 类型写法不同</td></tr>
+  <tr><td>接住异常</td><td><code>try { } catch (Exception e) { }</code></td><td><code>try { } catch (Exception e) { }</code> ✅ 一样</td></tr>
+  <tr><td>遍历</td><td><code>foreach (var x in list) { }</code></td><td><code>for (var x : list) { }</code> ⚠️</td></tr>
+  <tr><td>字符串拼接</td><td><code>$"共 {n} 张"</code></td><td><code>"共 " + n + " 张"</code> ⚠️</td></tr>
+</table>
+
+<div class="good"><b>记住这个感觉</b>：你以后看到 C# 代码时的"读法"，就是<b>把 <code>extends</code> 换成 <code>:</code>、把 <code>System.out.println</code> 换成 <code>Console.WriteLine</code></b>。剩下 90% 是相通的。</div>
+
+<h2 id="p3">3 · 从项目里看六个概念</h2>
+
+<details open>
+<summary><span class="num">1</span>类与对象：一张图 vs 一套房</summary>
+<p>项目里有一张"图片"的概念。它的<b>设计图</b>大致是这样（我简化了）：</p>
+<pre><code>class StoreItem        // 设计图：一张图该有什么
+{
+    public Bitmap Image;      // 属性：图本身
+    public string Name;       // 属性：名字
+    public int Index;         // 属性：它在环上是第几张
+
+    public void Save(string path)   // 方法：能被要求做的事
+    {
+        // ...把图存到硬盘...
+    }
+}</code></pre>
+<p>而"<b>一套房</b>"是这样造出来的：</p>
+<pre><code>StoreItem a = new StoreItem();   // 造出第一张
+StoreItem b = new StoreItem();   // 造出第二张</code></pre>
+<div class="analogy"><b>类比</b>：<code>class</code> 是户型图，<code>new</code> 是按图盖房。<b>图纸只有一张，房子可以盖很多套</b> —— 而且每套房的装修（属性值）可以不同。</div>
+</details>
+
+<details>
+<summary><span class="num">2</span>方法：对象"会做的事"</summary>
+<pre><code>a.Save("C:/图片/1.png");</code></pre>
+<p>读法：<b>"让 a 这个东西，去做 Save 这件事，材料是那个路径"</b>。</p>
+<div class="analogy"><b>类比</b>：方法是"动词"。<code>小狗.叫()</code>、<code>小狗.吃(骨头)</code> —— 点在前面的是"谁"，括号里的是"给它什么"。</div>
+<p>Java 写法完全一样：<code>a.save("...");</code></p>
+</details>
+
+<details>
+<summary><span class="num">3</span>继承：在别人的图上改，不用从头画</summary>
+<pre><code>class OverlayForm : Form     // C#：截图窗口是一种"窗体"
+{
+    // 它自动拥有 Form 的全部能力：能显示、能接收鼠标键盘
+    // 这里只写"它多出来的部分"
+}</code></pre>
+<div class="analogy"><b>类比</b>：<code>Form</code> 是"通用房子图纸"（有门有窗有墙），<code>OverlayForm</code> 是在它基础上加了"整面墙都是玻璃"的改造版。<b>不用重新画门窗</b>。</div>
+<p>Java 里写成 <code>class OverlayForm extends JFrame</code>。</p>
+</details>
+
+<details>
+<summary><span class="num">4</span>接口：一份"承诺清单"</summary>
+<pre><code>interface IMessageFilter        // 承诺：我能"过滤消息"
+{
+    bool PreFilterMessage(ref Message m);   // 具体怎么做，你自己定
+}</code></pre>
+<p>项目里有个窗口声明"我实现这份承诺"，于是系统就会把消息先交给它过一遍。</p>
+<div class="analogy"><b>类比</b>：接口像"面试要求：必须会开车"。<b>它不教你怎么开</b>，只要求你会开 —— 至于你开的是轿车还是卡车，它不管。</div>
+<p>Java 里写成 <code>class X implements IMessageFilter</code>。</p>
+</details>
+
+<details>
+<summary><span class="num">5</span>异常：出岔子时别让整桌菜报废</summary>
+<pre><code>try
+{
+    bmp.Save(path);              // 可能会失败（磁盘满、路径不对）
+}
+catch (Exception ex)
+{
+    MessageBox.Show("保存失败：" + ex.Message);   // 接住它，告诉用户
+}</code></pre>
+<div class="analogy"><b>类比</b>：<code>try</code> 是"我打算做这道菜"，<code>catch</code> 是"如果糊了就这样补救"。<b>关键是：出岔子不等于程序崩溃。</b></div>
+<p>Java 一模一样。**Java 还多一层要求**：有些异常你必须显式处理（叫"受检异常"），编译器会提醒你 —— 这是 Java 比 C# 更严格的地方。</p>
+</details>
+
+<details>
+<summary><span class="num">6</span>集合：一组东西，而不是一个</summary>
+<pre><code>List&lt;StoreItem&gt; items = new List&lt;StoreItem&gt;();
+items.Add(第一张);
+items.Add(第二张);
+</code></pre>
+<div class="analogy"><b>类比</b>：数组像"固定 10 个格子的药盒"，<b>列表</b>像"可以随时加格子的收纳架"。</div>
+<p>Java 里最常用的是 <code>ArrayList</code>（写法略有不同，意思一样）。项目里几乎所有"一堆东西"都是列表。</p>
+</details>
+
+<h2 id="p4">4 · 五个能直接学走的故事</h2>
+<p class="muted">这些都是这个项目开发过程中<b>真实发生的事</b>。你不需要会写代码，也能从里面学到东西 —— 而且这些道理<b>在 Java 里一模一样适用</b>。</p>
+
+<details open>
+<summary><span class="num">1</span>「先量一量，再动手」—— 猜了三次都没对</summary>
+<p>项目里有个动画很卡。开发者<b>凭经验猜</b>：可能是"每帧重画了整张屏幕"，于是改了一处；还是卡，又猜了第二个原因，改了第二处；第三次还是卡。</p>
+<p>后来他决定<b>先测量</b>：给程序加上计时，看看每一帧到底花在哪。结果发现 ——</p>
+<ul>
+  <li>他以为的"元凶"，实测只占 <b>0.3 毫秒</b>（几乎可以忽略）；</li>
+  <li>真正的大头在别处，占了 <b>22 毫秒</b>；</li>
+  <li>再细分下去，又发现真正的大头是"<b>每帧都在重新计算布局</b>"。</li>
+</ul>
+<div class="good"><b>能学走的</b>：<b>遇到"为什么这么慢"，先量，再改。</b>凭感觉猜，往往改半天改错地方。<br>Java 里也一样：程序慢的时候，先用工具（如 JProfiler、VisualVM）看看到底是谁慢，而不是猜。</div>
+</details>
+
+<details>
+<summary><span class="num">2</span>「说好一起做的事，两边的标准得一样」</summary>
+<p>项目要把一段字画在图上，需要先<b>问"这段字有多宽"</b>，好给它留位置。开发者用了一个方法去量，却用了<b>另一种方式</b>去画 —— 结果量出来 100 像素，实际画出来 118 像素，<b>字被裁掉了半截</b>。</p>
+<p>同一个错误，他在项目里犯了<b>四次</b>（字体不同、量的方式不同、对齐基准不同…）。</p>
+<div class="analogy"><b>类比</b>：你要裁一块布，先用<b>市尺</b>量，却拿<b>英寸</b>的尺子去剪 —— 长度一定对不上。<br><b>量的时候用哪把尺，裁的时候就得用哪把。</b></div>
+<div class="good"><b>能学走的</b>：很多 bug 不是"写错了"，而是<b>"两边约定不一致"</b>。更好的做法是：把这四件事（量的方式、画的字体、对齐基准、单位）<b>打包成一个函数</b>，让调用的人<b>没法写错</b> —— <b>好的设计能让错误写不出来。</b></div>
+</details>
+
+<details>
+<summary><span class="num">3</span>「复制」和「移动」不是一回事</summary>
+<p>用户把一张图从环上拖到聊天窗口，图就发过去了。但开发者发现：<b>拖完之后，环上那张图也没了</b>，想再发给别人就没有了。</p>
+<p>原因：这个"拖"在系统里是<b>复制</b>的意思（对方拿到的是副本），但代码却在成功之后把原件删了 —— <b>把"复制"当成了"移动"</b>。</p>
+<div class="good"><b>能学走的</b>：写代码前先问自己一句：<b>"这个动作是复制、还是移动？谁拥有这份数据？"</b> 想清楚再写，比写完再 debug 便宜得多。</div>
+</details>
+
+<details>
+<summary><span class="num">4</span>「用的时候先记账，用完再还」—— 嵌套时容易丢</summary>
+<p>项目有个"总在最前面"的功能。打开设置窗口时，主窗口要让到后面去；关掉设置，主窗口再回到最前面。</p>
+<p>原来的实现方式：<b>关之前先记住"我在最前面"，让位；结束时恢复成记住的那个值。</b></p>
+<p>看起来很对，但出问题了：<b>如果"让位"期间又发生了一次让位</b>（比如截图时又打开了设置），恢复出来的就是"后面的状态"，于是主窗口<b>永远回不到最前面了</b>。</p>
+<div class="good"><b>正确做法</b>：用<b>计数</b> —— 第一个进来的人负责保存原状态，最后一个离开的人负责恢复。中间的人只是加减一个数字。<br>
+<b>这个套路在 Java 里到处都是</b>：数据库连接池、锁、事务，都是"谁先来谁负责、谁最后走谁收尾"。</div>
+</details>
+
+<details>
+<summary><span class="num">5</span>「中文说得好好的，换成英文就挤爆了」</summary>
+<p>项目原本只有中文界面。想加英文时发现：<b>所有按钮和文字都被裁掉了、互相压在一起</b>。</p>
+<p>因为当初排版是按"中文字数"估的宽度 —— 而同一句话，英文往往长得多。</p>
+<div class="analogy"><b>类比</b>：你按"中文 8 个字"给标签留位置，换成 "Screenshots will appear here"（30 个字符）自然放不下。</div>
+<div class="good"><b>能学走的</b>：① 宽度要<b>实际量</b>，不要靠数个数估；② 做界面时，<b>一开始就用最长的语言试一遍</b>；③ 这个道理对"多语言软件"是基本功。</div>
+</details>
+
+<h2 id="p5">5 · 这个项目是怎么组织的</h2>
+<p>一个项目变大以后，"把代码放在哪个文件里"就成了一门学问。这个项目的做法是：<b>按"负责什么事"分文件，文件名前面加编号当作阅读顺序。</b></p>
+<table>
+  <tr><th>文件</th><th>它负责什么</th><th>Java 项目里通常对应</th></tr>
+  <tr><td><code>00-AppInfo</code></td><td>版本号、名字</td><td>常量类 / 配置文件</td></tr>
+  <tr><td><code>05-Err</code></td><td>记录错误日志、统计性能</td><td>日志工具类（Log4j / SLF4J）</td></tr>
+  <tr><td><code>10-Native</code></td><td>所有和操作系统打交道的代码，集中一处</td><td>工具类 / 适配层</td></tr>
+  <tr><td><code>25-Store</code></td><td>管理"一堆图片"</td><td>数据模型 / DAO 层</td></tr>
+  <tr><td><code>35-Settings</code></td><td>读写设置</td><td>配置类</td></tr>
+  <tr><td><code>50-OverlayForm</code></td><td>截图界面</td><td>界面类（Swing / JavaFX）</td></tr>
+  <tr><td><code>90-App</code></td><td>程序入口</td><td>含 <code>main</code> 方法的主类</td></tr>
+</table>
+<div class="good"><b>能学走的（对 Java 特别有用）</b>：
+<ul>
+  <li><b>按职责分文件</b>，不要什么都塞一个文件；</li>
+  <li><b>和外部世界打交道的东西集中放</b>（文件、网络、系统调用）—— 将来换环境时只改一处；</li>
+  <li><b>程序要能自己说出"我哪里出错了、哪里慢了"</b> —— 这就是日志和监控，Java 项目里同样是基本功。</li>
+</ul></div>
+
+<h2 id="p6">6 · 给你的练习建议</h2>
+<p>你刚接触编程，最好的入门方式是<b>先做小、但完整的东西</b>。下面按难度排，每个都能独立完成：</p>
+
+<table>
+  <tr><th>练习</th><th>你会学到</th></tr>
+  <tr><td><b>猜数字游戏</b>：程序想一个数，你猜，它提示"大了/小了"</td><td>变量、输入输出、循环、条件判断</td></tr>
+  <tr><td><b>通讯录</b>：能加人、按名字查、列出全部</td><td>类与对象、列表（<code>ArrayList</code>）、遍历</td></tr>
+  <tr><td><b>记事本（存文件）</b>：写几条，存到硬盘，下次打开还在</td><td>文件读写、异常处理</td></tr>
+  <tr><td><b>给通讯录加"撤销删除"</b></td><td>数据结构、状态管理（对应本册故事 4）</td></tr>
+  <tr><td><b>做一个能显示窗口的小程序</b>（Swing 或 JavaFX）</td><td>界面编程入门 —— 你会发现"画东西"和本册故事 2 是同一回事</td></tr>
+</table>
+
+<div class="tip">
+<b>三条建议</b>：<br>
+① <b>不要一开始就追求"大项目"</b> —— 先把上面的小东西做完 3 个，比读十本书有用；<br>
+② <b>出错时先读报错信息</b> —— Java 的报错信息其实写得很清楚，它会告诉你第几行、什么类型的问题；<br>
+③ <b>把"为什么这么写"记下来</b> —— 不是为了别人，是为了三个月后的你自己。
+</div>
+
+<hr>
+<p class="muted">这个项目叫 <b>SnapWheel（快照轮环）</b>，是 Windows 上的截图小工具，用 C# 写的。<br>
+本册由项目作者整理，目的是让学 Java 的人也能从这个真实项目里学到东西。<br>
+C# 和 Java 是"表兄弟" —— 你在 Java 里学到的工程思维，在这个项目里全都能看见。</p>
+
+</body>
+</html>
