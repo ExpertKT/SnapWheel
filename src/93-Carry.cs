@@ -92,10 +92,10 @@ namespace SnapWheel
             {
                 TopMost = true;
                 BringToFront();
-                // 拿一次键盘焦点，这样 Enter / Esc 能直接收到（不动鼠标）
-                Activate();
+                // 这里**故意不** Activate()：假光标靠全局轮询 GetAsyncKeyState 读按键，
+                // 不需要键盘焦点；抢焦点会让用户 Alt+Tab 切到别的程序时"切不过去"（用户实测）。
                 Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
-                    Native.SWP_NOMOVE | Native.SWP_NOSIZE);
+                    Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
             }
             catch { }
             ApplyPos();

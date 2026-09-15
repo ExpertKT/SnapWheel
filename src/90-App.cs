@@ -355,12 +355,31 @@ namespace SnapWheel
             // 传递期间不能让轮盘自动收起：用户要自己切屏过去，常常超过那 8 秒；
             // 轮盘一藏，"按下"的起点就变成空桌面，目标程序什么都不会发生。
             WheelForm.SuppressAutoHide++;
-            try { cf.ShowDialog(_wheel); }
-            finally
+            // 用 Show() 而**不是** ShowDialog()：模态窗口会一直占着"活动窗口"的位置，
+            // 用户 Alt+Tab 切到目标程序时会觉得"切不过去"（用户实测的现象）。
+            // 传递模式本来也不需要模态 —— 假光标和按键全靠全局轮询，不依赖键盘焦点。
+            cf.FormClosed += new FormClosedEventHandler(delegate(object o, FormClosedEventArgs e2)
             {
                 WheelForm.SuppressAutoHide = Math.Max(0, WheelForm.SuppressAutoHide - 1);
+                try
+                {
+                    if (cf.UseClipboard)
+                    {
+                        // 用户选的是「复制到剪贴板」：不走模拟拖放，直接把图写进剪贴板。
+                        // 先登记"这张剪贴板是我们自己写的"，否则"复制即收纳"会把刚复制的图又收一遍。
+                        SelfClipboard.Note(item.Image);
+                        Clipboard.SetImage(item.Image);
+                        SelfClipboard.NoteSequence();
+                        if (_settings.ShowBalloon) _tray.ShowBalloonTip(6000,
+                            Lang.T("已复制到剪贴板", "Copied to clipboard"),
+                            Lang.T("切到目标窗口按 Ctrl+V 就能粘贴。", "Switch to the target window and press Ctrl+V."),
+                            ToolTipIcon.Info);
+                    }
+                }
+                catch (Exception ex) { Err.Log("Carry.Clipboard", ex); }
                 try { thumb.Dispose(); } catch { }
-            }
+            });
+            cf.Show();
         }
 
         // 生成"吸附在假光标上"的小图：按比例填满目标框、居中裁切，不变形
