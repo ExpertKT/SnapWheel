@@ -114,15 +114,20 @@ namespace SnapWheel
             {
                 fontName = string.IsNullOrEmpty(fontName) ? UI : fontName;
                 style = SafeStyle(fontName, style);
+                // 超宽就缩。注意：字号与宽度**不是线性关系**（字体渲染有舍入和 hinting），
+                // 按比例算一次往往还差几个像素 —— 测试就抓到过这个：773px 的文本缩进 192px 的框，
+                // 按比例算完仍溢出 8px。所以这里**迭代缩小 + 留 2% 余量**，最多试 4 轮。
                 int use = pt;
-                using (Font probe = new Font(fontName, pt, style))
+                for (int iter = 0; iter < 4; iter++)
                 {
-                    SizeF sz = g.MeasureString(text, probe, new PointF(0, 0), StringFormat.GenericTypographic);
-                    if (sz.Width > maxW && sz.Width > 0)
-                        use = Math.Max(6, (int)Math.Floor(pt * (maxW / sz.Width)));
+                    SizeF sz;
+                    using (Font probe = new Font(fontName, use, style))
+                        sz = g.MeasureString(text, probe, new PointF(0, 0), StringFormat.GenericTypographic);
+                    if (sz.Width <= maxW || use <= 6) break;
+                    int next = (int)Math.Floor(use * (maxW / sz.Width) * 0.98);
+                    if (next >= use) next = use - 1;
+                    use = Math.Max(6, next);
                 }
-                DrawInternal(g, text, use, fontName, style, box, color, align);
-            }
             catch { }
         }
 
