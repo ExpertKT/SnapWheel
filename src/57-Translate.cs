@@ -52,13 +52,13 @@ namespace SnapWheel
             return total > 0 && cjk * 10 >= total * 3;
         }
 
-        public static string TargetLabel(string text) { return LooksChinese(text) ? "英文" : "中文"; }
+        public static string TargetLabel(string text) { return LooksChinese(text) ? Lang.T("英文", "English") : Lang.T("中文", "Chinese"); }
 
         // 成功返回译文；失败返回 null 并给出人话原因
         public static string Run(string text, out string error)
         {
             error = null;
-            if (string.IsNullOrEmpty(text) || text.Trim().Length == 0) { error = "没有要翻译的文字"; return null; }
+            if (string.IsNullOrEmpty(text) || text.Trim().Length == 0) { error = Lang.T("没有要翻译的文字", "Nothing to translate"); return null; }
             string src = LooksChinese(text) ? "zh-CN" : "en";
             string dst = LooksChinese(text) ? "en" : "zh-CN";
             bool toChinese = (dst != "en");
@@ -80,7 +80,7 @@ namespace SnapWheel
             }
             if (outp.Length == 0)
             {
-                error = empty > 0 ? "接口没返回译文（多半是被限流了），过一会儿再试" : "没有要翻译的文字";
+                error = empty > 0 ? Lang.T("接口没返回译文（多半是被限流了），过一会儿再试", "The API returned no translation (likely rate-limited) - try again shortly") : Lang.T("没有要翻译的文字", "Nothing to translate");
                 return null;
             }
             return outp.ToString();
@@ -155,17 +155,17 @@ namespace SnapWheel
             {
                 Tls();
                 string url = st.LlmUrl.Trim();
-                if (url.Length == 0) { error = "没填翻译接口地址"; return null; }
+                if (url.Length == 0) { error = Lang.T("没填翻译接口地址", "No translation API URL is configured"); return null; }
                 // 允许只填到 /v1，剩下那截自动补；填全了就用填的
                 if (url.IndexOf("/chat/completions", StringComparison.OrdinalIgnoreCase) < 0)
                 {
                     if (url.EndsWith("/")) url = url.Substring(0, url.Length - 1);
                     url += "/chat/completions";
                 }
-                string want = (dst == "en") ? "英文" : "简体中文";
-                string sys = "你是翻译引擎。只输出译文本身：不要解释、不要引号、不要 Markdown 标记。"
-                           + "严格保持原文的换行与段落结构，不要合并或增删句子。";
-                string usr = "把下面的内容翻译成" + want + "：\n" + text;
+                string want = (dst == "en") ? Lang.T("英文", "English") : Lang.T("简体中文", "Simplified Chinese");
+                string sys = Lang.T("你是翻译引擎。只输出译文本身：不要解释、不要引号、不要 Markdown 标记。", "You are a translation engine. Output only the translation itself: no explanations, no quotes, no Markdown.")
+                           + Lang.T("严格保持原文的换行与段落结构，不要合并或增删句子。", "Preserve the original line breaks and paragraph structure exactly; do not merge, add or drop sentences.");
+                string usr = Lang.T("把下面的内容翻译成", "Translate the following into ") + want + "：\n" + text;
 
                 StringBuilder body = new StringBuilder();
                 body.Append("{\"model\":\"").Append(JsonEsc(st.LlmModel)).Append("\"");
@@ -190,7 +190,7 @@ namespace SnapWheel
                     string t = ExtractField(json, "content");
                     if (t == null)
                     {
-                        error = "翻译接口没按 OpenAI 格式返回（该填 /v1/chat/completions 那种地址）";
+                        error = Lang.T("翻译接口没按 OpenAI 格式返回（该填 /v1/chat/completions 那种地址）", "The API did not return OpenAI-style output (the URL should look like /v1/chat/completions)");
                         return null;
                     }
                     return t;
@@ -199,11 +199,11 @@ namespace SnapWheel
             catch (WebException wex)
             {
                 HttpWebResponse hr = wex.Response as HttpWebResponse;
-                string code = hr != null ? ("HTTP " + (int)hr.StatusCode) : (wex.Status == WebExceptionStatus.Timeout ? "超时" : wex.Message);
-                error = "自填翻译接口连不上（" + code + "）——检查地址 / key / 模型名";
+                string code = hr != null ? ("HTTP " + (int)hr.StatusCode) : (wex.Status == WebExceptionStatus.Timeout ? Lang.T("超时", "Timed out") : wex.Message);
+                error = Lang.T("自填翻译接口连不上（", "Custom translation API unreachable (") + code + Lang.T("）——检查地址 / key / 模型名", ") - check the URL / key / model name");
                 return null;
             }
-            catch (Exception ex) { error = "自填翻译接口失败：" + ex.Message; return null; }
+            catch (Exception ex) { error = Lang.T("自填翻译接口失败：", "Custom translation API failed: ") + ex.Message; return null; }
         }
 
         // ---------------- ② 有道（免费、无 key、国内直连） ----------------
@@ -231,10 +231,10 @@ namespace SnapWheel
             }
             catch (WebException wex)
             {
-                error = "免费翻译接口连不上：" + (wex.Status == WebExceptionStatus.Timeout ? "超时" : wex.Message);
+                error = Lang.T("免费翻译接口连不上：", "Free translation API unreachable: ") + (wex.Status == WebExceptionStatus.Timeout ? Lang.T("超时", "Timed out") : wex.Message);
                 return null;
             }
-            catch (Exception ex) { error = "翻译失败：" + ex.Message; return null; }
+            catch (Exception ex) { error = Lang.T("翻译失败：", "Translation failed: ") + ex.Message; return null; }
         }
 
         // MyMemory 用 zh-CN，有道用 zh-CHS —— 别混用（混了有道会把中文当未知语言）
@@ -253,11 +253,11 @@ namespace SnapWheel
         internal static string ReadYoudao(string json, string dst, out string error)
         {
             error = null;
-            if (string.IsNullOrEmpty(json)) { error = "翻译接口没有返回内容"; return null; }
+            if (string.IsNullOrEmpty(json)) { error = Lang.T("翻译接口没有返回内容", "The API returned no content"); return null; }
             int k = json.LastIndexOf("\"translation\"", StringComparison.Ordinal);
-            if (k < 0) { error = "翻译接口返回的内容看不懂（可能被限流了）"; return null; }
+            if (k < 0) { error = Lang.T("翻译接口返回的内容看不懂（可能被限流了）", "The API returned something unreadable (possibly rate-limited)"); return null; }
             int lb = json.IndexOf('[', k);
-            if (lb < 0) { error = "翻译接口返回的内容看不懂"; return null; }
+            if (lb < 0) { error = Lang.T("翻译接口返回的内容看不懂", "The API returned something unreadable"); return null; }
             int rb = json.IndexOf(']', lb);
             if (rb < 0) rb = json.Length;
 
@@ -272,7 +272,7 @@ namespace SnapWheel
                 i = next;
                 if (one != null) parts.Add(one);
             }
-            if (parts.Count == 0) { error = "免费翻译额度用完了（限流）——过一会儿再试"; return null; }
+            if (parts.Count == 0) { error = Lang.T("免费翻译额度用完了（限流）——过一会儿再试", "Free translation quota exhausted (rate-limited) - try again shortly"); return null; }
 
             string sep = (dst == "en") ? " " : "";
             StringBuilder sb = new StringBuilder();
@@ -309,10 +309,10 @@ namespace SnapWheel
             }
             catch (WebException wex)
             {
-                error = "备用翻译接口连不上：" + (wex.Status == WebExceptionStatus.Timeout ? "超时" : wex.Message);
+                error = Lang.T("备用翻译接口连不上：", "Fallback translation API unreachable: ") + (wex.Status == WebExceptionStatus.Timeout ? Lang.T("超时", "Timed out") : wex.Message);
                 return null;
             }
-            catch (Exception ex) { error = "翻译失败：" + ex.Message; return null; }
+            catch (Exception ex) { error = Lang.T("翻译失败：", "Translation failed: ") + ex.Message; return null; }
         }
 
         // 从 MyMemory 返回里读结果：成功=译文（可能为空串）；失败=null，并把人话原因写进 error。
@@ -322,7 +322,7 @@ namespace SnapWheel
         internal static string ReadResult(string json, out string error)
         {
             error = null;
-            if (string.IsNullOrEmpty(json)) { error = "备用接口没有返回内容"; return null; }
+            if (string.IsNullOrEmpty(json)) { error = Lang.T("备用接口没有返回内容", "The fallback API returned no content"); return null; }
 
             string t = ExtractField(json, "translatedText");
             string details = ExtractField(json, "responseDetails");
@@ -333,15 +333,15 @@ namespace SnapWheel
                                              || details.IndexOf("WARNING", StringComparison.OrdinalIgnoreCase) >= 0));
             if (limited)
             {
-                error = "免费翻译额度用完了（MyMemory 限流）——过一会儿再试";
+                error = Lang.T("免费翻译额度用完了（MyMemory 限流）——过一会儿再试", "Free translation quota exhausted (MyMemory rate limit) - try again shortly");
                 return null;
             }
             if (!string.IsNullOrEmpty(status) && status != "200")
             {
-                error = "备用翻译接口报错：" + (string.IsNullOrEmpty(details) ? status : details);
+                error = Lang.T("备用翻译接口报错：", "Fallback translation API error: ") + (string.IsNullOrEmpty(details) ? status : details);
                 return null;
             }
-            if (t == null) { error = "备用接口返回的内容看不懂（可能被限流了）"; return null; }
+            if (t == null) { error = Lang.T("备用接口返回的内容看不懂（可能被限流了）", "The fallback API returned something unreadable (possibly rate-limited)"); return null; }
             return t.Trim();
         }
 

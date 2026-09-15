@@ -14,7 +14,7 @@ namespace SnapWheel
 {
     static class Palette
     {
-        public static readonly string[] Names = { "蓝", "红", "琥珀", "绿", "紫", "青", "橙", "灰" };
+        public static readonly string[] Names = { Lang.T("蓝", "Blue"), Lang.T("红", "Red"), Lang.T("琥珀", "Amber"), Lang.T("绿", "Green"), Lang.T("紫", "Purple"), Lang.T("青", "Teal"), Lang.T("橙", "Orange"), Lang.T("灰", "Grey") };
         public static readonly Color[] Colors = {
             Color.FromArgb(0, 122, 204),
             Color.FromArgb(232, 86, 110),
@@ -39,7 +39,7 @@ namespace SnapWheel
         public string Name;
         public int ColorIndex;
         public Store Store = new Store();
-        public Wheel() { Id = Guid.NewGuid().ToString("N").Substring(0, 8); Name = "项目"; ColorIndex = 0; }
+        public Wheel() { Id = Guid.NewGuid().ToString("N").Substring(0, 8); Name = Lang.T("项目", "Project"); ColorIndex = 0; }
         public Color Accent { get { return Palette.Get(ColorIndex); } }
     }
 
@@ -77,7 +77,7 @@ namespace SnapWheel
 
         public static string SafeName(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) name = "项目";
+            if (string.IsNullOrWhiteSpace(name)) name = Lang.T("项目", "Project");
             char[] bad = Path.GetInvalidFileNameChars();
             for (int i = 0; i < bad.Length; i++) name = name.Replace(bad[i], '_');
             return name.Trim();
@@ -99,7 +99,7 @@ namespace SnapWheel
         public Wheel New()
         {
             Wheel w = new Wheel();
-            w.Name = "项目" + (Wheels.Count + 1);
+            w.Name = Lang.T("项目", "Project") + (Wheels.Count + 1);
             w.ColorIndex = Wheels.Count % Palette.Colors.Length;
             Wheels.Add(w);
             ApplySettings();

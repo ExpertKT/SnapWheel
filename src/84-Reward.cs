@@ -592,7 +592,7 @@ namespace SnapWheel
     }
 
     // ============================ 收款码小窗口 ============================
-    // 一张图 + 一句"请作者喝杯咖啡"。Esc、点窗口外面、标题栏 × 都能关掉。
+    // 一张图 + 一句Lang.T("请作者喝杯咖啡", "Buy the author a coffee")。Esc、点窗口外面、标题栏 × 都能关掉。
     //
     // ⚠️ DPI：这个窗口原来自己算了一遍缩放系数（构造函数里的本地 k + 字段 _k），只把"间距"乘了系数，
     // 行距还是写死的数字 —— 150% 下 14pt 标题的真实高度是 40px 上下，写死 38px 的行距就跟副标题叠在一起
@@ -611,7 +611,7 @@ namespace SnapWheel
 
         public RewardForm()
         {
-            Text = AppInfo.Name + " 打赏";
+            Text = AppInfo.Name + Lang.T(" 打赏", " Tip");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -654,7 +654,7 @@ namespace SnapWheel
             catch { }
 
             Label head = new Label();
-            head.Text = "请作者喝杯咖啡";
+            head.Text = Lang.T("请作者喝杯咖啡", "Buy the author a coffee");
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.Location = new Point(pad, y);
@@ -666,7 +666,7 @@ namespace SnapWheel
             y += head.PreferredSize.Height + Ui.S(13);
 
             Label sub = new Label();
-            sub.Text = img != null ? "扫码打赏，随心意就好 —— 不打赏也完全不影响使用。" : "收款码没读出来（图片数据坏了），重装一次应该就好。";
+            sub.Text = img != null ? Lang.T("扫码打赏，随心意就好 —— 不打赏也完全不影响使用。", "Scan to tip - entirely optional; not tipping changes nothing.") : Lang.T("收款码没读出来（图片数据坏了），重装一次应该就好。", "The payment QR could not be read (corrupt image data); reinstalling should fix it.");
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             sub.Location = new Point(pad + Ui.S(2), y);   // 副标题相对标题缩进 2px（跟标题左边对齐得更自然）
             Ui.Wrap(sub, maxTextW - Ui.S(2));
@@ -686,7 +686,7 @@ namespace SnapWheel
             y += ih + Ui.S(10);
 
             Label hint = new Label();
-            hint.Text = "按 Esc、点窗口外面，或点右上角 × 关掉";
+            hint.Text = Lang.T("按 Esc、点窗口外面，或点右上角 × 关掉", "Press Esc, click outside, or use the × in the top-right corner to close");
             hint.ForeColor = Color.FromArgb(158, 162, 172);
             hint.Location = new Point(pad, y);
             Ui.Wrap(hint, maxTextW);

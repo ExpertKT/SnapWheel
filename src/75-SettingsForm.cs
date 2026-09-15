@@ -20,7 +20,7 @@ namespace SnapWheel
         //    v0.5.2 提速时就是因为挪了添加顺序，标题跑到最底下、按钮跑到最上面（"头和屁股长反了"）。
         // 2. 四页内容 = 四张页面格，同一时间只显示一张；每页都是"两列 + 行"的明确坐标。
         // 3. 每页的控件**第一次翻到那页才建**（懒建）：构造量降到 1/4，这是打开设置变快的主因。
-        //    没建过的页 = 没被看过 = 没被改过，所以"确定"时跳过它（值保持原样，不会被写回默认值）。
+        //    没建过的页 = 没被看过 = 没被改过，所以Lang.T("确定", "OK")时跳过它（值保持原样，不会被写回默认值）。
         // ==========================================================================
         TableLayoutPanel _root;
         Panel _body;
@@ -192,7 +192,7 @@ namespace SnapWheel
         public SettingsForm(Settings s)
         {
             _s = s;
-            Text = AppInfo.Name + " 设置  ·  BETA";
+            Text = AppInfo.Name + Lang.T(" 设置  ·  BETA", " Settings  ·  BETA");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -248,7 +248,7 @@ namespace SnapWheel
             // 但文字真正要占的格子是 25px —— 底下一排会被削掉（用户报的"标题被遮挡了一点"，
             // 和上一轮 ComboBox"报 23px 实高 27px"是同一个坑）。这里改成自己量出真实宽高。
             head.AutoSize = false;
-            head.Text = AppInfo.Name + " 设置";
+            head.Text = AppInfo.Name + Lang.T(" 设置", " Settings");
             head.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(32, 34, 38);
             head.TextAlign = ContentAlignment.MiddleLeft;
@@ -259,7 +259,7 @@ namespace SnapWheel
 
             // 分页器：顶部小圆弧，四个扇区 = 四页（点扇区 / 滚轮翻页），新拟态凸起 + 当前页高亮
             _dial = new PageDial();
-            _dial.Names = new string[] { Lang.T("行为与快捷键", "Behaviour & shortcuts"), Lang.T("轮盘与外观", "Ring & appearance"), "风格", Lang.T("万能键与高级", "Universal key & advanced") };
+            _dial.Names = new string[] { Lang.T("行为与快捷键", "Behaviour & shortcuts"), Lang.T("轮盘与外观", "Ring & appearance"), Lang.T("风格", "Style"), Lang.T("万能键与高级", "Universal key & advanced") };
             _dial.BackColor = Color.FromArgb(250, 250, 252);
             _dial.Dock = DockStyle.Fill;
             _dial.Margin = new Padding(0);
@@ -291,7 +291,7 @@ namespace SnapWheel
 
             // ---------------- 底部按钮（新手引导 / 还原默认 / 确定 取消）行为一字未改 ----------------
             RoundButton ok = new RoundButton();
-            ok.Text = "确定";
+            ok.Text = Lang.T("确定", "OK");
             ok.Size = new Size(S(104), S(36));
             ok.Fill = Color.FromArgb(0, 122, 204);
             ok.FillHover = Color.FromArgb(0, 140, 232);
@@ -314,7 +314,7 @@ namespace SnapWheel
             cancel.Click += new EventHandler(delegate(object o, EventArgs e2) { DialogResult = DialogResult.Cancel; Close(); });
 
             RoundButton guide = new RoundButton();
-            guide.Text = "新手引导";
+            guide.Text = Lang.T("新手引导", "Getting started");
             guide.Size = new Size(S(104), S(36));
             guide.Fill = Color.FromArgb(236, 240, 246);
             guide.FillHover = Color.FromArgb(226, 233, 243);
@@ -349,7 +349,7 @@ namespace SnapWheel
 
             // 打赏：收款码弹窗（刻意不写进说明、不显眼，见 84-Reward.cs）
             RoundButton tip = new RoundButton();
-            tip.Text = "打赏";
+            tip.Text = Lang.T("打赏", "Tip the author");
             tip.Size = new Size(S(104), S(36));
             tip.Fill = Color.FromArgb(252, 246, 234);
             tip.FillHover = Color.FromArgb(248, 236, 216);
@@ -540,11 +540,11 @@ namespace SnapWheel
 
             _chkAuto = new CheckBox();
             _chkAuto.AutoSize = true;
-            _chkAuto.Text = "空闲后自动收起轮盘";
+            _chkAuto.Text = Lang.T("空闲后自动收起轮盘", "Auto-collapse the ring when idle");
             _chkAuto.Checked = s.AutoHide;
             _chkAuto.Margin = new Padding(0, 4, 0, 4);
             _numSec = Num(2, 600, s.AutoHideSeconds);
-            g.Controls.Add(Row(_chkAuto, Gap(16), MkLabel("空闲秒数"), _numSec), 0, 3);
+            g.Controls.Add(Row(_chkAuto, Gap(16), MkLabel(Lang.T("空闲秒数", "Idle seconds")), _numSec), 0, 3);
 
             _cmbDel = new ComboBox();
             _cmbDel.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -565,9 +565,9 @@ namespace SnapWheel
             _cmbSwitch.DropDownStyle = ComboBoxStyle.DropDownList;
             _cmbSwitch.Width = S(170);
             _cmbSwitch.Margin = new Padding(0, 6, 0, 0);
-            _cmbSwitch.Items.AddRange(new object[] { "长按万能键弹圆盘", "长按后左右滑动" });
+            _cmbSwitch.Items.AddRange(new object[] { Lang.T("长按万能键弹圆盘", "Long-press the universal key for the dial"), Lang.T("长按后左右滑动", "Long-press then slide left/right") });
             _cmbSwitch.SelectedIndex = (s.SwitchMode == "swipe") ? 1 : 0;
-            g.Controls.Add(Row(MkLabel("Wheel 切换"), _cmbSwitch), 1, 4);
+            g.Controls.Add(Row(MkLabel(Lang.T("Wheel 切换", "Wheel switching")), _cmbSwitch), 1, 4);
 
             // 保存目录这一行本来就宽，横跨两列（否则两列加起来会顶破窗口宽度）
             _txtDir = new TextBox();
@@ -575,7 +575,7 @@ namespace SnapWheel
             _txtDir.Width = S(300);
             _txtDir.Margin = new Padding(0, 5, 8, 0);
             Button browse = new Button();
-            browse.Text = "浏览";
+            browse.Text = Lang.T("浏览", "Browsing");
             browse.AutoSize = true;
             browse.MinimumSize = new Size(S(60), S(26));
             browse.Margin = new Padding(0, 4, 0, 0);
@@ -637,7 +637,7 @@ namespace SnapWheel
             lbLang.Margin = new Padding(0, 6, 10, 0);
             _cbLang = new ComboBox();
             _cbLang.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cbLang.Items.AddRange(new object[] { Lang.T("跟随系统", "Follow system"), "中文", "English" });
+            _cbLang.Items.AddRange(new object[] { Lang.T("跟随系统", "Follow system"), Lang.T("中文", "Chinese"), "English" });
             _cbLang.SelectedIndex = (s.UiLanguage == "en") ? 2 : (s.UiLanguage == "zh" ? 1 : 0);
             _cbLang.Width = S(160);
             _cbLang.Margin = new Padding(0);
@@ -724,7 +724,7 @@ namespace SnapWheel
             hintRing.Text = Lang.T("（只管收起 / 展开；百分比越大越快）", "(collapse / expand only; higher = faster)");
             hintRing.ForeColor = Color.FromArgb(150, 152, 160);
             hintRing.Margin = new Padding(0, 10, 0, 0);
-            Control ringRow = Row(MkLabel("展开速度"), _cmbRing, Gap(10), hintRing);
+            Control ringRow = Row(MkLabel(Lang.T("展开速度", "Expand speed")), _cmbRing, Gap(10), hintRing);
             g.Controls.Add(ringRow, 0, 4);
             g.SetColumnSpan(ringRow, 2);
 
@@ -741,7 +741,7 @@ namespace SnapWheel
             hintRing2.Text = Lang.T("（默认比展开快一档，收起要干脆）", "(one notch faster than expand by default)");
             hintRing2.ForeColor = Color.FromArgb(150, 152, 160);
             hintRing2.Margin = new Padding(0, 10, 0, 0);
-            Control ring2Row = Row(MkLabel("收起速度"), _cmbRing2, Gap(10), hintRing2);
+            Control ring2Row = Row(MkLabel(Lang.T("收起速度", "Collapse speed")), _cmbRing2, Gap(10), hintRing2);
             g.Controls.Add(ring2Row, 0, 5);
             g.SetColumnSpan(ring2Row, 2);
 
@@ -755,7 +755,7 @@ namespace SnapWheel
 
             _chkSingle = new CheckBox();
             _chkSingle.AutoSize = true;
-            _chkSingle.Text = "只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）";
+            _chkSingle.Text = Lang.T("只用一个把手：左边那个点一下展开、再点一下收起（任务栏自动隐藏时更省事）", "Single handle: click the left one to expand, click again to collapse (handy with an auto-hidden taskbar)");
             _chkSingle.Checked = s.NubSingle;
             Control singleRow = Row(_chkSingle);
             g.Controls.Add(singleRow, 0, 7);
@@ -769,7 +769,7 @@ namespace SnapWheel
             SetupRows(g, 4);
             Settings s = _s;
 
-            g.Controls.Add(Section("风格"), 0, 0);
+            g.Controls.Add(Section(Lang.T("风格", "Style")), 0, 0);
 
             _cmbStyle = new ComboBox();
             _cmbStyle.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -836,8 +836,8 @@ namespace SnapWheel
             g.Controls.Add(Section(Lang.T("万能键", "Universal key")), 0, 0);
 
             // 四个分区各绑一个动作（以前是写死的）。选中就立刻写进设置：
-            // 不依赖"确定"里那段保存循环（之前那里没生效）。
-            string[] keyDir = { "上", "右", "下", "左" };
+            // 不依赖Lang.T("确定", "OK")里那段保存循环（之前那里没生效）。
+            string[] keyDir = { Lang.T("上", "Up"), Lang.T("右", "Right"), Lang.T("下", "Down"), Lang.T("左", "Left") };
             for (int i = 0; i < 4; i++)
             {
                 ComboBox kb = new ComboBox();
@@ -862,7 +862,7 @@ namespace SnapWheel
             g.Controls.Add(Row(MkLabel(keyDir[0]), _keyBox[0], Gap(16), MkLabel(keyDir[1]), _keyBox[1]), 0, 1);
             g.Controls.Add(Row(MkLabel(keyDir[2]), _keyBox[2], Gap(16), MkLabel(keyDir[3]), _keyBox[3]), 0, 2);
 
-            Label keyHint = MkLabel("按住万能键弹出圆盘，往哪个方向松手就执行哪个动作");
+            Label keyHint = MkLabel(Lang.T("按住万能键弹出圆盘，往哪个方向松手就执行哪个动作", "Hold the universal key and the dial appears; release towards a direction to run that action"));
             keyHint.ForeColor = Color.FromArgb(140, 146, 158);
             Control keyHintRow = Row(keyHint);
             g.Controls.Add(keyHintRow, 0, 3);
@@ -943,7 +943,7 @@ namespace SnapWheel
             // 反馈入口（0.6.0）：一键提 issue（预填环境信息）+ 复制诊断信息。
             // 放在Lang.T("高级", "Advanced")页最下面：不占常用路径，但用户真遇到问题时找得到。
             RoundButton fb = new RoundButton();
-            fb.Text = "反馈 / 报告问题…";
+            fb.Text = Lang.T("反馈 / 报告问题…", "Feedback / report a problem…");
             fb.Font = new Font("Microsoft YaHei UI", 10f);
             fb.Fill = Color.FromArgb(238, 240, 245);
             fb.FillHover = Color.FromArgb(226, 230, 238);
