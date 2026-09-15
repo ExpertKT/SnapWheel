@@ -337,8 +337,12 @@ namespace SnapWheel
         // 流程：取图 → 生成吸附用的小图 → 开假光标窗口 → 用户自己切屏、WASD 移动、Enter 放下。
         void StartCarry()
         {
+            // 先记一条"确实被调用了"：用来区分"托盘菜单/热键根本没触发"和"触发了但后面出问题"。
+            // （用户反馈"连托盘启动都不行"，但日志里又有放下的记录 —— 必须先分清是哪一种。）
+            Err.Log("Carry.Start", new Exception("进入传递模式：被调用"));
             Store st = _wheels.ActiveStore;
             int idx = _wheel.CurrentIndex;
+            Err.Log("Carry.Start", new Exception("轮盘项数=" + (st == null ? -1 : st.Items.Count) + " 当前索引=" + idx));
             if (st == null || idx < 0 || idx >= st.Items.Count)
             {
                 MessageBox.Show(_wheel,
