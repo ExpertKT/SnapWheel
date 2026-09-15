@@ -122,7 +122,10 @@ namespace SnapWheel
             }
             catch { }
             ApplyPos();
-            InstallHook();      // 装上键盘钩子：传递期间把 WASD 等键吃掉，别漏给前台窗口
+            // ⚠️ 键盘钩子先停用：装上去之后"一进传递模式就卡死"（用户实测）。
+            // 低级键盘钩子一旦处理不当会卡住整个系统的输入链，风险太高 —— 先回到可用状态，
+            // 再换一种不插进系统输入链的做法来处理"WASD 漏到前台窗口"的问题。
+            // InstallHook();
         }
 
         static bool Down(Keys k)
