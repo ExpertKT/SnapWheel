@@ -332,8 +332,14 @@ namespace SnapWheel
                 // 也就不会有 DoDragDrop。所以这里先显式把它带到前台，让后面的点击真正送达。
                 if (WheelHandle != IntPtr.Zero)
                 {
-                    Native.SetForegroundWindow(WheelHandle);
+                    bool fg = Native.SetForegroundWindow(WheelHandle);
+                    // 记下来：这一步成不成，直接决定后面的模拟点击能不能送到轮盘手上
+                    Err.Log("Carry.Drag", new Exception("放下开始：拿前台=" + fg + " 起点=" + from.X + "," + from.Y + " 终点=" + to.X + "," + to.Y));
                     Thread.Sleep(180);
+                }
+                else
+                {
+                    Err.Log("Carry.Drag", new Exception("放下开始：WheelHandle 没拿到！起点=" + from.X + "," + from.Y));
                 }
 
                 Native.SetCursorPos(from.X, from.Y);
