@@ -48,6 +48,15 @@ namespace SnapWheel
         // 表现就是"闪了一下就没了"（用户实测出来的）。
         bool _prevEnter, _prevEsc, _prevC, _prevSpace;
 
+        // ---- "飞回"动画：按 Esc 取消时，不是啪一下消失，而是让缩略图飞回它在轮盘上的位置 ----
+        // 直接消失会让人不知道刚才那张去哪了；飞回去明确表达"放回原处了"。
+        // 不需要额外的窗口 —— 假光标窗口本身就是透明置顶的，让它自己移动+淡出即可。
+        bool _flyBack;
+        Point _flyFrom, _flyTo;
+        DateTime _flyStart;
+        float _flyScale = 1f;            // 飞行途中缩略图一起缩小（1 → 0.4）
+        const int FlyMs = 320;
+
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
         /// <summary>放下的位置（屏幕坐标）。</summary>
@@ -146,6 +155,26 @@ namespace SnapWheel
         void OnTick(object sender, EventArgs e)
         {
             if (_busy) return;
+
+            // 飞行分支：按 Esc 之后走这条，把缩略图送回轮盘上的位置
+            if (_flyBack)
+            {
+                try
+                {
+                    double t = (DateTime.Now - _flyStart).TotalMilliseconds / (double)FlyMs;
+                    if (t >= 1.0) { try { _tick.Stop(); } catch { } try { Close(); } catch { } return; }
+                    float eased = 1f - (float)Math.Pow(1.0 - t, 3);    // ease-out：起步快、收尾慢
+                    _fx = _flyFrom.X + (_flyTo.X - _flyFrom.X) * eased;
+                    _fy = _flyFrom.Y + (_flyTo.Y - _flyFrom.Y) * eased;
+                    _pos = new Point((int)Math.Round(_fx), (int)Math.Round(_fy));
+                    _flyScale = 1f - eased * 0.6f;                     // 缩到 40%
+                    try { Opacity = Math.Max(0.05, 1.0 - t * 0.85); } catch { }
+                    ApplyPos();
+                }
+                catch { try { Close(); } catch { } }
+                return;
+            }
+
             try
             {
                 // 超时保护：两分钟没有任何确认就自己取消，免得假光标一直赖在屏幕上
@@ -206,10 +235,16 @@ namespace SnapWheel
 
         void Cancel()
         {
-            try { _tick.Stop(); } catch { }
+            // 不直接消失：让缩略图"飞回"它在轮盘上的位置（缓动 + 淡出 + 缩小，约 320ms）。
+            // 真正关闭在 OnTick 的飞行分支里做。
+            if (_flyBack) { try { Close(); } catch { } return; }
+            _flyBack = true;
             Confirmed = false;
-            try { if (_hint != null) _hint.Close(); } catch { }
-            try { Close(); } catch { }
+            _flyFrom = _pos;
+            _flyTo = _origin;
+            _flyStart = DateTime.Now;
+            try { if (_hint != null) _hint.Close(); } catch { }   // 提示条先收掉
+            try { _tick.Start(); } catch { }                       // 定时器继续跑，改走飞行分支
         }
 
         // ---------- 放下：把假光标的位置"演"成一次真实的鼠标拖放 ----------
@@ -404,17 +439,21 @@ namespace SnapWheel
 
             try
             {
-                // 阴影
+                // 阴影（跟着缩略图一起缩）
+                int shw = (int)(ThumbW * _flyScale), shh = (int)(ThumbH * _flyScale);
                 for (int i = 4; i >= 1; i--)
                 {
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb(26, 0, 0, 0)))
-                        g.FillRectangle(sb, tx - i + 2, ty - i + 3, ThumbW + i * 2, ThumbH + i * 2);
+                        g.FillRectangle(sb, tx - i + 2, ty - i + 3, shw + i * 2, shh + i * 2);
                 }
-                // 图
-                if (_thumb != null) g.DrawImage(_thumb, new Rectangle(tx, ty, ThumbW, ThumbH));
+                // 图（按 _flyScale 缩放：飞行途中一起缩小，回到环上时正好是缩略图大小）
+                int tw = (int)(ThumbW * _flyScale), th = (int)(ThumbH * _flyScale);
+                int cx = tx + ThumbW / 2, cy = ty + ThumbH / 2;
+                Rectangle box = new Rectangle(cx - tw / 2, cy - th / 2, tw, th);
+                if (_thumb != null) g.DrawImage(_thumb, box);
                 // 白边（提到"被拿起来"的感觉）
                 using (Pen p = new Pen(Color.FromArgb(230, 255, 255, 255), 2f))
-                    g.DrawRectangle(p, tx, ty, ThumbW, ThumbH);
+                    g.DrawRectangle(p, box);
             }
             catch { }
 
