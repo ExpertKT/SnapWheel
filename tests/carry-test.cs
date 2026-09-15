@@ -3,8 +3,17 @@ namespace SnapWheel { static class CarryTest {
   static int pass=0, fail=0;
   static void Ck(string n, bool ok, string d) { if (ok) { pass++; Console.WriteLine("  [OK]   " + n); } else { fail++; Console.WriteLine("  [FAIL] " + n + "  " + d); } }
   [STAThread] static void Main() {
-    Type cf = Type.GetType("SnapWheel.CarryForm");
-    Type app = Type.GetType("SnapWheel.App");
+    // 用"遍历程序集找类型"而不是 Type.GetType(名字)：后者在有些情况下找不到，
+    // 而且拿不到类型时后面的反射会以 NullReference 崩掉（这里就被这个坑绊过一次）。
+    Func<string, Type> find = delegate(string name) {
+      foreach (Type ty in Assembly.GetExecutingAssembly().GetTypes()) if (ty.Name == name) return ty;
+      return null;
+    };
+    Type cf = find("CarryForm");
+    Type app = find("App");
+    Ck("找到 CarryForm 类型", cf != null, "");
+    Ck("找到 App 类型", app != null, "");
+    if (cf == null || app == null) { Console.WriteLine("类型都找不到，后面的测不了"); return; }
     // ---- 1) 拖放分步插值 ----
     MethodInfo sp = cf.GetMethod("StepPoint", BindingFlags.Public | BindingFlags.Static);
     Point from = new Point(100, 200), to = new Point(1000, 800);
