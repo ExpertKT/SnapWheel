@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>SnapWheel 学习手册 · 手机版</title>
+<title>学习手册 · C → Python → Agent（手机版）</title>
 <style>
   :root{
     --bg:#ffffff; --fg:#1c1f24; --muted:#5f6672; --card:#f5f6f8; --line:#e3e6ea;
@@ -17,13 +17,11 @@
     }
   }
   *{box-sizing:border-box;-webkit-text-size-adjust:100%}
-  body{
-    margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);
+  body{margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);
     font:16px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI",sans-serif;
-    max-width:820px;margin-inline:auto;
-  }
-  h1{font-size:1.5rem;line-height:1.4;margin:0 0 6px}
-  h2{font-size:1.2rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+    max-width:820px;margin-inline:auto}
+  h1{font-size:1.45rem;line-height:1.4;margin:0 0 6px}
+  h2{font-size:1.18rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
   h3{font-size:1.05rem;margin:22px 0 8px}
   h4{font-size:1rem;margin:16px 0 6px;color:var(--brand)}
   p,li{margin:8px 0}
@@ -36,13 +34,11 @@
       -webkit-overflow-scrolling:touch}
   pre code{background:none;padding:0}
   .lead{background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
-  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;
-                   padding:10px 12px;margin:12px 0}
+  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;padding:10px 12px;margin:12px 0}
   .bad{border-color:var(--bad)} .good{border-color:var(--good)} .tip{border-color:var(--warn)}
   .toc{background:var(--card);border-radius:10px;padding:12px 14px;margin:16px 0}
   .toc ol{margin:6px 0 0;padding-left:22px}
-  .toc li{margin:4px 0}
-  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.92rem}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.9rem}
   th,td{border:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
   th{background:var(--card);font-weight:600;white-space:nowrap}
   details{background:var(--card);border-radius:10px;margin:12px 0;overflow:hidden}
@@ -53,373 +49,397 @@
   details[open] summary::before{content:"▾ "}
   details > *:not(summary){margin-left:14px;margin-right:14px}
   .num{display:inline-block;min-width:1.6em;color:var(--brand);font-weight:700}
-  .sym{color:var(--bad);font-weight:700}
-  .ok{color:var(--good);font-weight:700}
   hr{border:none;border-top:1px solid var(--line);margin:28px 0}
-  .kbd{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:.85em}
 </style>
 </head>
 <body>
 
-<h1>SnapWheel 学习手册</h1>
-<p class="muted">手机离线版 ｜ 一个人看的一册 ｜ 配合 <code>docs/LEARNING.md</code>（给 AI 的教材）使用</p>
+<h1>学习手册</h1>
+<p class="muted">手机离线版 ｜ C → Python → Agent ｜ 配套 <code>docs/LEARNING.md</code>（给 AI 的教材）</p>
 
 <div class="lead">
-  <b>为什么要看这个：</b>你参与了自己的项目，但没底气说"这是我自己做的" —— 因为你参与的是<b>结果</b>，不是<b>决策</b>。<br>
-  这册子的目标只有一个：让你拿到<b>决策能力</b>。方法是用你熟悉的 C 当锚点，把 C# / 工程实践一个个接上去；并且<b>把我们已经踩过的坑直接告诉你</b>，你不用再走一遍。
+  <b>目标</b>：<b>能独立做出能用的 agent 应用</b> + <b>能读懂并修改开源 agent 框架</b>。<br>
+  <b>路线</b>：C（收尾）→ <b>Python（主力）</b> → TypeScript（第二，以后）→ Go（看方向再说）。<br>
+  <b>方法</b>：用 C 当锚点迁移概念；工程能力部分<b>直接给你正确做法</b>，不用重走我们踩过的坑。
 </div>
 
 <div class="toc">
   <b>目录</b>
   <ol>
-    <li><a href="#p1">C → C# 对照表</a></li>
-    <li><a href="#p2">我的项目长什么样</a></li>
-    <li><a href="#p3">七个「为什么」</a></li>
-    <li><a href="#p4">反例库：我们踩过的 10 个坑</a></li>
-    <li><a href="#p5">学习路线（7 个阶段）</a></li>
-    <li><a href="#p6">术语速查</a></li>
-    <li><a href="#p7">通用套路速查卡</a></li>
+    <li><a href="#p1">为什么是 Python（不是 Go/TS）</a></li>
+    <li><a href="#p2">C → Python 对照表 + 必踩的五个坑</a></li>
+    <li><a href="#p3">Python 工程习惯（别跳过）</a></li>
+    <li><a href="#p4">工程反例库：真实踩过的 10 个坑</a></li>
+    <li><a href="#p5">Agent 专章：心智模型 + 8 个常见坑</a></li>
+    <li><a href="#p6">学习路线（8 个阶段）</a></li>
+    <li><a href="#p7">术语速查</a></li>
+    <li><a href="#p8">通用套路速查卡</a></li>
   </ol>
 </div>
 
-<h2 id="p1">1 · C → C# 对照表</h2>
-<p>你不需要先学很多 C# 才能看懂这个项目。下面这些是<b>够用</b>的映射，遇到新的再回来查。</p>
-
+<h2 id="p1">1 · 为什么是 Python（不是 Go / TS）</h2>
+<p>不是"Python 火"，而是<b>你的两个目标筛出来的</b>：</p>
 <table>
-  <tr><th>C</th><th>C#</th><th>关键差别</th></tr>
-  <tr><td><code>struct Point { int x, y; }</code></td><td><code>class Point { public int x, y; }</code></td><td>结构体默认<b>按值</b>传递，类默认<b>按引用</b>。C# 两者都有</td></tr>
-  <tr><td><code>malloc / free</code></td><td><code>new</code> / GC 回收</td><td>不用手动释放；但<b>能释放的东西要写 <code>Dispose</code></b>（文件、位图、画笔）</td></tr>
-  <tr><td>函数指针</td><td>委托 / 事件（<code>delegate</code>、<code>event</code>）</td><td>语法糖更甜：可以带上下文（闭包），事件是"一对多"的委托</td></tr>
-  <tr><td>头文件 + .c</td><td>一个 .cs 文件（或 <code>partial</code> 拆成多个）</td><td>没有头文件；<code>partial</code> 让一个类写在多个文件里（项目里 <code>60~66-WheelForm.*</code> 就是这么拆的）</td></tr>
-  <tr><td>全局变量</td><td><code>static</code> 字段</td><td><b>同样危险</b>。项目里的静态字段基本都为了"跨文件共享"或"测试注入"</td></tr>
-  <tr><td><code>#define</code> / <code>#ifdef</code></td><td><code>const</code> / <code>#if</code> 条件编译</td><td>项目用 <code>/define:NO_KEY</code> 编译出第二条产品线</td></tr>
-  <tr><td>数组 <code>int a[10]</code></td><td><code>List&lt;int&gt;</code> / <code>int[]</code></td><td><code>List</code> 自动扩容、能增删 —— 项目里几乎所有"一堆东西"都是 <code>List</code></td></tr>
-  <tr><td>字符串 <code>char*</code> + 手动管理</td><td><code>string</code>（不可变）</td><td>拼接会产生新对象；大量拼接用 <code>StringBuilder</code></td></tr>
-  <tr><td><code>NULL</code></td><td><code>null</code></td><td>访问 null 会抛 <code>NullReferenceException</code>；项目里到处是 <code>if (x != null)</code></td></tr>
-  <tr><td>错误码 / <code>errno</code></td><td>异常 <code>try/catch/finally</code></td><td><code>finally</code> <b>一定会执行</b> —— 项目里用它保证"让位之后一定还原"</td></tr>
+  <tr><th></th><th>Python</th><th>TypeScript</th><th>Go</th></tr>
+  <tr><td><b>做 agent 应用</b></td><td>✅ 生态第一</td><td>⚠️ 能做，薄一档</td><td>❌ 应用层没人用</td></tr>
+  <tr><td><b>读/改开源 agent 框架</b></td><td>✅✅ <b>框架本身就是 Python 写的</b></td><td>❌ 框架层基本没有</td><td>❌ 极少</td></tr>
+  <tr><td><b>从 C 迁移难度</b></td><td>🟡 容易（但动态类型要适应）</td><td>🟡 中等（语法像 C，包袱多）</td><td>🟢 <b>最平滑</b></td></tr>
+  <tr><td><b>岗位（AI 相关）</b></td><td>✅✅ 绝大多数</td><td>✅ 全栈/前端向</td><td>⚠️ 后端多，agent 少</td></tr>
 </table>
-
 <div class="tip">
-<b>看代码时的三个高频句型：</b><br>
-<code>using (Font f = new Font(...)) { ... }</code> —— 花括号结束时自动释放（相当于 C 里"记得 free"的自动化版本）<br>
-<code>for (int i = 0; i &lt; list.Count; i++)</code> —— 遍历，和 C 的数组循环一样<br>
-<code>delegate(object o, EventArgs e) { ... }</code> —— 就地写一个回调函数，相当于 C 里传函数指针
+你选了"能改框架" —— <b>那就只有 Python 这个答案</b>。LangChain / LangGraph / LlamaIndex / CrewAI / AutoGen / OpenAI Agents SDK / Anthropic SDK / MCP 参考实现，<b>全是 Python</b>。<br><br>
+<b>Go 是最诱惑的</b>（你 C 基础好，学它最顺），但它对应"基础设施"方向。方向未定之前，<b>别把时间花在它上面</b> —— 等确定了要做 MCP 服务器/高并发编排，那时你有 Python 底子，两周就能上手。
 </div>
 
-<h2 id="p2">2 · 我的项目长什么样</h2>
-
-<p><b>一句话</b>：Windows 上的截图工具。截完图<b>不弹保存框</b>，图直接变成屏幕角上一张缩略图（排成一段圆弧），要用的时候把缩略图<b>拖进任何程序</b>就发出去了。</p>
-
-<p><b>三条主流程</b>（整个项目就围绕这三条线）：</p>
-<pre><code>① 截图线：热键 → 全屏浮层 → 拖框选 → 标注/取字 → 确认
-                                    ↓ 合成成一张位图
-② 收纳线：位图 → 存进"轮盘"（内存里的列表）→ 屏幕角落的圆弧上排开
-                                    ↓
-③ 用图线：缩略图 → 拖出去（OLE 拖放）→ 目标程序收到文件或位图</code></pre>
-
-<p><b>技术栈</b>：C# / .NET Framework 4.0 / WinForms，约 2 万行、38 个源文件。所有界面<b>全部自己画</b>（没有 UI 框架、没有一张图片资源），编译用 Windows 自带的编译器，<b>零第三方依赖</b>，产物是单个约 300KB 的 exe。</p>
-
-<details>
-<summary>代码地图（按职责分四层，手机上随时查）</summary>
+<h2 id="p2">2 · C → Python 对照表</h2>
 <table>
-  <tr><th>层</th><th>文件</th><th>在解决什么</th></tr>
-  <tr><td rowspan="8">底座</td><td>00-AppInfo</td><td>版本号、名字、仓库地址</td></tr>
-  <tr><td>05-Err</td><td><b>出错日志 + 帧耗时统计</b>（诊断能力都在这）</td></tr>
-  <tr><td>10-Native</td><td>所有系统 API 声明集中一处</td></tr>
-  <tr><td>13-Ui</td><td>DPI 缩放 + 文字折行（统一入口）</td></tr>
-  <tr><td>14-Lang</td><td>界面语言（中英双写）</td></tr>
-  <tr><td>15-Gfx</td><td>绘制原语：圆角、阴影、玻璃、新拟态</td></tr>
-  <tr><td>12-Power</td><td>省电模式</td></tr>
-  <tr><td>69-ArcUi</td><td>弧形胶囊 + 沿弧文字</td></tr>
-  <tr><td rowspan="5">数据</td><td>20-ImageIO</td><td>图片格式解析、存盘</td></tr>
-  <tr><td>25-Store</td><td>一个轮盘里的所有图</td></tr>
-  <tr><td>27-Undo</td><td>撤销删除（只留内存引用）</td></tr>
-  <tr><td>30-Wheel</td><td>多轮盘管理</td></tr>
-  <tr><td>35-Settings</td><td>设置读写、热键、配置迁移</td></tr>
-  <tr><td rowspan="8">绘制</td><td>60-WheelForm</td><td>轮盘主窗口：字段/布局/几何</td></tr>
-  <tr><td>61-….Draw</td><td>绘制</td></tr>
-  <tr><td>62-….Anim</td><td>动画与展开收起</td></tr>
-  <tr><td>63-….Glass</td><td>抓屏毛玻璃</td></tr>
-  <tr><td>64-….Input</td><td>鼠标键盘、拖放</td></tr>
-  <tr><td>66-….Layers</td><td><b>分层缓存与签名</b>（性能核心）</td></tr>
-  <tr><td>40-RoundButton</td><td>自绘按钮（最小完整控件）</td></tr>
-  <tr><td>52-SymbolPicker</td><td>符号面板</td></tr>
-  <tr><td rowspan="12">功能</td><td>50-OverlayForm</td><td>截图浮层（框选 + 尺寸面板）</td></tr>
-  <tr><td>51-….Annotate</td><td>标注（箭头/方框/马赛克/文字/符号）</td></tr>
-  <tr><td>55-PinForm</td><td>贴图到屏幕</td></tr>
-  <tr><td>56-Ocr / 81-OcrForm</td><td>取字（系统自带 OCR）</td></tr>
-  <tr><td>57-Translate</td><td>翻译引擎链</td></tr>
-  <tr><td>58-LongShot / 59-LongShotForm</td><td>滚动长截图</td></tr>
-  <tr><td>70-WheelsForm</td><td>管理轮盘</td></tr>
-  <tr><td>75-SettingsForm</td><td>设置窗口</td></tr>
-  <tr><td>80-Dialogs</td><td>引导等对话框</td></tr>
-  <tr><td>84-Reward</td><td>打赏窗口</td></tr>
-  <tr><td>90-App</td><td>托盘与程序入口</td></tr>
-  <tr><td>91-Feedback</td><td>反馈闭环（诊断信息 + 提 issue）</td></tr>
+  <tr><th>C</th><th>Python</th><th>关键差别</th></tr>
+  <tr><td><code>int a[10]</code></td><td><code>list</code></td><td>可增删、可混合类型，<b>有切片</b> <code>a[1:3]</code></td></tr>
+  <tr><td><code>struct</code></td><td><code>class</code> / <code>dict</code> / <code>dataclass</code></td><td>没有"按值传递"，<b>一切皆引用</b></td></tr>
+  <tr><td><code>malloc/free</code></td><td>自动 GC</td><td>没有 <code>free</code>，但<b>引用还在就不回收</b></td></tr>
+  <tr><td>函数指针</td><td>函数是一等公民</td><td>可直接赋值、有 <code>lambda</code> 与装饰器</td></tr>
+  <tr><td><code>char*</code></td><td><code>str</code>（不可变）</td><td>拼接用 <code>"".join(list)</code></td></tr>
+  <tr><td><code>NULL</code></td><td><code>None</code></td><td>可以当默认值，但<b>别当可变默认参数</b></td></tr>
+  <tr><td>错误码</td><td>异常</td><td><code>try/except/finally</code>，<code>finally</code> 一定执行</td></tr>
+  <tr><td>头文件</td><td>没有</td><td><code>import</code> 是运行时行为</td></tr>
+  <tr><td>缩进无所谓</td><td><b>缩进就是语法</b></td><td>混用 tab/空格会报错</td></tr>
+  <tr><td>编译期检查</td><td>运行时才报错</td><td>必须靠<b>类型注解 + 静态检查</b>补回来</td></tr>
 </table>
-</details>
 
-<h2 id="p3">3 · 七个「为什么」</h2>
-<p class="muted">代码能看出"怎么做"，看不出"为什么"。这七条是项目里最难被外人看懂的部分。</p>
-
+<h3>从 C 过来必踩的五个坑（先看，别等踩）</h3>
 <details>
-<summary>3.1 为什么窗口要自己画，不用系统控件？</summary>
-<p>因为要<b>真透明</b>。Windows 上想要"只有圆弧和缩略图、其余完全透明"的窗口，必须用<b>分层窗口</b>。而分层窗口<b>不能承载普通控件</b> —— 控件的绘制不走分层通道。</p>
-<p>代价：按钮、圆角、阴影、图标、文字全得自己画。收益：视觉完全可控。</p>
+<summary><span class="num">1</span>可变默认参数</summary>
+<pre><code>def f(x, lst=[]):      # ← 这个 [] 只创建一次！
+    lst.append(x)
+    return lst</code></pre>
+<p>它<b>跨调用累积</b>。正确写法：</p>
+<pre><code>def f(x, lst=None):
+    lst = lst if lst is not None else []</code></pre>
 </details>
-
 <details>
-<summary>3.2 为什么毛玻璃要自己抓屏，不用系统效果？</summary>
-<p>两个原因：① 分层窗口<b>用不了</b>系统毛玻璃；② 系统效果会给<b>整个窗口矩形</b>蒙一层灰，而我们要"只糊面板内部、边缘干净"。</p>
-<p>做法：后台线程每 3.5 秒抓一次屏幕 → 模糊 → <b>裁进面板形状</b>。抓屏时给窗口打标记，保证<b>不会拍到自己</b>。</p>
+<summary><span class="num">2</span>赋值不是拷贝</summary>
+<pre><code>a = [1, 2, 3]
+b = a          # 只是多一个引用
+b.append(4)
+print(a)       # [1, 2, 3, 4] —— a 也变了</code></pre>
+<p>要拷贝用 <code>a.copy()</code>（一层）或 <code>copy.deepcopy(a)</code>（递归）。<b>和 C 里"数组名是地址"有点像，但更容易被骗。</b></p>
 </details>
-
 <details>
-<summary>3.3 为什么要有「分层缓存 + 签名」？</summary>
-<p>一帧如果每次都把所有矢量图形重画，要 12.7ms（量出来的）。做法：把画面分成三层（环/缩略图/控件），<b>每层缓存成位图</b>，每帧只贴图。</p>
-<p>但贴图有个前提：<b>缓存必须还有效</b>。于是给每层算一个签名（由"这一层依赖的所有状态"混合而成：悬停项、偏移量、缩放、颜色…）。</p>
-<div class="bad"><b>规则：任何参与绘制的状态都必须进签名</b>，否则画面会卡在旧状态（我们真踩过，见 §4.6）。</div>
-</details>
+<summary><span class="num">3</span>闭包里的循环变量</summary>
+<pre><code>fs = [lambda: i for i in range(3)]
+print([f() for f in fs])   # [2, 2, 2] —— 不是 [0,1,2]！
 
+# 正确：立即绑定
+fs = [lambda i=i: i for i in range(3)]</code></pre>
+<p>原因：变量在<b>调用时</b>才求值，那时循环早已结束。</p>
+</details>
 <details>
-<summary>3.4 为什么偏移量要有两个变量（当前值 / 目标值）？</summary>
-<p><code>_targetOffset</code> = <b>目标</b>（滚轮一滚就变，代表用户意图）<br>
-<code>_offset</code> = <b>当前值</b>（每帧向目标靠近一小步，代表动画）</p>
-<p>分开的好处：<b>意图立刻记录、画面平滑跟上</b>。所有动画系统都是这个套路（C 里写游戏循环也一样）。</p>
+<summary><span class="num">4</span><code>is</code> 和 <code>==</code> 不是一回事</summary>
+<p><code>is</code> 比身份（内存地址），<code>==</code> 比值。小整数和短字符串会被缓存，导致 <code>is</code> <b>有时"碰巧对"</b> —— 最危险的 bug 类型。判断空值用 <code>is None</code>（这是唯一推荐的 <code>is</code> 用法）。</p>
 </details>
-
 <details>
-<summary>3.5 为什么要统一用「屏幕坐标」？</summary>
-<p>因为要跨多显示器工作。统一用虚拟屏幕坐标的好处是"算一次到处能用"；代价是<b>任何相对坐标都要显式转换</b> —— 忘记转换就会出现"面板跑到副屏去了"（我们踩过）。</p>
+<summary><span class="num">5</span>GIL：同一时刻只有一个线程在跑 Python 字节码</summary>
+<p>所以：<b>I/O 密集用线程，CPU 密集用多进程</b>。<br>
+做 agent 时这条<b>极其重要</b> —— agent 大量时间在等网络，线程反而正合适。</p>
 </details>
 
-<details>
-<summary>3.6 为什么设置窗口翻页要用「位图滑动」？</summary>
-<p>因为控件在翻页时要重排 + 重绘，会闪、会掉帧。做法：动画期间<b>把两页各渲染成位图</b>，滑动位图；动画结束再切回真实控件。</p>
-<p><b>通用套路：动画期间用位图，静止时用控件。</b></p>
-</details>
+<h2 id="p3">3 · Python 工程习惯（<b>别跳过</b>）</h2>
+<p>C 有编译器帮你把关，Python 没有 —— <b>这些职责必须由工具链和纪律补回来</b>。这也是从"能跑"到"能维护"的分水岭。</p>
+<table>
+  <tr><th>要做什么</th><th>用什么</th><th>为什么</th></tr>
+  <tr><td><b>类型注解 + 静态检查</b></td><td><code>def f(x: int) -&gt; str:</code> + mypy / pyright</td><td>补上动态类型最大的缺点。从 C 过来你会觉得亲切</td></tr>
+  <tr><td><b>虚拟环境</b></td><td><code>python -m venv .venv</code></td><td>一人一环境，别污染系统</td></tr>
+  <tr><td><b>依赖锁定</b></td><td><code>pyproject.toml</code> / <code>requirements.txt</code>（uv / poetry）</td><td>记住版本，否则三个月后跑不起来</td></tr>
+  <tr><td><b>格式化 + lint</b></td><td><code>ruff</code>（一个工具全干）</td><td>别在风格上争论，让工具定</td></tr>
+  <tr><td><b>测试</b></td><td><code>pytest</code></td><td><b>从第一天就写</b>，哪怕只测一个函数</td></tr>
+</table>
 
-<details>
-<summary>3.7 为什么「拖出去」是复制语义？</summary>
-<p>拖放调用用的是"复制"效果 —— 目标程序拿到的是<b>副本</b>，所以环上那份<b>应该留着</b>（想再拖一次、或拖给第二个窗口都要用）。</p>
-<div class="bad">我们曾经在拖出成功后把图从环上删掉（把复制当成了移动），于是"拖一次就没了"。见 §4.3。</div>
-</details>
-
-<h2 id="p4">4 · 反例库：我们踩过的 10 个坑</h2>
-<p class="muted">这是整册最有价值的部分。每条都是真实的：有症状、有日志、有数据。<b>你不用再走一遍，但要能讲出"为什么会这样"。</b></p>
+<h2 id="p4">4 · 工程反例库：真实踩过的 10 个坑</h2>
+<p class="muted">来自一个真实项目（SnapWheel）的开发过程。<b>这些坑和语言无关</b> —— 换成 Python / TS / Go 全成立。</p>
 
 <details open>
-<summary><span class="num">4.1</span>度量与绘制不同源 —— <b>同一个坑摔了四次</b></summary>
-<p><b>症状</b>：文字/图形的位置和它的边框、命中区域对不上，或者被裁掉一半。</p>
-<p><b>根因</b>：<b>测量用一套参数，绘制用另一套。</b>四次分别是：</p>
+<summary><span class="num">1</span>度量与绘制不同源 —— <b>同一个坑摔了四次</b></summary>
+<p><b>症状</b>：文字/图形的位置和它的边框、命中区域对不上，或被裁掉一半。</p>
+<p><b>根因</b>：<b>测量用一套参数，绘制用另一套</b>。四次分别是：</p>
 <ol>
-  <li>用 GDI+ 的方式量宽度、却用另一种方式画 → 实际更宽 → <b>右边缘被切</b>；</li>
-  <li>格子按 20pt 字号算，而表情的<b>行高</b>远大于字号 → <b>被裁</b>；</li>
-  <li>量框用中文字体、画的时候用符号字体 → <b>两个字体宽高不同</b> → 错位；同时<b>锚点不一致</b>（框按左上角、画按中心）→ 差半个字；</li>
-  <li><b>GDI 与 GDI+ 混用</b>：用 GDI 画，却期望它响应 GDI+ 的旋转/平移变换 —— <b>GDI 完全不理会</b>，于是预览正常、一合成到成品图就跑到图外。</li>
+  <li>用 A 方式量宽度、却用 B 方式画 → 实际更宽 → 右边缘被切；</li>
+  <li>格子按字号算，而实际行高远大于字号 → 被裁；</li>
+  <li>量框用一个字体、画的时候用另一个字体 → 宽高不同 → 错位；同时<b>锚点不一致</b>（一边算左上角、一边按中心）；</li>
+  <li><b>两套绘图 API 混用</b>：用旧的 API 画，却期望它响应新 API 的旋转/平移变换 —— 它<b>完全不理会</b>，于是预览正常、一导出就跑偏。</li>
 </ol>
-<div class="good"><b>正确做法</b>：测量和绘制必须<b>同一条 API 路径</b>；锚点必须一致；字体必须一致。更工程化的做法是<b>把这几件事封装成一个函数</b>，让调用方<b>不可能</b>写错。</div>
-<div class="tip"><b>这条的普适教训</b>：很多 bug 不是"写错了"，而是<b>"约定没有强制"</b>。好的设计让错误写不出来。</div>
+<div class="good"><b>正确做法</b>：测量和绘制必须<b>同一条路径</b>；锚点、字体、单位必须一致。更工程化的做法：<b>封装成一个函数，让调用方不可能写错</b>。</div>
+<div class="tip"><b>普适教训</b>：很多 bug 不是"写错了"，而是<b>"约定没有强制"</b>。好的设计让错误写不出来。</div>
 </details>
 
 <details>
-<summary><span class="num">4.2</span>不要用字符串片段做批量替换的锚点</summary>
-<p><b>症状</b>：批量改文案后，编译报错一片，字符串被劈成两半。</p>
-<p><b>根因</b>：把 <code>" 张"</code>、<code>" 行"</code> 这种<b>片段</b>当查找目标，而它们是<b>更大字符串的一部分</b>。</p>
-<p><b>正确做法</b>：用完整字符串做锚点；批量改完<b>必须编译验证</b>；先确认目标唯一。</p>
+<summary><span class="num">2</span>拿字符串片段做批量替换的锚点</summary>
+<p>把 <code>" 张"</code>、<code>" 行"</code> 这种片段当查找目标，而它们是更大字符串的一部分 → 把它劈成两半，编译报错一片。</p>
+<p><b>正确做法</b>：用完整锚点；改完<b>必须验证</b>；先确认目标唯一。</p>
 </details>
 
 <details>
-<summary><span class="num">4.3</span>语义搞错：把「复制」当成了「移动」</summary>
-<p><b>症状</b>：拖出去的图从环上消失了，不能再拖第二次。</p>
-<p><b>根因</b>：拖放用的是复制效果，但成功后代码把图从列表里删了。</p>
-<p><b>正确做法</b>：<b>先想清楚操作的语义</b>（复制？移动？），再写代码。</p>
+<summary><span class="num">3</span>把「复制」当成了「移动」</summary>
+<p>拖放用的语义是"复制"，代码却在成功后把源删掉了 → 用户发现"拖一次就没了"。</p>
+<p><b>教训</b>：<b>先想清语义</b>（复制还是移动？谁拥有这块数据？），再写代码。</p>
 </details>
 
 <details>
-<summary><span class="num">4.4</span>状态用属性临时保存，嵌套时丢失</summary>
-<p><b>症状</b>：打开设置窗口，它跑到了轮盘<b>下面</b>（以为没打开）；截图界面也在下层。</p>
-<p><b>根因</b>：为了让轮盘让位，代码临时把它设为非置顶，结束再恢复。但<b>多处嵌套</b>（截图时又打开设置）→ 恢复时拿到的是<b>中间态</b> → <b>状态永久丢失</b>。</p>
-<div class="good"><b>正确做法</b>：用<b>计数 / 引用计数</b>：第一个进入时保存原值、最后一个离开时恢复。这是"可嵌套资源管理"的通用模式（C 里做锁、做引用计数同理）。</div>
-<div class="bad"><b>附加教训</b>：改这个时我<b>只抑制了"重新置顶"，却忘了它本来就还在顶层</b> —— 没修好还创造新 bug。<b>改状态机前，先把它所有状态和转换画出来。</b></div>
+<summary><span class="num">4</span>状态用"记住原值再恢复"临时保存 —— <b>嵌套时永久丢失</b></summary>
+<p><b>症状</b>：打开设置窗口，它跑到了主窗口下面（以为没打开）。</p>
+<p><b>根因</b>：为了让主窗口"让位"，代码临时把它降级，结束再恢复。但<b>多处嵌套</b>（截图时又打开设置）→ 恢复时拿到的是<b>中间态</b> → 状态永久错乱。</p>
+<div class="good"><b>正确做法</b>：用<b>计数 / 引用计数</b>：第一个进入时保存原值、最后一个离开时恢复。<b>这是"可嵌套资源管理"的通用模式</b>（锁、连接池、事务都一样）。</div>
+<div class="bad"><b>附加教训</b>：修这个时我<b>只做了一半</b>（抑制了"重新提升"，却忘了它本来就还在高位），没修好还创造新 bug。<b>改状态机前，先把它所有状态和转换画出来。</b></div>
 </details>
 
 <details>
-<summary><span class="num">4.5</span>显示值用错变量：当前值 vs 目标值</summary>
-<p><b>症状</b>：滚轮滚动时，"第几张 / 共几张"的数字<b>不变</b>。</p>
-<p><b>根因</b>：数字用了<b>当前动画值</b>（要等动画追上去才更新），而用户期望"滚轮一动就变" → 应该用<b>目标值</b>。</p>
-<p><b>正确做法</b>：区分"意图"和"呈现"。反映用户操作的显示用目标值；反映动画进度的用当前值。</p>
+<summary><span class="num">5</span>显示值用了「当前值」而不是「目标值」</summary>
+<p><b>症状</b>：滚动时"第几张 / 共几张"的数字不变。</p>
+<p><b>根因</b>：数字用了<b>当前动画值</b>（要等动画追上去才更新），而用户期望"一动就变"。</p>
+<p><b>正确做法</b>：<b>区分"意图"和"呈现"</b>。反映用户操作的显示用目标值；反映动画进度的用当前值。</p>
 </details>
 
 <details>
-<summary><span class="num">4.6</span>新状态没进缓存签名</summary>
-<p><b>症状</b>：新加的动画<b>完全不动</b>，或画面卡在旧状态。</p>
-<p><b>根因</b>：项目用"层签名"决定缓存是否有效（§3.3）。<b>新增了参与绘制的状态，却没把它混进签名</b> → 系统以为缓存还有效 → 一直贴旧图。</p>
-<p><b>正确做法</b>：<b>任何参与绘制的状态都必须进签名</b> —— 把它当成"改绘制代码的检查清单第一项"。</p>
+<summary><span class="num">6</span>新增的绘制状态没进缓存失效判据</summary>
+<p>项目用"签名"判断缓存还能不能用。<b>新增了参与绘制的状态却没混进签名</b> → 系统以为缓存有效 → 画面卡在旧状态。</p>
+<p><b>正确做法</b>：<b>任何参与绘制的状态都必须进失效判据</b> —— 作为"改绘制代码的检查清单第一项"。</p>
 </details>
 
 <details>
-<summary><span class="num">4.7</span>按中文宽度设计的布局，换英文就溢出</summary>
-<p><b>症状</b>：做成多语言后，英文一行挤成一长串被裁；提示文字压住了别的元素。</p>
-<p><b>根因</b>：布局宽度是<b>按中文字符数估</b>的，英文同义句往往长 50%~100%。</p>
-<div class="good"><b>正确做法</b>：① 不按"字符数"算宽度，按<b>实测宽度</b>（同 §4.1）；② 有些控件<b>不会自动折行</b>，要在文案里手工插换行；③ <b>设计时就用最长的语言试一遍</b>。</div>
+<summary><span class="num">7</span>按中文宽度设计的布局，换英文就溢出</summary>
+<p>布局宽度按中文字符数估，英文同义句往往长 50%~100% → 被裁、压住别的控件。</p>
+<div class="good"><b>正确做法</b>：① 不按字符数估，按<b>实测宽度</b>；② 有些控件不会自动折行，要在文案里手工插换行；③ <b>设计时就用最长的语言试一遍</b>。</div>
 </details>
 
 <details>
-<summary><span class="num">4.8</span>构建脚本的编码：BOM 不是可选项</summary>
-<p><b>症状</b>：改完构建脚本，突然报一堆语法错误、中文全变乱码。</p>
-<p><b>根因</b>：PowerShell 对<b>没有 BOM 的 UTF-8 脚本</b>会<b>按系统本地编码解释</b> → 中文全乱 → 语法崩。</p>
-<p><b>正确做法</b>：<b>写回脚本文件时必须带 BOM</b>。这条很小，但我把能跑的构建脚本搞坏了两次，都靠版本控制才恢复。</p>
+<summary><span class="num">8</span>脚本文件编码：BOM 不是可选项</summary>
+<p>改完构建脚本突然报一堆语法错误、中文全乱 —— 因为某些环境对<b>没有 BOM 的 UTF-8 脚本</b>会按本地编码解释。</p>
+<p><b>教训</b>：<b>"文件编码"是真实存在的工程细节</b>，不是学术问题。我把能跑的脚本搞坏了两次，都靠版本控制恢复。</p>
 </details>
 
 <details>
-<summary><span class="num">4.9</span>不要用「解析输出」判断成败</summary>
-<p><b>症状</b>：脚本里写"编译成功就提交"，结果<b>连续两次把编译不过的版本推了上去</b>。</p>
-<p><b>根因</b>：① 判断写了正则但没转义元字符，匹配失败；② 改成字符串包含也失败 —— 因为那个构建脚本用<b>只输出到屏幕</b>的方式打印，<b>不进管道</b>，变量一直是空的。</p>
-<div class="good"><b>正确做法</b>：用"<b>产物是否存在且合理</b>"判断（文件在不在、大小对不对），或者用退出码。<b>不要解析给人看的输出。</b></div>
-<p><b>附带教训</b>：<b>先编译、再提交</b>。我把顺序写反了两次。</p>
+<summary><span class="num">9</span>用「解析输出」判断成败</summary>
+<p>脚本里写"编译成功就提交"，结果<b>连续两次把编译不过的版本推上去</b>：① 正则没转义元字符；② 那个工具的输出<b>根本不进管道</b>，变量一直是空的。</p>
+<div class="good"><b>正确做法</b>：用<b>产物是否存在且合理</b>判断，或用退出码。<b>不要解析给人看的输出。</b></div>
+<p><b>附带教训</b>：<b>先验证、再提交</b>。我把顺序写反了两次。</p>
 </details>
 
 <details>
-<summary><span class="num">4.10</span>先测量，再优化 —— <b>方法论中的方法论</b></summary>
-<p><b>症状</b>：比例面板展开动画卡顿。我<b>猜了三个原因、改了三轮</b>，都没解决。</p>
-<p><b>实测之后</b>：</p>
+<summary><span class="num">10</span>先测量，再优化 —— <b>方法论中的方法论</b></summary>
+<p>动画卡顿，我<b>猜了三个原因、改了三轮</b>都没解决。实测之后：</p>
 <ul>
-  <li>我以为的元凶（每帧重贴整张 2560×1440 底图）实测是 <b>0.31ms</b> —— <b>根本无关</b>；</li>
-  <li>真正的数据：<b>全屏重绘 22.2ms/帧（≈45fps）</b>，局部重绘降到 <b>13.5ms</b> —— 这才是"帧率低"的确切原因。</li>
+  <li>我以为的元凶，实测只占 <b>0.31ms</b> —— <b>根本无关</b>；</li>
+  <li>真正的数据：<b>全屏重绘 22.2ms/帧</b>，局部重绘 <b>13.5ms</b> —— 这才是"帧率低"的确切原因；</li>
+  <li>再细分：最大头是一个绘制函数占 <b>8.4ms</b>，而它的一半花在<b>每帧重算布局</b>上。</li>
 </ul>
-<div class="good"><b>正确做法</b>：① 先加计时，拿到分段数据；② 按数据改，不按直觉改；③ 改完<b>再测一次</b>验证。</div>
-<div class="tip"><b>一句话记住</b>：<b>没有测量就没有优化，只有猜测。</b> 我在这上面白烧了大量时间和额度。</div>
+<div class="good"><b>正确做法</b>：① 先加计时，拿分段数据；② 按数据改，不按直觉改；③ 改完<b>再测一次</b>验证。</div>
+<div class="tip"><b>一句话</b>：<b>没有测量就没有优化，只有猜测。</b> 这条在优化 agent 的延迟和成本时，一模一样适用。</div>
 </details>
 
-<h2 id="p5">5 · 学习路线（7 个阶段）</h2>
-<p class="muted">每阶段都是「原理 → 看真实代码 → 看反例 → 自己动手 → 验收」。练习写在 <code>tests/learn/</code>。</p>
+<h2 id="p5">5 · Agent 专章</h2>
+<div class="tip">
+<b>诚实声明</b>：上面 §4 的反例是<b>真实踩过的</b>（有日志、有数据）。<br>
+下面这一节是<b>公开资料与业界共识的整理</b> —— 方向正确，但<b>没有第一手经验背书</b>。<br>
+<b>请带我去读真实开源代码验证，不要只信概念。</b>
+</div>
 
-<details>
-<summary><b>阶段 1</b>｜一个程序是怎么"活"起来的</summary>
-<p><b>原理</b>：程序入口、事件循环、消息、回调。C 里是 <code>main</code> + <code>while</code> + 函数指针；Windows 程序是 <code>WinMain</code> + 消息循环 + 窗口过程回调。</p>
-<p><b>代码</b>：<code>90-App.cs</code>（入口与托盘）、<code>10-Native.cs</code>（怎么声明系统调用）。</p>
-<p><b>动手</b>：写一个 50 行的窗口程序，点一下就换标题。</p>
-<p><b>验收</b>：能解释"我点了按钮之后，代码从哪一行跳到哪一行"。</p>
-</details>
-
-<details>
-<summary><b>阶段 2</b>｜数据怎么组织（从结构体到类）</summary>
-<p><b>原理</b>：结构体→类；函数指针→委托/事件；<code>malloc/free</code>→GC 与生命周期；<b>封装</b>到底解决什么问题。</p>
-<p><b>代码</b>：<code>25-Store</code>、<code>30-Wheel</code>、<code>27-Undo</code>。</p>
-<p><b>反例</b>：§4.3（语义不清导致逻辑错误）。</p>
-<p><b>动手</b>：用 C 写一个"能存 N 条、能删、能撤销"的小程序（<b>自己写，不看项目代码</b>），写完再对照项目看它怎么做得更好。</p>
-<p><b>验收</b>：能说清"为什么撤销用引用计数而不是拷贝"。</p>
-</details>
-
-<details>
-<summary><b>阶段 3</b>｜画到屏幕上（<b>核心阶段</b>）</summary>
-<p><b>原理</b>：坐标系、绘制原语、双缓冲（为什么需要）、裁剪、抗锯齿、字体度量。</p>
-<p><b>代码</b>：<code>15-Gfx</code>、<code>40-RoundButton</code>（最小完整控件）、<code>61-….Draw</code>。</p>
-<p><b>反例</b>：<b>§4.1（摔了四次的坑）</b>+ §4.7。</p>
-<p><b>动手</b>：写一个自绘按钮：悬停变色、按下变暗、文字<b>真正居中</b>（用测得的尺寸算）。<b>写完截图放大，用尺子量</b>是否真居中。</p>
-<p><b>验收</b>：能讲出"为什么测量和绘制必须同源"，并举出一个会出错的例子。</p>
-</details>
-
-<details>
-<summary><b>阶段 4</b>｜交互（命中、状态、焦点）</summary>
-<p><b>原理</b>：命中测试、状态机、焦点与激活、窗口层级（Z 序）。</p>
-<p><b>代码</b>：<code>64-….Input</code>、<code>51-….Annotate</code>（选中/拖动/缩放）。</p>
-<p><b>反例</b>：<b>§4.4（状态嵌套丢失）</b>+ §4.5。</p>
-<p><b>动手</b>：给阶段 3 的按钮加上拖动、缩放、删除、撤销，再加一个动画过渡。</p>
-<p><b>验收</b>：能在纸上画出一个对象的所有状态和转换。</p>
-</details>
-
-<details>
-<summary><b>阶段 5</b>｜让程序跑得快且不卡（性能工程）</summary>
-<p><b>原理</b>：帧预算（60fps = 16.7ms）、缓存、失效与签名、<b>测量方法</b>。</p>
-<p><b>代码</b>：<code>66-….Layers</code>、<code>05-Err</code>（帧耗时统计）。</p>
-<p><b>反例</b>：§4.6 + <b>§4.10（先测量再优化）</b>。</p>
-<p><b>动手</b>：给自己阶段 4 的程序加"帧耗时打印"，然后<b>故意</b>制造卡顿，用数据找出原因并修掉。</p>
-<p><b>验收</b>：能独立完成"测量 → 定位 → 优化 → 复测"整套流程。</p>
-</details>
-
-<details>
-<summary><b>阶段 6</b>｜工程化（从"能跑"到"能维护"）</summary>
-<p><b>原理</b>：分层与依赖方向、构建脚本、测试的价值、配置兼容、多语言、发布流程。</p>
-<p><b>代码</b>：<code>tools/build.ps1</code>、<code>tests/</code>、<code>35-Settings</code>（配置迁移）、<code>14-Lang</code>。</p>
-<p><b>反例</b>：§4.2、§4.8、§4.9。</p>
-<p><b>动手</b>：给自己的程序加：一键构建脚本、3 个自动化测试、一个配置文件（且旧配置能读）。</p>
-<p><b>验收</b>：能解释"为什么测试值得写"，并举出<b>你自己代码里</b>一个"当初写测试能省几小时"的例子。</p>
-</details>
-
-<details>
-<summary><b>阶段 7</b>｜毕业设计：独立完成一个小工具</summary>
-<p>范围 <b>200~800 行</b>，<b>从需求到发布全流程</b>：自己定需求、自己设计、自己写、自己测、自己打包、写 README。</p>
-<p>建议题材：和 SnapWheel 同类但不同 —— 剪贴板历史、颜色拾取器、窗口置顶工具。</p>
-<p>AI 的角色：<b>审阅者</b>，只在你卡住时给方向，<b>不写代码</b>。</p>
-<p><b>验收</b>：你能完整讲一遍 —— 为什么这么分层、最大的技术问题是什么、怎么解决的、如果重做会改哪里。</p>
-</details>
-
-<h2 id="p6">6 · 术语速查</h2>
+<h3>5.1 心智模型：一句话</h3>
+<pre><code>agent = LLM + 工具 + 循环 + 状态</code></pre>
+<ul>
+  <li><b>LLM</b>：判断"下一步做什么"；</li>
+  <li><b>工具</b>：把判断变成真实动作（查库、调 API、写文件）；</li>
+  <li><b>循环</b>：做完一步、把结果喂回去、再判断 —— <b>直到完成或达到上限</b>；</li>
+  <li><b>状态</b>：跨步骤要记住的东西（历史、进度、中间结果）。</li>
+</ul>
+<p><b>三个最容易被误解的点</b>（要重点纠正）：</p>
 <table>
-  <tr><th>词</th><th>一句话解释</th></tr>
-  <tr><td>分层窗口</td><td>一种支持"整窗按像素透明"的窗口，代价是不能放普通控件，一切自己画</td></tr>
-  <tr><td>双缓冲</td><td>先在内存里画好一整张，再一次性贴到屏幕，避免闪烁</td></tr>
-  <tr><td>裁剪（Clip）</td><td>限制"只能画在某块区域里"，超出部分不画</td></tr>
-  <tr><td>脏区</td><td>需要重绘的那一小块区域。只重绘脏区能大幅省时间</td></tr>
-  <tr><td>帧预算</td><td>60fps 意味着每帧只有 16.7ms，所有绘制必须在此之内完成</td></tr>
-  <tr><td>缓存失效</td><td>缓存的内容过时了、不能再用。需要一个机制判断"还能不能用"</td></tr>
-  <tr><td>签名</td><td>把一组状态压缩成一个数字，用它快速判断"缓存是否需要重建"</td></tr>
-  <tr><td>命中测试</td><td>判断"鼠标点在了哪个对象上"</td></tr>
-  <tr><td>状态机</td><td>用"当前处于哪个状态"来决定"该响应什么"。状态多时画成图最不容易错</td></tr>
-  <tr><td>Z 序</td><td>窗口的前后层叠顺序</td></tr>
-  <tr><td>置顶（TopMost）</td><td>让窗口始终显示在其它窗口之上</td></tr>
-  <tr><td>焦点</td><td>键盘输入会送到"拥有焦点"的窗口</td></tr>
-  <tr><td>激活</td><td>把某窗口提到前台并给它焦点</td></tr>
-  <tr><td>委托 / 事件</td><td>C 里函数指针的升级版：可以带上下文，事件是"一对多"</td></tr>
-  <tr><td>闭包</td><td>一个函数 + 它记住的外部变量。C 里要手动传结构体才能做到</td></tr>
-  <tr><td>partial 类</td><td>一个类写在多个文件里，编译时合并 —— 用来拆分超大文件</td></tr>
-  <tr><td>DPI 缩放</td><td>高分屏上按比例放大界面。必须统一入口，否则各处尺寸会打架</td></tr>
-  <tr><td>OLE 拖放</td><td>Windows 标准的"拖文件到别的程序"机制</td></tr>
-  <tr><td>OCR</td><td>从图片里识别文字</td></tr>
-  <tr><td>回归（regression）</td><td>改 A 的时候把原本好的 B 弄坏了</td></tr>
+  <tr><th>误解</th><th>实际</th></tr>
+  <tr><td>"让 LLM 自由发挥"</td><td>生产级 agent 的关键是<b>约束</b>：工具边界、步数上限、超时、预算</td></tr>
+  <tr><td>"prompt 写好就行"</td><td>大部分失败来自<b>上下文管理与错误处理</b>，不是措辞</td></tr>
+  <tr><td>"一次调用就完"</td><td>它是<b>循环</b> → 死循环、状态漂移、错误累积，全是经典循环问题</td></tr>
 </table>
 
-<h2 id="p7">7 · 通用套路速查卡</h2>
-<div class="lead">这些是跨语言、跨项目都成立的<b>经验</b>。忘了就回来翻。</div>
+<h3>5.2 Agent 特有的 8 个常见坑</h3>
+<details>
+<summary><span class="num">1</span>上下文无限膨胀</summary>
+<p>每轮把全部历史塞回去 → 成本线性涨，而且后期模型会"忘记"关键早期信息。<br>
+应对：摘要、只保留相关片段、用结构化状态代替原始对话。</p>
+</details>
+<details>
+<summary><span class="num">2</span>工具调用死循环</summary>
+<p>反复调同一个工具、或用同样参数重试。<br>
+应对：步数上限、重复检测、<b>把错误原样喂回</b>让模型自己纠偏。</p>
+</details>
+<details>
+<summary><span class="num">3</span>错误被静默吞掉</summary>
+<p>工具失败后返回空字符串 → 模型以为成功 → 继续往下走 → 最后给出错误答案。<br>
+<b>应对：失败必须显式返回给模型。</b></p>
+</details>
+<details>
+<summary><span class="num">4</span>不设预算和超时</summary>
+<p>一次跑飞烧掉大量 token 和时间。<br>
+<b>应对：每次调用都必须有 token 上限、超时、最大步数。</b></p>
+</details>
+<details>
+<summary><span class="num">5</span>prompt 注入</summary>
+<p>工具返回的内容里可能藏着指令（网页里写着"忽略之前的指令"）。<br>
+应对：区分<b>可信指令</b>与<b>不可信数据</b>，不要把工具输出直接当指令执行。</p>
+</details>
+<details>
+<summary><span class="num">6</span>非确定性导致测试困难</summary>
+<p>同样输入给出不同输出。<br>
+应对：<b>把可确定的部分（工具、状态机、解析）与不可确定的部分（模型调用）分离</b> —— 前者写死测试，后者做行为评测。</p>
+</details>
+<details>
+<summary><span class="num">7</span>把 agent 当函数用</summary>
+<p>它是<b>带状态的长流程</b>，要像"服务"一样考虑可观测性：每步输入输出、耗时、成本，出问题能复现。</p>
+</details>
+<details>
+<summary><span class="num">8</span>没有评测集</summary>
+<p>没有评测就无法判断"改了 prompt 是变好还是变坏"。<br>
+应对：<b>尽早建一个 20~50 条真实用例的小评测集</b>。这条和反例 #10 是同一个道理 —— <b>不测量就不知道有没有变好</b>。</p>
+</details>
+
+<h3>5.3 必学清单</h3>
+<table>
+  <tr><th>主题</th><th>掌握到什么程度</th></tr>
+  <tr><td>LLM API 基础</td><td>流式输出、超时重试、token 计费、错误分类</td></tr>
+  <tr><td>Prompt 编排</td><td>系统/工具/历史/用户四类消息的组织；上下文窗口管理</td></tr>
+  <tr><td>工具调用</td><td>函数签名定义、参数校验、失败回传、<b>幂等性</b>（重试安全）</td></tr>
+  <tr><td>Agent 循环</td><td>步数上限、终止条件、<b>状态持久化</b>（中途崩了能恢复吗）</td></tr>
+  <tr><td>上下文与记忆</td><td>摘要、检索（RAG）、结构化状态</td></tr>
+  <tr><td>并发与重试</td><td>指数退避、限流、幂等、部分失败处理</td></tr>
+  <tr><td>可观测性</td><td>每步输入输出/耗时/成本；出问题能复现</td></tr>
+  <tr><td>评测</td><td>小评测集、回归（改 prompt 前后对比）</td></tr>
+  <tr><td><b>MCP 协议</b></td><td>模型与工具的标准化接口，目前事实标准，值得专门学</td></tr>
+</table>
+
+<h3>5.4 建议读的真实代码（从易到难）</h3>
+<ol>
+  <li><b>MCP 的 Python SDK</b> —— 体量适中，直接展示"工具协议"怎么定义；</li>
+  <li><b>OpenAI / Anthropic 官方 SDK 的示例</b> —— 最基本循环与流式处理；</li>
+  <li><b>LangGraph</b>（或类似）—— 理解"把 agent 建模成状态图"为什么有必要；</li>
+  <li><b>一个真实的开源 agent 应用</b> —— 看工程细节：预算、错误处理、日志。</li>
+</ol>
+<p><b>读法</b>：先跑通，再专挑「预算控制 / 错误处理 / 状态管理」这三处细读 —— <b>不要从头读到尾</b>。</p>
+
+<h2 id="p6">6 · 学习路线（8 个阶段）</h2>
+<p class="muted">每阶段：原理 → 读真实代码 → 看反例 → 自己动手 → 验收。每天 1~2 小时，每阶段要能在几天内啃完。</p>
+
+<details>
+<summary><b>1</b>｜Python 速通（从 C 迁移）</summary>
+<p><b>动手</b>：写一个命令行小工具 —— 读文件、发 HTTP 请求、解析 JSON、把结果写回文件。</p>
+<p><b>验收</b>：能讲清 C 的"值/地址"和 Python 的"引用"区别，并举出反例 #2 的例子。</p>
+</details>
+
+<details>
+<summary><b>2</b>｜Python 工程化</summary>
+<p><b>动手</b>：给阶段 1 的工具加上：虚拟环境、类型注解、静态检查、3 个 pytest 用例、一键运行脚本。</p>
+<p><b>验收</b>：能解释<b>为什么</b>需要类型注解和测试（而不是背概念）。</p>
+</details>
+
+<details>
+<summary><b>3</b>｜第一次调用 LLM API</summary>
+<p><b>动手</b>：一个能流式输出、带超时与重试、能统计 token 成本的命令行工具。</p>
+<p><b>验收</b>：能用一句话说清"这次调用的输入、输出、和可能的失败"，并算出花了多少钱。</p>
+</details>
+
+<details>
+<summary><b>4</b>｜工具调用与 agent 循环</summary>
+<p><b>动手</b>：给上一步加上"能调用 2~3 个本地函数"，并且加上<b>步数上限</b>和<b>失败显式回传</b>。</p>
+<p><b>验收</b>：能画出循环流程图，并指出<b>三处可能死循环</b>的地方。</p>
+</details>
+
+<details>
+<summary><b>5</b>｜上下文与状态管理</summary>
+<p><b>动手</b>：让它能处理"超过上下文窗口"的输入（摘要或检索）。</p>
+<p><b>验收</b>：能讲清"为什么不能把全部历史都塞回去"，并说出两种替代方案。</p>
+</details>
+
+<details>
+<summary><b>6</b>｜读开源框架</summary>
+<p><b>动手</b>：跑通 MCP Python SDK 的一个例子；给 LangGraph 改一个小功能并让它通过测试。</p>
+<p><b>验收</b>：能讲清 MCP 是怎么定义"工具"的；能说出你改的那处代码为什么这么写。</p>
+</details>
+
+<details>
+<summary><b>7</b>｜健壮性与评测</summary>
+<p><b>动手</b>：给自己的 agent 加上预算/超时/日志追踪；建一个 20 条真实用例的评测集，测出准确率。</p>
+<p><b>验收</b>：能拿出<b>评测数据</b>说明"我的改动让准确率从 X 变成 Y"。</p>
+</details>
+
+<details>
+<summary><b>8</b>｜毕业设计：做一个真能用的 agent</summary>
+<p>自己定题，从需求到部署全流程。AI 只当<b>审阅者</b>，不写代码。</p>
+<p><b>验收</b>：能完整讲一遍 —— 为什么这么设计、最大的技术问题是什么、怎么解决的、如果重做会改哪里。</p>
+</details>
+
+<h2 id="p7">7 · 术语速查</h2>
+<h4>Python / 工程</h4>
+<table>
+  <tr><th>词</th><th>一句话</th></tr>
+  <tr><td>虚拟环境</td><td>隔离的依赖空间，一人一份，避免互相污染</td></tr>
+  <tr><td>类型注解</td><td>写法上的类型说明，靠工具检查（运行时不强制）</td></tr>
+  <tr><td>装饰器</td><td><code>@xxx</code>，把一个函数包起来加工（像 C 里手动包装函数指针）</td></tr>
+  <tr><td>生成器</td><td><code>yield</code>，一次产一个值，省内存 —— 流式处理的基础</td></tr>
+  <tr><td>上下文管理器</td><td><code>with</code>，保证退出时清理（异常也清理）</td></tr>
+  <tr><td>GIL</td><td>同一时刻只有一个线程跑 Python 字节码；I/O 密集用线程，CPU 密集用多进程</td></tr>
+  <tr><td>幂等</td><td>重复执行结果一样 —— <b>重试安全的前提</b></td></tr>
+</table>
+<h4>Agent</h4>
+<table>
+  <tr><th>词</th><th>一句话</th></tr>
+  <tr><td>LLM</td><td>大语言模型，负责"下一步做什么"的判断</td></tr>
+  <tr><td>Tool calling</td><td>让模型输出结构化的"我要调哪个函数、参数是什么"</td></tr>
+  <tr><td>Agent 循环</td><td>调用模型 → 执行工具 → 把结果喂回 → 再调用，直到结束</td></tr>
+  <tr><td>上下文窗口</td><td>模型一次能看多长；超出就必须摘要或检索</td></tr>
+  <tr><td>RAG</td><td>先检索相关资料、再让模型基于资料回答</td></tr>
+  <tr><td>MCP</td><td>模型与工具之间的标准化协议（目前事实标准）</td></tr>
+  <tr><td>流式输出</td><td>边生成边返回，用户不用等全部生成完</td></tr>
+  <tr><td>Prompt 注入</td><td>不可信的输入里藏着指令，诱导模型执行</td></tr>
+  <tr><td>评测集</td><td>一批固定用例 + 期望结果，用来判断改动是变好还是变坏</td></tr>
+  <tr><td>Trace</td><td>一次任务里每一步的记录（输入输出/耗时/成本）</td></tr>
+</table>
+
+<h2 id="p8">8 · 通用套路速查卡</h2>
 
 <h4>关于正确性</h4>
 <ul>
-  <li><b>量了再画，且两件事必须同源</b>（§4.1）</li>
-  <li><b>让错误写不出来</b>，比"记得别写错"可靠得多（§4.1 的封装）</li>
-  <li><b>先想清语义</b>（复制还是移动？谁拥有这块内存？）再写代码（§4.3）</li>
-  <li><b>状态要么完整，要么不存在</b> —— 半途状态最危险（§4.4）</li>
+  <li><b>量了再画，且两件事同源</b>（#1）</li>
+  <li><b>让错误写不出来</b>，比"记得别写错"可靠（#1 的封装）</li>
+  <li><b>先想清语义</b>（复制还是移动？谁拥有这块数据？）再写代码（#3）</li>
+  <li><b>状态要么完整、要么不存在</b> —— 半途状态最危险（#4）</li>
+  <li>失败要<b>显式</b>说出来，不要静默吞掉（agent 坑 #3）</li>
 </ul>
 
-<h4>关于性能</h4>
+<h4>关于性能与成本</h4>
 <ul>
-  <li><b>先测量，再优化</b>（§4.10）—— 这是最省钱的一条</li>
-  <li><b>只重绘变了的那一块</b>（脏区思维）</li>
-  <li><b>缓存 + 一个明确的失效判据</b>（§4.6：判据漏了就会卡住）</li>
-  <li><b>动画期间用位图，静止时用控件</b>（§3.6）</li>
+  <li><b>先测量，再优化</b>（#10）—— 最省钱的一条</li>
+  <li>只处理变了的那一块（脏区思维）</li>
+  <li>缓存 + 一个明确的失效判据（#6）</li>
+  <li>每次调用都要有<b>上限</b>：token、超时、步数（agent 坑 #4）</li>
 </ul>
 
 <h4>关于可维护性</h4>
 <ul>
-  <li><b>可嵌套的资源管理要用计数</b>，不要用"记住原值再恢复"（§4.4）</li>
-  <li><b>能自己说出"我哪里慢、哪里错了"</b> —— 日志与计时是一等功能（<code>05-Err</code>）</li>
-  <li><b>把平台相关的调用集中到一处</b>（<code>10-Native</code>）</li>
-  <li><b>构建脚本是项目的一部分</b>，要能一键复现</li>
+  <li><b>可嵌套的资源管理用计数</b>（#4）</li>
+  <li>程序要能<b>自己说出"我哪里慢、哪里错了"</b> —— 日志与计时是一等功能</li>
+  <li>把平台/外部依赖集中到一处</li>
+  <li>构建与运行要能<b>一键复现</b></li>
+  <li>把<b>可确定的</b>与<b>不确定的</b>部分分开，前者写死测试（agent 坑 #6）</li>
 </ul>
 
 <h4>关于工作方式</h4>
 <ul>
-  <li><b>改完就编译验证</b>，别攒着（§4.9：我曾把编译不过的版本推上去两次）</li>
-  <li><b>用"产物"验证，不要解析给人看的输出</b>（§4.9）</li>
-  <li><b>批量替换用完整锚点</b>，改完必编译（§4.2）</li>
-  <li><b>不确定就做个小实验</b> —— 这比争论和猜测都快（§4.10）</li>
+  <li><b>改完立即验证</b>，别攒着（#9）</li>
+  <li>用<b>产物</b>验证，不解析给人看的输出（#9）</li>
+  <li>批量替换用<b>完整锚点</b>，改完必验证（#2）</li>
+  <li><b>不确定就做个小实验</b> —— 比争论和猜测都快（#10）</li>
 </ul>
 
 <hr>
-<p class="muted">这份手册随项目一起放进了仓库（<code>docs/mobile-handbook.html</code>）。<br>
-配套：<code>docs/LEARNING.md</code>（给 AI 的教材与路线）、<code>docs/ROADMAP.md</code>（版本路线图）。<br>
-看不懂的地方，去那个"学习对话"里问 —— 记得让它先读 LEARNING.md。</p>
+<p class="muted">本册随项目放在仓库：<code>docs/mobile-handbook.html</code>（这份，手机看）<br>
+配套：<code>docs/LEARNING.md</code>（给 AI 的教材与协作规则）、<code>docs/ROADMAP.md</code>（版本路线图）<br>
+去那个「学习对话」提问时，记得让它先读 <code>docs/LEARNING.md</code>。</p>
 
 </body>
 </html>
