@@ -13,7 +13,7 @@ namespace SnapWheel
     // 用户提 issue 时最怕"说不清环境"：版本、系统、DPI、设置组合一多，作者就要来回问。
     // 这里把该问的东西一次收齐，分成两档：
     //   · Brief() —— 短，塞进 GitHub issue 的 URL 里（URL 有长度上限，日志不能放）；
-    //   · Full()  —— 长，带错误日志尾部，给"复制诊断信息"按钮用（用户自己找地方贴）。
+    //   · Full()  —— 长，带错误日志尾部，给Lang.T("复制诊断信息", "Copy diagnostics")按钮用（用户自己找地方贴）。
     static class Diag
     {
         static string Bits() { try { return Environment.Is64BitOperatingSystem ? " 64 位" : " 32 位"; } catch { return ""; } }
@@ -114,7 +114,7 @@ namespace SnapWheel
     // 反馈窗口：一键提 issue（预填好）+ 复制诊断信息。
     // ⚠️ 刻意**不内置任何 token**：客户端直传 issue 需要服务端中转，而"打开预填好的新建页"
     //    不需要任何凭据、也不碰用户的账号 —— 点一下浏览器打开、他自己点提交就行。
-    // ⚠️ 国内网络打不开 github.com 是常态：所以文案里明说、并给"复制诊断信息"这条兜底路，
+    // ⚠️ 国内网络打不开 github.com 是常态：所以文案里明说、并给Lang.T("复制诊断信息", "Copy diagnostics")这条兜底路，
     //    跳转失败也要当场说清原因，绝不静默失败。
     class FeedbackForm : Form
     {
@@ -123,7 +123,7 @@ namespace SnapWheel
 
         public FeedbackForm()
         {
-            Text = AppInfo.Name + " 反馈";
+            Text = AppInfo.Name + Lang.T(" 反馈", " Feedback");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -144,7 +144,7 @@ namespace SnapWheel
             int y = Ui.S(22);
 
             Label head = new Label();
-            head.Text = "遇到问题了？";
+            head.Text = Lang.T("遇到问题了？", "Something wrong?");
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             head.Location = new Point(mL, y);
@@ -154,8 +154,8 @@ namespace SnapWheel
 
             Label sub = new Label();
             sub.Text = "点下面的按钮会在浏览器里打开 GitHub 的「新建 issue」页面，标题和环境信息已经帮你填好了，你只要补一句现象、点提交。\r\n"
-                     + "⚠️ 国内网络经常打不开 github.com —— 打不开是正常的，不是程序坏了：把下面那段诊断信息复制出来，"
-                     + "直接发给作者（QQ / 微信 / 邮件都行）效果完全一样。";
+                     + Lang.T("⚠️ 国内网络经常打不开 github.com —— 打不开是正常的，不是程序坏了：把下面那段诊断信息复制出来，", "⚠️ github.com is often unreachable from mainland China - that is normal, not a bug: copy the diagnostics below and")
+                     + Lang.T("直接发给作者（QQ / 微信 / 邮件都行）效果完全一样。", "send them to the author directly (QQ / WeChat / email all work the same).");
             sub.ForeColor = Color.FromArgb(110, 114, 126);
             sub.Location = new Point(mL, y);
             Ui.Wrap(sub, contentW);
@@ -177,7 +177,7 @@ namespace SnapWheel
 
             int bh = Ui.S(36);
             RoundButton go = new RoundButton();
-            go.Text = "在浏览器里提 issue";
+            go.Text = Lang.T("在浏览器里提 issue", "Open a GitHub issue");
             go.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
             go.Fill = Color.FromArgb(0, 122, 204);
             go.FillHover = Color.FromArgb(0, 140, 232);
@@ -188,7 +188,7 @@ namespace SnapWheel
             Controls.Add(go);
 
             RoundButton cp = new RoundButton();
-            cp.Text = "复制诊断信息";
+            cp.Text = Lang.T("复制诊断信息", "Copy diagnostics");
             cp.Font = new Font("Microsoft YaHei UI", 10f);
             cp.Fill = Color.FromArgb(238, 240, 245);
             cp.FillHover = Color.FromArgb(226, 230, 238);
@@ -199,7 +199,7 @@ namespace SnapWheel
             Controls.Add(cp);
 
             RoundButton no = new RoundButton();
-            no.Text = "关闭";
+            no.Text = Lang.T("关闭", "Close");
             no.Font = new Font("Microsoft YaHei UI", 10f);
             no.Fill = Color.FromArgb(238, 240, 245);
             no.FillHover = Color.FromArgb(226, 230, 238);
@@ -225,7 +225,7 @@ namespace SnapWheel
 
         void OnOpen(object o, EventArgs e)
         {
-            string title = "反馈：" + AppInfo.Name + " v" + AppInfo.Version;
+            string title = Lang.T("反馈：", "Feedback: ") + AppInfo.Name + " v" + AppInfo.Version;
             string body = Diag.Brief() + "\r\n【我遇到的情况】\r\n（在这里写一句：做什么的时候、出现了什么）\r\n";
             string url = "https://github.com/" + AppInfo.Repo + "/issues/new?title=" +
                          Uri.EscapeDataString(title) + "&body=" + Uri.EscapeDataString(body);
@@ -233,12 +233,12 @@ namespace SnapWheel
             {
                 Process.Start(url);
                 _state.ForeColor = Color.FromArgb(0, 130, 90);
-                _state.Text = "已在浏览器里打开。填完点提交就行 —— 如果页面一直转圈打不开，就改用「复制诊断信息」发给作者。";
+                _state.Text = Lang.T("已在浏览器里打开。填完点提交就行 —— 如果页面一直转圈打不开，就改用「复制诊断信息」发给作者。", "Opened in your browser. Just submit when you are done - if the page keeps spinning, use \"Copy diagnostics\" instead.");
             }
             catch (Exception ex)
             {
                 _state.ForeColor = Color.FromArgb(190, 90, 40);
-                _state.Text = "没能打开浏览器（" + ex.Message + "）—— 请点「复制诊断信息」，把它发给作者；仓库地址：" + url;
+                _state.Text = Lang.T("没能打开浏览器（", "Could not open the browser (") + ex.Message + Lang.T("）—— 请点「复制诊断信息」，把它发给作者；仓库地址：", ") - click \"Copy diagnostics\" and send it to the author; repository: ") + url;
             }
         }
 
@@ -248,12 +248,12 @@ namespace SnapWheel
             {
                 Clipboard.SetText(Diag.Full());
                 _state.ForeColor = Color.FromArgb(0, 130, 90);
-                _state.Text = "诊断信息已复制。可以直接发给作者，或粘到任何你能打开的地方。";
+                _state.Text = Lang.T("诊断信息已复制。可以直接发给作者，或粘到任何你能打开的地方。", "Diagnostics copied. Send them to the author, or paste them anywhere you can.");
             }
             catch (Exception ex)
             {
                 _state.ForeColor = Color.FromArgb(190, 90, 40);
-                _state.Text = "复制失败（" + ex.Message + "）—— 可以在上面的框里手动选中复制。";
+                _state.Text = Lang.T("复制失败（", "Copy failed (") + ex.Message + Lang.T("）—— 可以在上面的框里手动选中复制。", ") - select the text in the box above and copy it manually.");
             }
         }
     }

@@ -72,7 +72,7 @@ namespace SnapWheel
         public WheelsForm(WheelManager mgr)
         {
             _mgr = mgr;
-            Text = "管理 Wheel";
+            Text = Lang.T("管理 Wheel", "Manage wheels");
             Icon = Brand.Get();
             Font = new Font("Microsoft YaHei UI", 9.5f);        // 磅值不动：GDI+ 已按 DPI 渲染过一遍
             AutoScaleMode = AutoScaleMode.None;
@@ -96,7 +96,7 @@ namespace SnapWheel
             // 「名称」「颜色」是单行短标签：原来给的是写死的 60×22 死格子，靠"字比格子小"侥幸没出事。
             // 改成 AutoSize 之后宽度/高度都由字自己报，换一档缩放、换一种字体都不用再回来调数字。
             Label l1 = new Label();
-            l1.Text = "名称";
+            l1.Text = Lang.T("名称", "Name");
             l1.Location = Ui.Pt(ColX, Lab1Y);
             Ui.OneLine(l1);
             Controls.Add(l1);
@@ -107,7 +107,7 @@ namespace SnapWheel
             Controls.Add(_name);
 
             Label l2 = new Label();
-            l2.Text = "颜色";
+            l2.Text = Lang.T("颜色", "Colour");
             l2.Location = Ui.Pt(ColX, Lab2Y);
             Ui.OneLine(l2);
             Controls.Add(l2);
@@ -120,7 +120,7 @@ namespace SnapWheel
             Controls.Add(_color);
 
             RoundButton add = new RoundButton();
-            add.Text = "新建"; add.Size = Ui.Sz(BtnW, BtnH);
+            add.Text = Lang.T("新建", "New"); add.Size = Ui.Sz(BtnW, BtnH);
             add.Fill = Color.FromArgb(0, 122, 204); add.FillHover = Color.FromArgb(0, 140, 232);
             add.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);   // 磅值不动
             add.Location = Ui.Pt(ColX, BtnY);
@@ -128,7 +128,7 @@ namespace SnapWheel
             Controls.Add(add);
 
             RoundButton del = new RoundButton();
-            del.Text = "删除"; del.Size = Ui.Sz(BtnW, BtnH);
+            del.Text = Lang.T("删除", "Delete"); del.Size = Ui.Sz(BtnW, BtnH);
             del.Fill = Color.FromArgb(214, 70, 84); del.FillHover = Color.FromArgb(230, 90, 104);
             del.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);   // 磅值不动
             // 右对齐到列尾：原来写死 346（= 272+140-66）也对，但那样是"数值凑巧对"，
@@ -136,14 +136,14 @@ namespace SnapWheel
             del.Location = Ui.Pt(ColX + ColW - BtnW, BtnY);
             del.Click += new EventHandler(delegate(object o, EventArgs e2) {
                 if (_list.SelectedIndex < 0) return;
-                if (MessageBox.Show("确定删除 Wheel「" + _mgr.Wheels[_list.SelectedIndex].Name + "」及其截图？",
-                        "删除 Wheel", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+                if (MessageBox.Show(Lang.T("确定删除 Wheel「", "Delete wheel \"") + _mgr.Wheels[_list.SelectedIndex].Name + Lang.T("」及其截图？", "\" and its screenshots?"),
+                        Lang.T("删除 Wheel", "Delete wheel"), MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
                 _mgr.Remove(_list.SelectedIndex); _mgr.Save(); Reload(Math.Min(_list.SelectedIndex, _mgr.Wheels.Count - 1));
             });
             Controls.Add(del);
 
             RoundButton close = new RoundButton();
-            close.Text = "完成"; close.Size = Ui.Sz(ColW, CloseH);   // 宽度 = 整列宽（原写死 140，正好等于 ColW）
+            close.Text = Lang.T("完成", "Done"); close.Size = Ui.Sz(ColW, CloseH);   // 宽度 = 整列宽（原写死 140，正好等于 ColW）
             close.Fill = Color.FromArgb(233, 234, 238); close.FillHover = Color.FromArgb(222, 224, 230);
             close.TextColor = Color.FromArgb(58, 60, 66);
             close.Font = new Font("Microsoft YaHei UI", 9.5f);      // 磅值不动
@@ -152,7 +152,7 @@ namespace SnapWheel
             Controls.Add(close);
 
             Label tip = new Label();
-            tip.Text = "点一下左侧即可切换为当前 Wheel";
+            tip.Text = Lang.T("点一下左侧即可切换为当前 Wheel", "Click one on the left to make it the active wheel");
             tip.ForeColor = Color.FromArgb(150, 150, 158);
             // 原来是 AutoSize=false 的死格子 (16,276,260,22)：一行放不下就只剩半句。现在交给 Wrap()，
             // 让它自己折行、自己报高度。竖直位置也不再写死 276，而是吊在"列表和右列谁更低"的下面 ——
@@ -268,7 +268,7 @@ namespace SnapWheel
 
         public RenameForm(string cur)
         {
-            Text = "给这个 Wheel 起个名";
+            Text = Lang.T("给这个 Wheel 起个名", "Name this wheel");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);        // 磅值不动：GDI+ 已按 DPI 渲染过一遍
@@ -284,7 +284,7 @@ namespace SnapWheel
             int right = winW - mR;                              // 内容右沿，按钮全部贴它对齐
 
             Label l = new Label();
-            l.Text = "名字（最多 " + MaxName + " 个字，会显示在轮盘上）";
+            l.Text = Lang.T("名字（最多 ", "Name (up to ") + MaxName + Lang.T(" 个字，会显示在轮盘上）", " characters, shown on the ring)");
             l.ForeColor = Color.FromArgb(110, 114, 124);
             l.Location = new Point(mL, mT);
             Ui.Wrap(l, right - mL);      // 给折行上限：光 AutoSize 的话，字比窗口宽就直接伸出窗口被裁掉
@@ -304,7 +304,7 @@ namespace SnapWheel
             int yBtn = _box.Bottom + Ui.S(GapBtn);              // 同理：按钮行吊在输入框下面，不写死
 
             RoundButton ok = new RoundButton();
-            ok.Text = "改好了";
+            ok.Text = Lang.T("改好了", "Renamed");
             ok.Size = Ui.Sz(OkW, BtnH);
             ok.Fill = Color.FromArgb(0, 122, 204);
             ok.FillHover = Color.FromArgb(0, 140, 232);
@@ -325,7 +325,7 @@ namespace SnapWheel
             Controls.Add(ok);
 
             RoundButton cancel = new RoundButton();
-            cancel.Text = "取消";
+            cancel.Text = Lang.T("取消", "Cancel");
             cancel.Size = Ui.Sz(CancelW, BtnH);
             cancel.Fill = Color.FromArgb(234, 235, 240);
             cancel.FillHover = Color.FromArgb(222, 224, 230);

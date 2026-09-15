@@ -42,12 +42,12 @@ namespace SnapWheel
 
             _tray = new NotifyIcon();
             _tray.Icon = Brand.Get();
-            _tray.Text = "SnapWheel 快照轮环";
+            _tray.Text = Lang.T("SnapWheel 快照轮环", "SnapWheel");
             _tray.Visible = true;
             Err.Notify = delegate(string msg)             // 出问题时托盘冒个泡，程序继续跑
             {
                 if (!_settings.ShowBalloon) return;        // 设置里可以关掉右下角通知
-                try { _tray.ShowBalloonTip(4000, "SnapWheel 快照轮环遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
+                try { _tray.ShowBalloonTip(4000, Lang.T("SnapWheel 快照轮环遇到一个问题（已记录）", "SnapWheel hit a problem (logged)"), msg, ToolTipIcon.Warning); }
                 catch { }
             };
             Lang.Init(string.IsNullOrEmpty(_settings.UiLanguage) ? Lang.Guess() : _settings.UiLanguage);   // 界面语言：没选过就按系统语言，切换后重启生效
@@ -87,8 +87,8 @@ namespace SnapWheel
             if (Elev.Is && _settings.ShowBalloon)
                 try
                 {
-                    _tray.ShowBalloonTip(6000, "SnapWheel 快照轮环以管理员身份运行",
-                        "Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（托盘右键 → 管理员模式说明）。",
+                    _tray.ShowBalloonTip(6000, Lang.T("SnapWheel 快照轮环以管理员身份运行", "SnapWheel is running as administrator"),
+                        Lang.T("Windows 会拦掉管理员进程和桌面/资源管理器之间的拖拽。想在轮盘上拖进拖出图片，请用普通权限运行（托盘右键 → 管理员模式说明）。", "Windows blocks dragging between an elevated process and the desktop / Explorer. To drag images in and out of the ring, run it with normal permissions (tray menu -> admin mode)."),
                         ToolTipIcon.Warning);
                 }
                 catch { }
@@ -115,10 +115,10 @@ namespace SnapWheel
             {
                 _settings.PinHintDone = true;
                 _settings.Save();
-                _wheel.ShowToast("新功能：缩略图上按鼠标中键 = 把图钉在屏幕上");
+                _wheel.ShowToast(Lang.T("新功能：缩略图上按鼠标中键 = 把图钉在屏幕上", "New: middle-click a thumbnail to pin that image on screen"));
             }
             else if (Elev.Is)
-                _wheel.ShowToast("管理员模式：拖拽会被 Windows 拦（托盘右键看说明）");
+                _wheel.ShowToast(Lang.T("管理员模式：拖拽会被 Windows 拦（托盘右键看说明）", "Administrator mode: Windows blocks dragging (see the tray menu)"));
 
             // 第一次打开、或者换到没见过的版本：都自动弹一次引导（"看过就不再弹"只对同一版本成立）。
             // 需要自己去托盘里找的引导留不住人，所以升级后也主动亮一次。
@@ -187,7 +187,7 @@ namespace SnapWheel
             {
                 if (!Undo.CanUndo)
                 {
-                    MessageBox.Show("没有可撤销的删除。\n\n（只记得住本次运行中最近 " + Undo.MaxBatches + " 次删除，退出程序就清空 —— 需要长期保存的图请拖到文件夹里存好。）",
+                    MessageBox.Show("没有可撤销的删除。\n\n（只记得住本次运行中最近 " + Undo.MaxBatches + Lang.T(" 次删除，退出程序就清空 —— 需要长期保存的图请拖到文件夹里存好。）", " deletions; cleared when the app exits - drag images to a folder to keep them.)"),
                         AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -196,11 +196,11 @@ namespace SnapWheel
                 int n = Undo.UndoLast(_wheels, out wheel);
                 if (n <= 0)
                 {
-                    MessageBox.Show("没能放回去（原轮盘可能已经被删掉了）。", AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(Lang.T("没能放回去（原轮盘可能已经被删掉了）。", "Could not put it back (the original wheel may have been deleted)."), AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 _wheel.RefreshWheel();
-                _wheel.ShowToast("已放回 " + n + " 张到「" + wheel + "」" + (string.IsNullOrEmpty(desc) ? "" : "（" + desc + "）"));
+                _wheel.ShowToast(Lang.T("已放回 ", "Restored ") + n + Lang.T(" 张到「", " item(s) to \"") + wheel + "」" + (string.IsNullOrEmpty(desc) ? "" : "（" + desc + "）"));
             }
             catch (Exception ex) { Err.Log("UndoDelete", ex); }
         }
@@ -218,7 +218,7 @@ namespace SnapWheel
             {
                 try
                 {
-                    MessageBox.Show("剪贴板里没有图片。先复制一张图（或截图），再来点这里。",
+                    MessageBox.Show(Lang.T("剪贴板里没有图片。先复制一张图（或截图），再来点这里。", "No image in the clipboard. Copy one (or take a screenshot) and try again."),
                         AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch { }
@@ -267,7 +267,7 @@ namespace SnapWheel
             {
                 try
                 {
-                    MessageBox.Show("没能自动重启。请关掉 SnapWheel，再右键 SnapWheel.exe →「以普通权限运行」。",
+                    MessageBox.Show(Lang.T("没能自动重启。请关掉 SnapWheel，再右键 SnapWheel.exe →「以普通权限运行」。", "Could not restart automatically. Close SnapWheel, then right-click SnapWheel.exe and choose \"Run as a normal user\"."),
                         AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch { }
@@ -295,12 +295,12 @@ namespace SnapWheel
                     if (!m.Success) return;
                     string remote = m.Groups[1].Value;
                     if (!NewerVersion(remote, AppInfo.Version)) return;
-                    string msg = "有新版本 v" + remote + "（当前 v" + AppInfo.Version + "）。右键托盘图标 →「打开项目主页」可以下载。";
+                    string msg = Lang.T("有新版本 v", "New version available: v") + remote + Lang.T("（当前 v", " (current v") + AppInfo.Version + Lang.T("）。右键托盘图标 →「打开项目主页」可以下载。", "). Right-click the tray icon and choose \"Open project page\" to download.");
                     try
                     {
                         _wheel.BeginInvoke((MethodInvoker)delegate
                         {
-                            try { if (_settings.ShowBalloon) _tray.ShowBalloonTip(8000, "SnapWheel 快照轮环 有新版本", msg, ToolTipIcon.Info); } catch { }
+                            try { if (_settings.ShowBalloon) _tray.ShowBalloonTip(8000, Lang.T("SnapWheel 快照轮环 有新版本", "SnapWheel has an update"), msg, ToolTipIcon.Info); } catch { }
                         });
                     }
                     catch { }
@@ -331,7 +331,7 @@ namespace SnapWheel
         {
             using (System.Windows.Forms.OpenFileDialog d = new System.Windows.Forms.OpenFileDialog())
             {
-                d.Title = "把图片加入轮盘";
+                d.Title = Lang.T("把图片加入轮盘", "Add images to the ring");
                 d.Multiselect = true;
                 d.Filter = ImageIO.DialogFilter();
                 d.RestoreDirectory = true;
@@ -356,13 +356,13 @@ namespace SnapWheel
                     { _settings.Hotkey = name; _settings.Save(); ok = true; break; }
                 }
             }
-            string tip = ok ? ("已就绪，热键 " + _settings.Hotkey) : "热键注册失败，请在设置里换一个";
+            string tip = ok ? (Lang.T("已就绪，热键 ", "Ready, hotkey ") + _settings.Hotkey) : Lang.T("热键注册失败，请在设置里换一个", "Hotkey registration failed - pick another one in settings");
             try
             {
-                _tray.Text = "SnapWheel 快照轮环 (" + _settings.Hotkey + ")";
+                _tray.Text = Lang.T("SnapWheel 快照轮环 (", "SnapWheel (") + _settings.Hotkey + ")";
                 // 热键提示只在"第一次运行"或"注册失败"时弹，平时开机不打扰
                 if ((_settings.ShowBalloon && !_settings.IntroSeen) || !ok)
-                    _tray.ShowBalloonTip(3000, "SnapWheel 快照轮环", tip, ToolTipIcon.Info);
+                    _tray.ShowBalloonTip(3000, Lang.T("SnapWheel 快照轮环", "SnapWheel"), tip, ToolTipIcon.Info);
             }
             catch { }
         }
@@ -488,7 +488,7 @@ namespace SnapWheel
                 try { _wheel.RequestBackdropAsync(); } catch { }
                 if (_settings.CollapseMode) _wheel.ExpandWheel(true);
                 else _wheel.ShowWheel();
-                _wheel.MarkNew(ni);      // 和普通截图一样：刚出的这张要有"滑进来"的动画
+                _wheel.MarkNew(ni);      // 和普通截图一样：刚出的这张要有Lang.T("滑进来", "slides in")的动画
             }
             else if (wasExpanded)
             {
