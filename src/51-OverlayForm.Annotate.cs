@@ -81,7 +81,9 @@ namespace SnapWheel
         SizeF TextSize(Shape s)
         {
             string t = string.IsNullOrEmpty(s.Text) ? " " : s.Text;
-            using (Font f = new Font("Microsoft YaHei UI", Math.Max(6f, s.Size * _k), FontStyle.Bold))
+            // 度量用的字体必须和绘制用的**同一个**，否则框和内容对不上（符号画的时候用 Segoe UI Symbol）
+            string ff2 = (s.Kind == AnnotKind.Emoji) ? "Segoe UI Symbol" : "Microsoft YaHei UI";
+            using (Font f = new Font(ff2, Math.Max(6f, s.Size * _k), (s.Kind == AnnotKind.Emoji) ? FontStyle.Regular : FontStyle.Bold))
             {
                 Size sz = TextRenderer.MeasureText(t, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
                 return new SizeF(sz.Width, sz.Height);
@@ -93,6 +95,11 @@ namespace SnapWheel
         {
             if (s == null) return RectangleF.Empty;
             if (!IsTextLike(s)) return RectOf(s.A, s.B);
+            if (s.Kind == AnnotKind.Emoji)   // 符号：A 是**中心**（与绘制一致）；文字用的是左上角锚点
+            {
+                SizeF esz = TextSize(s);
+                return new RectangleF(s.A.X - esz.Width / 2f, s.A.Y - esz.Height / 2f, esz.Width, esz.Height);
+            }
             SizeF sz = TextSize(s);
             return new RectangleF(s.A.X - 3 * _k, s.A.Y - 2 * _k, sz.Width + 7 * _k, sz.Height + 5 * _k);
         }
@@ -385,17 +392,15 @@ namespace SnapWheel
             {
                     case AnnotKind.Emoji:
                     {
-                        // 矢量符号（以前的 emoji 在 .NET Framework 里只能画出黑色剪影）：
-                        // 字体自带字形，单色、可上色、放大不糊，和箭头/方框/文字是同一套画法
+                        // 矢量符号：用 TextRenderer（GDI）画，和 TextSize() 的度量同源，
+                        // 否则框会和符号错位；锚点是 A（中心）。
                         float sf2 = Math.Max(10f, s.Size * _k);
                         using (Font f = new Font("Segoe UI Symbol", sf2))
-                        using (SolidBrush b = new SolidBrush(s.Color))
                         {
-                            StringFormat fmt = new StringFormat();
-                            fmt.Alignment = StringAlignment.Center;
-                            fmt.LineAlignment = StringAlignment.Center;
-                            g.DrawString(s.Text, f, b,
-                                new RectangleF(s.A.X - sf2, s.A.Y - sf2 * 0.85f, sf2 * 2f, sf2 * 1.7f), fmt);
+                            Size gsz = TextRenderer.MeasureText(s.Text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                            TextRenderer.DrawText(g, s.Text, f,
+                                new Point((int)Math.Round(s.A.X - gsz.Width / 2f), (int)Math.Round(s.A.Y - gsz.Height / 2f)),
+                                s.Color, TextFormatFlags.NoPadding);
                         }
                         break;
                     }

@@ -68,7 +68,7 @@ namespace SnapWheel
             const int Cols = 12;
             int pad = (int)(10 * k);
             int headH = (int)(24 * k);
-            int cell = (int)(40 * k);
+            int cell = (int)(48 * k);        // 原来 40 装不下 20pt 的符号，会被裁掉一截
             int colorH = (int)(34 * k);
 
             int rows = 0;
@@ -118,7 +118,7 @@ namespace SnapWheel
                     int r = i / Cols, c = i % Cols;
                     GlyphCell el = new GlyphCell();
                     el.Glyph = Sets[gi][i];
-                    el.Px = (float)(20 * k);
+                    el.Px = (float)(19 * k);
                     el.Ink = Color.FromArgb(228, 236, 246);
                     el.Location = new Point(pad + c * cell, y + r * cell);
                     el.Size = new Size(cell, cell);
@@ -181,9 +181,12 @@ namespace SnapWheel
                     using (SolidBrush b = new SolidBrush(Color.FromArgb(80, 120, 170, 235)))
                         e.Graphics.FillRectangle(b, 0, 0, Width, Height);
                 using (Font f = new Font("Segoe UI Symbol", Px))
+                {
+                    // 按实际度量居中放（不用 VerticalCenter 标志：单字符时它会偏上，看着像被裁）
+                    Size gsz = TextRenderer.MeasureText(Glyph, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
                     TextRenderer.DrawText(e.Graphics, Glyph, f,
-                        new Point(Width / 2, Height / 2), Ink,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                        new Point((Width - gsz.Width) / 2, (Height - gsz.Height) / 2), Ink, TextFormatFlags.NoPadding);
+                }
             }
         }
 
