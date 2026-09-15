@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace SnapWheel
 {
@@ -15,16 +16,34 @@ namespace SnapWheel
     //   · Full()  —— 长，带错误日志尾部，给"复制诊断信息"按钮用（用户自己找地方贴）。
     static class Diag
     {
+        static string Bits() { try { return Environment.Is64BitOperatingSystem ? " 64 位" : " 32 位"; } catch { return ""; } }
+
+        // 系统版本**必须读注册表**：这个程序没有声明"支持 Windows 10"，于是
+        // Environment.OSVersion 会一直报 6.2（= Windows 8）—— 用户提 issue 时这一栏就是错的。
+        // 另外 Win11 在注册表里常常仍写着 "Windows 10"，要按 build 号纠正。
         static string Os()
         {
             try
             {
-                string s = Environment.OSVersion.VersionString;                 // Microsoft Windows NT 10.0.19045.0
-                int p = s.IndexOf("Windows NT ");
-                if (p >= 0) s = s.Substring(p);
-                return s + (Environment.Is64BitOperatingSystem ? " 64 位" : " 32 位");
+                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                {
+                    if (k != null)
+                    {
+                        string name = k.GetValue("ProductName") as string;
+                        string disp = k.GetValue("DisplayVersion") as string;
+                        string build = k.GetValue("CurrentBuildNumber") as string;
+                        string ubr = k.GetValue("UBR") as string;
+                        int b = 0; if (!string.IsNullOrEmpty(build)) int.TryParse(build, out b);
+                        if (b >= 22000 && !string.IsNullOrEmpty(name) && name.IndexOf("Windows 10") >= 0)
+                            name = name.Replace("Windows 10", "Windows 11");
+                        if (!string.IsNullOrEmpty(name))
+                            return name + (string.IsNullOrEmpty(disp) ? "" : " " + disp)
+                                 + " (build " + build + (string.IsNullOrEmpty(ubr) ? "" : "." + ubr) + ")" + Bits();
+                    }
+                }
             }
-            catch { return "未知"; }
+            catch { }
+            return Environment.OSVersion.VersionString + Bits();
         }
 
         static string Screen()
