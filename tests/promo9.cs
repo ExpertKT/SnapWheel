@@ -127,6 +127,8 @@ namespace SnapWheel
         }
 
         // 正中心那张：不放界面图，放品牌 + 硬数据（九宫格最抢眼的位置）
+        // 正中心那张：品牌 + 硬数据 + 一个抽象图形（弧 + 缩略图方块 + 中心圆 = 轮盘自己的意象）。
+        // 原来它只有文字，是九张里唯一没画面的，摆在最中间就显得空。
         static void Center5()
         {
             using (Bitmap b = new Bitmap(1080, 1080, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
@@ -137,43 +139,53 @@ namespace SnapWheel
                 Backdrop(g, b.Width, b.Height, 5);
 
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
-                using (SolidBrush sb = new SolidBrush(Accent))
                     TextRenderer.DrawText(g, "SnapWheel", fb, new Point(86, 74), Accent, TextFormatFlags.NoPadding);
                 using (Font fn = new Font(FONT, 22))
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(110, 150, 160, 180)))
                     TextRenderer.DrawText(g, "5 / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
-                using (Font ft = new Font(FONT, 104, FontStyle.Bold))
-                using (SolidBrush sb = new SolidBrush(Color.White))
-                    TextRenderer.DrawText(g, "快照轮环", ft, new Point(80, 300), Color.White, TextFormatFlags.NoPadding);
-                using (Font fs = new Font(FONT, 30))
-                using (SolidBrush sb = new SolidBrush(Sub))
-                    g.DrawString("一个常驻屏幕角落的圆环，把截图这件事变顺手", fs, sb, 84, 460);
+                using (Font ft = new Font(FONT, 88, FontStyle.Bold))
+                    TextRenderer.DrawText(g, "快照轮环", ft, new Point(80, 176), Color.White, TextFormatFlags.NoPadding);
+                using (Font fs = new Font(FONT, 28))
+                    TextRenderer.DrawText(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", fs, new Point(84, 300), Sub, TextFormatFlags.NoPadding);
 
-                // 三个硬数据
+                CenterArt(g, 540, 520, 148);
+
                 string[] num = { "274 KB", "0", "1" };
                 string[] cap = { "整个程序的大小", "第三方依赖", "个 exe，双击就跑" };
                 int cx = 84;
                 for (int i = 0; i < 3; i++)
                 {
-                    using (Font f1 = new Font(FONT, 58, FontStyle.Bold))
-                    using (SolidBrush sb = new SolidBrush(Accent))
-                        g.DrawString(num[i], f1, sb, cx, 600);
-                    using (Font f2 = new Font(FONT, 26))
-                    using (SolidBrush sb = new SolidBrush(Sub))
-                        g.DrawString(cap[i], f2, sb, cx, 700);
-                    cx += 370;
+                    using (Font f1 = new Font(FONT, 52, FontStyle.Bold))
+                        TextRenderer.DrawText(g, num[i], f1, new Point(cx, 726), Accent, TextFormatFlags.NoPadding);
+                    using (Font f2 = new Font(FONT, 24))
+                        TextRenderer.DrawText(g, cap[i], f2, new Point(cx, 800), Sub, TextFormatFlags.NoPadding);
+                    cx += 330;
                 }
-                using (Font f2 = new Font(FONT, 28))
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(210, 226, 234, 244)))
-                    g.DrawString("Windows 10 / 11 · 绿色免安装 · 开源 MIT", f2, sb, 84, 850);
+                using (Font f2 = new Font(FONT, 26))
+                    TextRenderer.DrawText(g, "Windows 10 / 11 · 免安装 · 开源 MIT", f2, new Point(84, 900), Color.FromArgb(200, 226, 234, 244), TextFormatFlags.NoPadding);
 
                 b.Save(Path.Combine(outDir, "图5.png"), System.Drawing.Imaging.ImageFormat.Png);
                 Console.WriteLine("  写出 图5.png  快照轮环（中心品牌位）");
             }
         }
 
-        // 九宫格总览：3x3 拼一张，方便一眼看排布
+        // 中心位那个图形：一段弧 + 弧上三个缩略图方块 + 中心一个圆（万能键的意象）
+        static void CenterArt(Graphics g, int cx, int cy, int R)
+        {
+            using (Pen p = new Pen(Color.FromArgb(130, 0, 138, 226), 12f))
+                g.DrawArc(p, cx - R, cy - R, R * 2, R * 2, 198, 144);
+            for (int i = 0; i < 3; i++)
+            {
+                double a = (214 + i * 52) * Math.PI / 180.0;
+                int x = (int)(cx + R * Math.Cos(a)), y = (int)(cy + R * Math.Sin(a));
+                using (SolidBrush sh = new SolidBrush(Color.FromArgb(60, 0, 0, 0)))
+                    g.FillRectangle(sh, x - 28, y - 19, 56, 42);
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(242, 250, 252, 255)))
+                    g.FillRectangle(b, x - 30, y - 22, 56, 42);
+            }
+            using (SolidBrush b = new SolidBrush(Color.FromArgb(255, 236, 178, 60)))
+                g.FillEllipse(b, cx - 25, cy - 25, 50, 50);
+        }
         static void Merge()
         {
             using (Bitmap b = new Bitmap(1080 * 3 / 2, 1080 * 3 / 2, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
