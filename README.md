@@ -43,6 +43,7 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 | Action | How |
 |---|---|
 | Capture | `Ctrl+Shift+S`, drag; resize from the corners, rotate with the dial, confirm with double-click / `Enter` |
+| **Carry** (keyboard) | `Ctrl+Alt+C` — lift the current thumbnail with a fake cursor, steer it with **WASD / arrows** (`Shift` = faster), `Enter` to drop it into whatever window you switched to, `Esc` to cancel |
 | Annotate | The overlay toolbar has arrow / box / mosaic / text, four colours, `Ctrl+Z` to undo. Annotations are baked into the image |
 | OCR | The 字 button on the overlay toolbar copies the text inside your selection; the tray menu can also OCR the clipboard image |
 | Zoom preview | Hold still on a thumbnail for ~0.3 s |
@@ -104,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.7.0-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.8.0-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-284%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -200,6 +201,7 @@ MIT — see [LICENSE](LICENSE).
 ## 特性
 
 - **截图**：热键（默认 `Ctrl+Shift+S`）→ 拖框选 → 四角缩放 / 拖旋转键转角度 / 宽高输入 / 角度归零 → 双击或回车确认
+- **传递模式（不用鼠标也能把图送出去）**：滚轮选好要发的那张 → `Ctrl+Alt+C` → 屏幕上出现一个**假光标**，右下角吸附着那张缩略图 → 自己 `Alt+Tab` 切到微信/文档 → **WASD 或方向键**把假光标移过去（`Shift` 加速）→ `Enter` 放下。放下时会真的模拟一次鼠标拖放，所以**任何支持拖放的窗口都适用**。`Esc` 取消。
 - **截图直接标注**：箭头 / 方框 / 马赛克 / 文字（快捷键 `A` / `R` / `M` / `T`），四色可选、`Ctrl+Z` 撤销；马赛克是真把底图糊掉；画完能拖动、滚轮改大小、`Del` 删掉；确认时标注合成进图片，工具条和选框不会被存进去
 - **取字（OCR）**：浮层工具条上的「字」（`O`）拖框圈住文字就能认出来并复制；窗口里能一键翻译成中文/英文；托盘也能识别剪贴板里的图。用系统自带引擎、不打包模型
 - **轮盘交互**：滚轮翻图、按住缩略图看大图（倍数可调）、拖出去用、从外部拖回来、拖放时整条环变绿提示
