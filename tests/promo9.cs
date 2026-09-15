@@ -38,7 +38,7 @@ namespace SnapWheel
 
             try
             {
-                Shot(1, "快照轮环", "截图不落文件，直接挂在屏幕角上", "", "promo_wheel.png", true);
+                Shot(1, "截图不落文件", "拖一下就发出去，环上还留着一份", "", "promo_wheel.png", true);
                 Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_bl.png", false);
                 Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "promo_drop.png", false);
                 Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停 · 0.6.0 新增", "wheel_empty.png", false);
