@@ -129,6 +129,8 @@ namespace SnapWheel
         // 正中心那张：不放界面图，放品牌 + 硬数据（九宫格最抢眼的位置）
         // 正中心那张：品牌 + 硬数据 + 一个抽象图形（弧 + 缩略图方块 + 中心圆 = 轮盘自己的意象）。
         // 原来它只有文字，是九张里唯一没画面的，摆在最中间就显得空。
+        // 正中心那张：**一切居中**（其余八张都是左对齐，只有这一张居中，作为九宫格的正中显得庄重）。
+        // 不再画抽象图形 —— 我上一版加的那段弧+方块并不好看，纯排版反而更稳。
         static void Center5()
         {
             using (Bitmap b = new Bitmap(1080, 1080, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
@@ -143,33 +145,38 @@ namespace SnapWheel
                 using (Font fn = new Font(FONT, 22))
                     TextRenderer.DrawText(g, "5 / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
-                using (Font ft = new Font(FONT, 88, FontStyle.Bold))
-                    TextRenderer.DrawText(g, "快照轮环", ft, new Point(80, 176), Color.White, TextFormatFlags.NoPadding);
-                using (Font fs = new Font(FONT, 28))
-                    TextRenderer.DrawText(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", fs, new Point(84, 300), Sub, TextFormatFlags.NoPadding);
+                Center(g, "快照轮环", 96, FontStyle.Bold, 300, Color.White);
+                Center(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", 28, FontStyle.Regular, 440, Sub);
 
-                CenterArt(g, 540, 520, 148);
-
+                // 三个硬数据：一行三列，各自居中
                 string[] num = { "274 KB", "0", "1" };
-                string[] cap = { "整个程序的大小", "第三方依赖", "个 exe，双击就跑" };
-                int cx = 84;
+                string[] cap = { "整个程序的大小", "第三方依赖", "个 exe 双击就跑" };
+                int[] col = { 240, 540, 840 };
                 for (int i = 0; i < 3; i++)
                 {
-                    using (Font f1 = new Font(FONT, 52, FontStyle.Bold))
-                        TextRenderer.DrawText(g, num[i], f1, new Point(cx, 726), Accent, TextFormatFlags.NoPadding);
-                    using (Font f2 = new Font(FONT, 24))
-                        TextRenderer.DrawText(g, cap[i], f2, new Point(cx, 800), Sub, TextFormatFlags.NoPadding);
-                    cx += 330;
+                    Center(g, num[i], 54, FontStyle.Bold, 620, Accent, col[i]);
+                    Center(g, cap[i], 24, FontStyle.Regular, 706, Sub, col[i]);
                 }
-                using (Font f2 = new Font(FONT, 26))
-                    TextRenderer.DrawText(g, "Windows 10 / 11 · 免安装 · 开源 MIT", f2, new Point(84, 900), Color.FromArgb(200, 226, 234, 244), TextFormatFlags.NoPadding);
+                Center(g, "Windows 10 / 11 · 免安装 · 开源 MIT", 26, FontStyle.Regular, 880, Color.FromArgb(200, 226, 234, 244));
 
                 b.Save(Path.Combine(outDir, "图5.png"), System.Drawing.Imaging.ImageFormat.Png);
                 Console.WriteLine("  写出 图5.png  快照轮环（中心品牌位）");
             }
         }
 
-        // 中心位那个图形：一段弧 + 弧上三个缩略图方块 + 中心一个圆（万能键的意象）
+        // 居中画一行字（cx 省略时按整幅 1080 居中）
+        static void Center(Graphics g, string text, float pt, FontStyle st, int y, Color col)
+        {
+            Center(g, text, pt, st, y, col, 540);
+        }
+
+        static void Center(Graphics g, string text, float pt, FontStyle st, int y, Color col, int cx)
+        {
+            using (Font f = new Font(FONT, FitSize(g, text, pt, 1000), st))
+            {
+                Size sz = TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                TextRenderer.DrawText(g, text, f, new Point(cx - sz.Width / 2, y), col, TextFormatFlags.NoPadding);
+            }
         static void CenterArt(Graphics g, int cx, int cy, int R)
         {
             using (Pen p = new Pen(Color.FromArgb(130, 0, 138, 226), 12f))
