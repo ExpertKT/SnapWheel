@@ -433,8 +433,13 @@ namespace SnapWheel
                         using (GraphicsPath p2 = Gfx.Round(r, 8f))
                         using (Pen pen = new Pen(Color.FromArgb((int)((act ? 255 : 120) * _chipsT), 255, 255, 255), 1.2f))
                             g.DrawPath(pen, p2);
-                        TextRenderer.DrawText(g, c.Label, f, r, Color.FromArgb(al, 255, 255, 255),
-                            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                        // 用 DrawString（GDI+）而不是 TextRenderer：GDI 不认半透明色，alpha 被忽略，
+                        // 收起时字不会渐隐、到某一帧直接消失（用户反馈"没有动画过渡"）。
+                        StringFormat sfC = new StringFormat();
+                        sfC.Alignment = StringAlignment.Center;
+                        sfC.LineAlignment = StringAlignment.Center;
+                        using (SolidBrush tb = new SolidBrush(Color.FromArgb(al, 255, 255, 255)))
+                            g.DrawString(c.Label, f, tb, new RectangleF(r.X, r.Y, r.Width, r.Height), sfC);
                     }
                 }
                 Rectangle tr = _toggleRect;
@@ -459,6 +464,9 @@ namespace SnapWheel
         void PaintOverlay(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
+            // 把绘制裁剪到脏区：不然即使只 Invalidate 一小块，这里照样重贴整张全屏底图，
+            // "局部重绘"就白做了（用户反馈比例动画帧率低，根因就在这）。
+            try { g.SetClip(e.ClipRectangle); } catch { }
             g.CompositingMode = CompositingMode.SourceCopy;
             if (_dimmed != null) g.DrawImageUnscaled(_dimmed, 0, 0);
             g.CompositingMode = CompositingMode.SourceOver;
