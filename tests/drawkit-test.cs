@@ -55,6 +55,28 @@ namespace SnapWheel { static class DrawKitTest {
       var c = DrawKit.Measure(g, "√", 20, DrawKit.UI, FontStyle.Regular);
       Check("符号字体可量", a.Valid, string.Format("Symbol {0:0.0}x{1:0.0} / UI {2:0.0}x{3:0.0}", a.Layout.Width, a.Layout.Height, c.Layout.Width, c.Layout.Height));
     }
+    // 测试 4：【回归】框太矮时也必须画得出来
+    //
+    // 这个 bug 是打了宣传图才发现的：DrawKit.DrawFitted 在框高 44px 时**整个文字消失**。
+    // 逐档试出来的阈值是"框高必须 ≥ Font.Height"——
+    // 30pt 的 MeasureString 报 50.8，而 DrawString 实际要 ≥52，差 1.2px 就什么都不画。
+    using (Bitmap b = new Bitmap(800, 200, PixelFormat.Format32bppPArgb))
+    using (Graphics g = Graphics.FromImage(b)) {
+      g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+      foreach (int h in new int[] { 5, 20, 44, 51 }) {
+        g.Clear(Color.White);
+        DrawKit.DrawFitted(g, "滚动长截图 · 翻译", new RectangleF(10, 10, 700, h), Color.Black, 30, 700, DrawKit.UI, FontStyle.Bold, Align.Near);
+        Rectangle ink = InkBounds(b);
+        Check("框高 " + h + "px 时仍能画出文字", ink != Rectangle.Empty,
+              "墨迹为空（整行消失）—— 说明框高没被撑到 Font.Height");
+      }
+      // 超长出框仍要截断，不能溢出
+      g.Clear(Color.White);
+      DrawKit.DrawFitted(g, "这是一段很长很长的中文说明文字用来测试超宽时会不会截断", new RectangleF(10, 10, 192, 40), Color.Black, 20, 192, DrawKit.UI, FontStyle.Regular, Align.Center);
+      Rectangle ink2 = InkBounds(b);
+      Check("超长文本被截断且不超出框", ink2 != Rectangle.Empty && ink2.Width <= 200,
+            "墨迹 " + ink2 + "（框宽 192）");
+    }
     Console.WriteLine();
     Console.WriteLine(string.Format("结果：通过 {0}，失败 {1}", pass, fail));
     Environment.ExitCode = fail == 0 ? 0 : 1;

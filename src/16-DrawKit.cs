@@ -158,6 +158,23 @@ namespace SnapWheel
         {
             using (Font f = new Font(fontName, pt, style))
             {
+                // ⚠️ 必须先把框撑够高，否则**一行都画不出来**。
+                //
+                // 实测（探针逐档试出来的）：
+                //   · 30pt 的中文，`MeasureString` 报 **50.8**，而 `DrawString` 实际需要 **≥52**；
+                //   · box 高 50 → 墨迹 **0**（整行消失）；box 高 52 → 正常输出。
+                // 也就是说差这 1.2px，`DrawString` **不裁、不缩，直接什么都不画** ——
+                // 调用方以为自己只是"框小了一点"，实际看到的是"文字没了"。
+                //
+                // 所以这里**用 `Font.Height`（字体行高）来撑框，并多留 2px 余量**，
+                // 不要用 `MeasureString` 的高度 —— 又一次是"量的高度 ≠ 画需要的高度"。
+                float need = f.Height + 2f;
+                if (need > box.Height)
+                {
+                    float cy = box.Y + box.Height / 2f;
+                    box = new RectangleF(box.X, cy - need / 2f, box.Width, need);
+                }
+
                 StringFormat fmt = new StringFormat(StringFormat.GenericTypographic);
                 fmt.Alignment = (align == Align.Near) ? StringAlignment.Near
                               : (align == Align.Center) ? StringAlignment.Center : StringAlignment.Far;
