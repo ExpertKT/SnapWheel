@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>SnapWheel 学习手册 · 手机版</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1c1f24; --muted:#5f6672; --card:#f5f6f8; --line:#e3e6ea;
+    --brand:#007acc; --warn:#b45309; --bad:#c0392b; --good:#1a7f4b; --code-bg:#f0f2f5; --code-fg:#24292f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1216; --fg:#e6e8ec; --muted:#98a0ad; --card:#171c22; --line:#232a33;
+      --brand:#5cb8ff; --warn:#f0b429; --bad:#ff7b72; --good:#56d364; --code-bg:#0b0f14; --code-fg:#c9d1d9;
+    }
+  }
+  *{box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{
+    margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);
+    font:16px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI",sans-serif;
+    max-width:820px;margin-inline:auto;
+  }
+  h1{font-size:1.5rem;line-height:1.4;margin:0 0 6px}
+  h2{font-size:1.2rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:1.05rem;margin:22px 0 8px}
+  h4{font-size:1rem;margin:16px 0 6px;color:var(--brand)}
+  p,li{margin:8px 0}
+  small,.muted{color:var(--muted);font-size:.9rem}
+  a{color:var(--brand);text-decoration:none}
+  code{background:var(--code-bg);color:var(--code-fg);padding:2px 5px;border-radius:4px;font-size:.9em;
+       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:12px;border-radius:8px;overflow-x:auto;
+      font-size:.85rem;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      -webkit-overflow-scrolling:touch}
+  pre code{background:none;padding:0}
+  .lead{background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;
+                   padding:10px 12px;margin:12px 0}
+  .bad{border-color:var(--bad)} .good{border-color:var(--good)} .tip{border-color:var(--warn)}
+  .toc{background:var(--card);border-radius:10px;padding:12px 14px;margin:16px 0}
+  .toc ol{margin:6px 0 0;padding-left:22px}
+  .toc li{margin:4px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.92rem}
+  th,td{border:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600;white-space:nowrap}
+  details{background:var(--card);border-radius:10px;margin:12px 0;overflow:hidden}
+  details[open]{padding-bottom:10px}
+  summary{padding:12px 14px;cursor:pointer;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--brand)}
+  details[open] summary::before{content:"▾ "}
+  details > *:not(summary){margin-left:14px;margin-right:14px}
+  .num{display:inline-block;min-width:1.6em;color:var(--brand);font-weight:700}
+  .sym{color:var(--bad);font-weight:700}
+  .ok{color:var(--good);font-weight:700}
+  hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+  .kbd{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:.85em}
+</style>
+</head>
+<body>
+
+<h1>SnapWheel 学习手册</h1>
+<p class="muted">手机离线版 ｜ 一个人看的一册 ｜ 配合 <code>docs/LEARNING.md</code>（给 AI 的教材）使用</p>
+
+<div class="lead">
+  <b>为什么要看这个：</b>你参与了自己的项目，但没底气说"这是我自己做的" —— 因为你参与的是<b>结果</b>，不是<b>决策</b>。<br>
+  这册子的目标只有一个：让你拿到<b>决策能力</b>。方法是用你熟悉的 C 当锚点，把 C# / 工程实践一个个接上去；并且<b>把我们已经踩过的坑直接告诉你</b>，你不用再走一遍。
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#p1">C → C# 对照表</a></li>
+    <li><a href="#p2">我的项目长什么样</a></li>
+    <li><a href="#p3">七个「为什么」</a></li>
+    <li><a href="#p4">反例库：我们踩过的 10 个坑</a></li>
+    <li><a href="#p5">学习路线（7 个阶段）</a></li>
+    <li><a href="#p6">术语速查</a></li>
+    <li><a href="#p7">通用套路速查卡</a></li>
+  </ol>
+</div>
+
+<h2 id="p1">1 · C → C# 对照表</h2>
+<p>你不需要先学很多 C# 才能看懂这个项目。下面这些是<b>够用</b>的映射，遇到新的再回来查。</p>
+
+<table>
+  <tr><th>C</th><th>C#</th><th>关键差别</th></tr>
+  <tr><td><code>struct Point { int x, y; }</code></td><td><code>class Point { public int x, y; }</code></td><td>结构体默认<b>按值</b>传递，类默认<b>按引用</b>。C# 两者都有</td></tr>
+  <tr><td><code>malloc / free</code></td><td><code>new</code> / GC 回收</td><td>不用手动释放；但<b>能释放的东西要写 <code>Dispose</code></b>（文件、位图、画笔）</td></tr>
+  <tr><td>函数指针</td><td>委托 / 事件（<code>delegate</code>、<code>event</code>）</td><td>语法糖更甜：可以带上下文（闭包），事件是"一对多"的委托</td></tr>
+  <tr><td>头文件 + .c</td><td>一个 .cs 文件（或 <code>partial</code> 拆成多个）</td><td>没有头文件；<code>partial</code> 让一个类写在多个文件里（项目里 <code>60~66-WheelForm.*</code> 就是这么拆的）</td></tr>
+  <tr><td>全局变量</td><td><code>static</code> 字段</td><td><b>同样危险</b>。项目里的静态字段基本都为了"跨文件共享"或"测试注入"</td></tr>
+  <tr><td><code>#define</code> / <code>#ifdef</code></td><td><code>const</code> / <code>#if</code> 条件编译</td><td>项目用 <code>/define:NO_KEY</code> 编译出第二条产品线</td></tr>
+  <tr><td>数组 <code>int a[10]</code></td><td><code>List&lt;int&gt;</code> / <code>int[]</code></td><td><code>List</code> 自动扩容、能增删 —— 项目里几乎所有"一堆东西"都是 <code>List</code></td></tr>
+  <tr><td>字符串 <code>char*</code> + 手动管理</td><td><code>string</code>（不可变）</td><td>拼接会产生新对象；大量拼接用 <code>StringBuilder</code></td></tr>
+  <tr><td><code>NULL</code></td><td><code>null</code></td><td>访问 null 会抛 <code>NullReferenceException</code>；项目里到处是 <code>if (x != null)</code></td></tr>
+  <tr><td>错误码 / <code>errno</code></td><td>异常 <code>try/catch/finally</code></td><td><code>finally</code> <b>一定会执行</b> —— 项目里用它保证"让位之后一定还原"</td></tr>
+</table>
+
+<div class="tip">
+<b>看代码时的三个高频句型：</b><br>
+<code>using (Font f = new Font(...)) { ... }</code> —— 花括号结束时自动释放（相当于 C 里"记得 free"的自动化版本）<br>
+<code>for (int i = 0; i &lt; list.Count; i++)</code> —— 遍历，和 C 的数组循环一样<br>
+<code>delegate(object o, EventArgs e) { ... }</code> —— 就地写一个回调函数，相当于 C 里传函数指针
+</div>
+
+<h2 id="p2">2 · 我的项目长什么样</h2>
+
+<p><b>一句话</b>：Windows 上的截图工具。截完图<b>不弹保存框</b>，图直接变成屏幕角上一张缩略图（排成一段圆弧），要用的时候把缩略图<b>拖进任何程序</b>就发出去了。</p>
+
+<p><b>三条主流程</b>（整个项目就围绕这三条线）：</p>
+<pre><code>① 截图线：热键 → 全屏浮层 → 拖框选 → 标注/取字 → 确认
+                                    ↓ 合成成一张位图
+② 收纳线：位图 → 存进"轮盘"（内存里的列表）→ 屏幕角落的圆弧上排开
+                                    ↓
+③ 用图线：缩略图 → 拖出去（OLE 拖放）→ 目标程序收到文件或位图</code></pre>
+
+<p><b>技术栈</b>：C# / .NET Framework 4.0 / WinForms，约 2 万行、38 个源文件。所有界面<b>全部自己画</b>（没有 UI 框架、没有一张图片资源），编译用 Windows 自带的编译器，<b>零第三方依赖</b>，产物是单个约 300KB 的 exe。</p>
+
+<details>
+<summary>代码地图（按职责分四层，手机上随时查）</summary>
+<table>
+  <tr><th>层</th><th>文件</th><th>在解决什么</th></tr>
+  <tr><td rowspan="8">底座</td><td>00-AppInfo</td><td>版本号、名字、仓库地址</td></tr>
+  <tr><td>05-Err</td><td><b>出错日志 + 帧耗时统计</b>（诊断能力都在这）</td></tr>
+  <tr><td>10-Native</td><td>所有系统 API 声明集中一处</td></tr>
+  <tr><td>13-Ui</td><td>DPI 缩放 + 文字折行（统一入口）</td></tr>
+  <tr><td>14-Lang</td><td>界面语言（中英双写）</td></tr>
+  <tr><td>15-Gfx</td><td>绘制原语：圆角、阴影、玻璃、新拟态</td></tr>
+  <tr><td>12-Power</td><td>省电模式</td></tr>
+  <tr><td>69-ArcUi</td><td>弧形胶囊 + 沿弧文字</td></tr>
+  <tr><td rowspan="5">数据</td><td>20-ImageIO</td><td>图片格式解析、存盘</td></tr>
+  <tr><td>25-Store</td><td>一个轮盘里的所有图</td></tr>
+  <tr><td>27-Undo</td><td>撤销删除（只留内存引用）</td></tr>
+  <tr><td>30-Wheel</td><td>多轮盘管理</td></tr>
+  <tr><td>35-Settings</td><td>设置读写、热键、配置迁移</td></tr>
+  <tr><td rowspan="8">绘制</td><td>60-WheelForm</td><td>轮盘主窗口：字段/布局/几何</td></tr>
+  <tr><td>61-….Draw</td><td>绘制</td></tr>
+  <tr><td>62-….Anim</td><td>动画与展开收起</td></tr>
+  <tr><td>63-….Glass</td><td>抓屏毛玻璃</td></tr>
+  <tr><td>64-….Input</td><td>鼠标键盘、拖放</td></tr>
+  <tr><td>66-….Layers</td><td><b>分层缓存与签名</b>（性能核心）</td></tr>
+  <tr><td>40-RoundButton</td><td>自绘按钮（最小完整控件）</td></tr>
+  <tr><td>52-SymbolPicker</td><td>符号面板</td></tr>
+  <tr><td rowspan="12">功能</td><td>50-OverlayForm</td><td>截图浮层（框选 + 尺寸面板）</td></tr>
+  <tr><td>51-….Annotate</td><td>标注（箭头/方框/马赛克/文字/符号）</td></tr>
+  <tr><td>55-PinForm</td><td>贴图到屏幕</td></tr>
+  <tr><td>56-Ocr / 81-OcrForm</td><td>取字（系统自带 OCR）</td></tr>
+  <tr><td>57-Translate</td><td>翻译引擎链</td></tr>
+  <tr><td>58-LongShot / 59-LongShotForm</td><td>滚动长截图</td></tr>
+  <tr><td>70-WheelsForm</td><td>管理轮盘</td></tr>
+  <tr><td>75-SettingsForm</td><td>设置窗口</td></tr>
+  <tr><td>80-Dialogs</td><td>引导等对话框</td></tr>
+  <tr><td>84-Reward</td><td>打赏窗口</td></tr>
+  <tr><td>90-App</td><td>托盘与程序入口</td></tr>
+  <tr><td>91-Feedback</td><td>反馈闭环（诊断信息 + 提 issue）</td></tr>
+</table>
+</details>
+
+<h2 id="p3">3 · 七个「为什么」</h2>
+<p class="muted">代码能看出"怎么做"，看不出"为什么"。这七条是项目里最难被外人看懂的部分。</p>
+
+<details>
+<summary>3.1 为什么窗口要自己画，不用系统控件？</summary>
+<p>因为要<b>真透明</b>。Windows 上想要"只有圆弧和缩略图、其余完全透明"的窗口，必须用<b>分层窗口</b>。而分层窗口<b>不能承载普通控件</b> —— 控件的绘制不走分层通道。</p>
+<p>代价：按钮、圆角、阴影、图标、文字全得自己画。收益：视觉完全可控。</p>
+</details>
+
+<details>
+<summary>3.2 为什么毛玻璃要自己抓屏，不用系统效果？</summary>
+<p>两个原因：① 分层窗口<b>用不了</b>系统毛玻璃；② 系统效果会给<b>整个窗口矩形</b>蒙一层灰，而我们要"只糊面板内部、边缘干净"。</p>
+<p>做法：后台线程每 3.5 秒抓一次屏幕 → 模糊 → <b>裁进面板形状</b>。抓屏时给窗口打标记，保证<b>不会拍到自己</b>。</p>
+</details>
+
+<details>
+<summary>3.3 为什么要有「分层缓存 + 签名」？</summary>
+<p>一帧如果每次都把所有矢量图形重画，要 12.7ms（量出来的）。做法：把画面分成三层（环/缩略图/控件），<b>每层缓存成位图</b>，每帧只贴图。</p>
+<p>但贴图有个前提：<b>缓存必须还有效</b>。于是给每层算一个签名（由"这一层依赖的所有状态"混合而成：悬停项、偏移量、缩放、颜色…）。</p>
+<div class="bad"><b>规则：任何参与绘制的状态都必须进签名</b>，否则画面会卡在旧状态（我们真踩过，见 §4.6）。</div>
+</details>
+
+<details>
+<summary>3.4 为什么偏移量要有两个变量（当前值 / 目标值）？</summary>
+<p><code>_targetOffset</code> = <b>目标</b>（滚轮一滚就变，代表用户意图）<br>
+<code>_offset</code> = <b>当前值</b>（每帧向目标靠近一小步，代表动画）</p>
+<p>分开的好处：<b>意图立刻记录、画面平滑跟上</b>。所有动画系统都是这个套路（C 里写游戏循环也一样）。</p>
+</details>
+
+<details>
+<summary>3.5 为什么要统一用「屏幕坐标」？</summary>
+<p>因为要跨多显示器工作。统一用虚拟屏幕坐标的好处是"算一次到处能用"；代价是<b>任何相对坐标都要显式转换</b> —— 忘记转换就会出现"面板跑到副屏去了"（我们踩过）。</p>
+</details>
+
+<details>
+<summary>3.6 为什么设置窗口翻页要用「位图滑动」？</summary>
+<p>因为控件在翻页时要重排 + 重绘，会闪、会掉帧。做法：动画期间<b>把两页各渲染成位图</b>，滑动位图；动画结束再切回真实控件。</p>
+<p><b>通用套路：动画期间用位图，静止时用控件。</b></p>
+</details>
+
+<details>
+<summary>3.7 为什么「拖出去」是复制语义？</summary>
+<p>拖放调用用的是"复制"效果 —— 目标程序拿到的是<b>副本</b>，所以环上那份<b>应该留着</b>（想再拖一次、或拖给第二个窗口都要用）。</p>
+<div class="bad">我们曾经在拖出成功后把图从环上删掉（把复制当成了移动），于是"拖一次就没了"。见 §4.3。</div>
+</details>
+
+<h2 id="p4">4 · 反例库：我们踩过的 10 个坑</h2>
+<p class="muted">这是整册最有价值的部分。每条都是真实的：有症状、有日志、有数据。<b>你不用再走一遍，但要能讲出"为什么会这样"。</b></p>
+
+<details open>
+<summary><span class="num">4.1</span>度量与绘制不同源 —— <b>同一个坑摔了四次</b></summary>
+<p><b>症状</b>：文字/图形的位置和它的边框、命中区域对不上，或者被裁掉一半。</p>
+<p><b>根因</b>：<b>测量用一套参数，绘制用另一套。</b>四次分别是：</p>
+<ol>
+  <li>用 GDI+ 的方式量宽度、却用另一种方式画 → 实际更宽 → <b>右边缘被切</b>；</li>
+  <li>格子按 20pt 字号算，而表情的<b>行高</b>远大于字号 → <b>被裁</b>；</li>
+  <li>量框用中文字体、画的时候用符号字体 → <b>两个字体宽高不同</b> → 错位；同时<b>锚点不一致</b>（框按左上角、画按中心）→ 差半个字；</li>
+  <li><b>GDI 与 GDI+ 混用</b>：用 GDI 画，却期望它响应 GDI+ 的旋转/平移变换 —— <b>GDI 完全不理会</b>，于是预览正常、一合成到成品图就跑到图外。</li>
+</ol>
+<div class="good"><b>正确做法</b>：测量和绘制必须<b>同一条 API 路径</b>；锚点必须一致；字体必须一致。更工程化的做法是<b>把这几件事封装成一个函数</b>，让调用方<b>不可能</b>写错。</div>
+<div class="tip"><b>这条的普适教训</b>：很多 bug 不是"写错了"，而是<b>"约定没有强制"</b>。好的设计让错误写不出来。</div>
+</details>
+
+<details>
+<summary><span class="num">4.2</span>不要用字符串片段做批量替换的锚点</summary>
+<p><b>症状</b>：批量改文案后，编译报错一片，字符串被劈成两半。</p>
+<p><b>根因</b>：把 <code>" 张"</code>、<code>" 行"</code> 这种<b>片段</b>当查找目标，而它们是<b>更大字符串的一部分</b>。</p>
+<p><b>正确做法</b>：用完整字符串做锚点；批量改完<b>必须编译验证</b>；先确认目标唯一。</p>
+</details>
+
+<details>
+<summary><span class="num">4.3</span>语义搞错：把「复制」当成了「移动」</summary>
+<p><b>症状</b>：拖出去的图从环上消失了，不能再拖第二次。</p>
+<p><b>根因</b>：拖放用的是复制效果，但成功后代码把图从列表里删了。</p>
+<p><b>正确做法</b>：<b>先想清楚操作的语义</b>（复制？移动？），再写代码。</p>
+</details>
+
+<details>
+<summary><span class="num">4.4</span>状态用属性临时保存，嵌套时丢失</summary>
+<p><b>症状</b>：打开设置窗口，它跑到了轮盘<b>下面</b>（以为没打开）；截图界面也在下层。</p>
+<p><b>根因</b>：为了让轮盘让位，代码临时把它设为非置顶，结束再恢复。但<b>多处嵌套</b>（截图时又打开设置）→ 恢复时拿到的是<b>中间态</b> → <b>状态永久丢失</b>。</p>
+<div class="good"><b>正确做法</b>：用<b>计数 / 引用计数</b>：第一个进入时保存原值、最后一个离开时恢复。这是"可嵌套资源管理"的通用模式（C 里做锁、做引用计数同理）。</div>
+<div class="bad"><b>附加教训</b>：改这个时我<b>只抑制了"重新置顶"，却忘了它本来就还在顶层</b> —— 没修好还创造新 bug。<b>改状态机前，先把它所有状态和转换画出来。</b></div>
+</details>
+
+<details>
+<summary><span class="num">4.5</span>显示值用错变量：当前值 vs 目标值</summary>
+<p><b>症状</b>：滚轮滚动时，"第几张 / 共几张"的数字<b>不变</b>。</p>
+<p><b>根因</b>：数字用了<b>当前动画值</b>（要等动画追上去才更新），而用户期望"滚轮一动就变" → 应该用<b>目标值</b>。</p>
+<p><b>正确做法</b>：区分"意图"和"呈现"。反映用户操作的显示用目标值；反映动画进度的用当前值。</p>
+</details>
+
+<details>
+<summary><span class="num">4.6</span>新状态没进缓存签名</summary>
+<p><b>症状</b>：新加的动画<b>完全不动</b>，或画面卡在旧状态。</p>
+<p><b>根因</b>：项目用"层签名"决定缓存是否有效（§3.3）。<b>新增了参与绘制的状态，却没把它混进签名</b> → 系统以为缓存还有效 → 一直贴旧图。</p>
+<p><b>正确做法</b>：<b>任何参与绘制的状态都必须进签名</b> —— 把它当成"改绘制代码的检查清单第一项"。</p>
+</details>
+
+<details>
+<summary><span class="num">4.7</span>按中文宽度设计的布局，换英文就溢出</summary>
+<p><b>症状</b>：做成多语言后，英文一行挤成一长串被裁；提示文字压住了别的元素。</p>
+<p><b>根因</b>：布局宽度是<b>按中文字符数估</b>的，英文同义句往往长 50%~100%。</p>
+<div class="good"><b>正确做法</b>：① 不按"字符数"算宽度，按<b>实测宽度</b>（同 §4.1）；② 有些控件<b>不会自动折行</b>，要在文案里手工插换行；③ <b>设计时就用最长的语言试一遍</b>。</div>
+</details>
+
+<details>
+<summary><span class="num">4.8</span>构建脚本的编码：BOM 不是可选项</summary>
+<p><b>症状</b>：改完构建脚本，突然报一堆语法错误、中文全变乱码。</p>
+<p><b>根因</b>：PowerShell 对<b>没有 BOM 的 UTF-8 脚本</b>会<b>按系统本地编码解释</b> → 中文全乱 → 语法崩。</p>
+<p><b>正确做法</b>：<b>写回脚本文件时必须带 BOM</b>。这条很小，但我把能跑的构建脚本搞坏了两次，都靠版本控制才恢复。</p>
+</details>
+
+<details>
+<summary><span class="num">4.9</span>不要用「解析输出」判断成败</summary>
+<p><b>症状</b>：脚本里写"编译成功就提交"，结果<b>连续两次把编译不过的版本推了上去</b>。</p>
+<p><b>根因</b>：① 判断写了正则但没转义元字符，匹配失败；② 改成字符串包含也失败 —— 因为那个构建脚本用<b>只输出到屏幕</b>的方式打印，<b>不进管道</b>，变量一直是空的。</p>
+<div class="good"><b>正确做法</b>：用"<b>产物是否存在且合理</b>"判断（文件在不在、大小对不对），或者用退出码。<b>不要解析给人看的输出。</b></div>
+<p><b>附带教训</b>：<b>先编译、再提交</b>。我把顺序写反了两次。</p>
+</details>
+
+<details>
+<summary><span class="num">4.10</span>先测量，再优化 —— <b>方法论中的方法论</b></summary>
+<p><b>症状</b>：比例面板展开动画卡顿。我<b>猜了三个原因、改了三轮</b>，都没解决。</p>
+<p><b>实测之后</b>：</p>
+<ul>
+  <li>我以为的元凶（每帧重贴整张 2560×1440 底图）实测是 <b>0.31ms</b> —— <b>根本无关</b>；</li>
+  <li>真正的数据：<b>全屏重绘 22.2ms/帧（≈45fps）</b>，局部重绘降到 <b>13.5ms</b> —— 这才是"帧率低"的确切原因。</li>
+</ul>
+<div class="good"><b>正确做法</b>：① 先加计时，拿到分段数据；② 按数据改，不按直觉改；③ 改完<b>再测一次</b>验证。</div>
+<div class="tip"><b>一句话记住</b>：<b>没有测量就没有优化，只有猜测。</b> 我在这上面白烧了大量时间和额度。</div>
+</details>
+
+<h2 id="p5">5 · 学习路线（7 个阶段）</h2>
+<p class="muted">每阶段都是「原理 → 看真实代码 → 看反例 → 自己动手 → 验收」。练习写在 <code>tests/learn/</code>。</p>
+
+<details>
+<summary><b>阶段 1</b>｜一个程序是怎么"活"起来的</summary>
+<p><b>原理</b>：程序入口、事件循环、消息、回调。C 里是 <code>main</code> + <code>while</code> + 函数指针；Windows 程序是 <code>WinMain</code> + 消息循环 + 窗口过程回调。</p>
+<p><b>代码</b>：<code>90-App.cs</code>（入口与托盘）、<code>10-Native.cs</code>（怎么声明系统调用）。</p>
+<p><b>动手</b>：写一个 50 行的窗口程序，点一下就换标题。</p>
+<p><b>验收</b>：能解释"我点了按钮之后，代码从哪一行跳到哪一行"。</p>
+</details>
+
+<details>
+<summary><b>阶段 2</b>｜数据怎么组织（从结构体到类）</summary>
+<p><b>原理</b>：结构体→类；函数指针→委托/事件；<code>malloc/free</code>→GC 与生命周期；<b>封装</b>到底解决什么问题。</p>
+<p><b>代码</b>：<code>25-Store</code>、<code>30-Wheel</code>、<code>27-Undo</code>。</p>
+<p><b>反例</b>：§4.3（语义不清导致逻辑错误）。</p>
+<p><b>动手</b>：用 C 写一个"能存 N 条、能删、能撤销"的小程序（<b>自己写，不看项目代码</b>），写完再对照项目看它怎么做得更好。</p>
+<p><b>验收</b>：能说清"为什么撤销用引用计数而不是拷贝"。</p>
+</details>
+
+<details>
+<summary><b>阶段 3</b>｜画到屏幕上（<b>核心阶段</b>）</summary>
+<p><b>原理</b>：坐标系、绘制原语、双缓冲（为什么需要）、裁剪、抗锯齿、字体度量。</p>
+<p><b>代码</b>：<code>15-Gfx</code>、<code>40-RoundButton</code>（最小完整控件）、<code>61-….Draw</code>。</p>
+<p><b>反例</b>：<b>§4.1（摔了四次的坑）</b>+ §4.7。</p>
+<p><b>动手</b>：写一个自绘按钮：悬停变色、按下变暗、文字<b>真正居中</b>（用测得的尺寸算）。<b>写完截图放大，用尺子量</b>是否真居中。</p>
+<p><b>验收</b>：能讲出"为什么测量和绘制必须同源"，并举出一个会出错的例子。</p>
+</details>
+
+<details>
+<summary><b>阶段 4</b>｜交互（命中、状态、焦点）</summary>
+<p><b>原理</b>：命中测试、状态机、焦点与激活、窗口层级（Z 序）。</p>
+<p><b>代码</b>：<code>64-….Input</code>、<code>51-….Annotate</code>（选中/拖动/缩放）。</p>
+<p><b>反例</b>：<b>§4.4（状态嵌套丢失）</b>+ §4.5。</p>
+<p><b>动手</b>：给阶段 3 的按钮加上拖动、缩放、删除、撤销，再加一个动画过渡。</p>
+<p><b>验收</b>：能在纸上画出一个对象的所有状态和转换。</p>
+</details>
+
+<details>
+<summary><b>阶段 5</b>｜让程序跑得快且不卡（性能工程）</summary>
+<p><b>原理</b>：帧预算（60fps = 16.7ms）、缓存、失效与签名、<b>测量方法</b>。</p>
+<p><b>代码</b>：<code>66-….Layers</code>、<code>05-Err</code>（帧耗时统计）。</p>
+<p><b>反例</b>：§4.6 + <b>§4.10（先测量再优化）</b>。</p>
+<p><b>动手</b>：给自己阶段 4 的程序加"帧耗时打印"，然后<b>故意</b>制造卡顿，用数据找出原因并修掉。</p>
+<p><b>验收</b>：能独立完成"测量 → 定位 → 优化 → 复测"整套流程。</p>
+</details>
+
+<details>
+<summary><b>阶段 6</b>｜工程化（从"能跑"到"能维护"）</summary>
+<p><b>原理</b>：分层与依赖方向、构建脚本、测试的价值、配置兼容、多语言、发布流程。</p>
+<p><b>代码</b>：<code>tools/build.ps1</code>、<code>tests/</code>、<code>35-Settings</code>（配置迁移）、<code>14-Lang</code>。</p>
+<p><b>反例</b>：§4.2、§4.8、§4.9。</p>
+<p><b>动手</b>：给自己的程序加：一键构建脚本、3 个自动化测试、一个配置文件（且旧配置能读）。</p>
+<p><b>验收</b>：能解释"为什么测试值得写"，并举出<b>你自己代码里</b>一个"当初写测试能省几小时"的例子。</p>
+</details>
+
+<details>
+<summary><b>阶段 7</b>｜毕业设计：独立完成一个小工具</summary>
+<p>范围 <b>200~800 行</b>，<b>从需求到发布全流程</b>：自己定需求、自己设计、自己写、自己测、自己打包、写 README。</p>
+<p>建议题材：和 SnapWheel 同类但不同 —— 剪贴板历史、颜色拾取器、窗口置顶工具。</p>
+<p>AI 的角色：<b>审阅者</b>，只在你卡住时给方向，<b>不写代码</b>。</p>
+<p><b>验收</b>：你能完整讲一遍 —— 为什么这么分层、最大的技术问题是什么、怎么解决的、如果重做会改哪里。</p>
+</details>
+
+<h2 id="p6">6 · 术语速查</h2>
+<table>
+  <tr><th>词</th><th>一句话解释</th></tr>
+  <tr><td>分层窗口</td><td>一种支持"整窗按像素透明"的窗口，代价是不能放普通控件，一切自己画</td></tr>
+  <tr><td>双缓冲</td><td>先在内存里画好一整张，再一次性贴到屏幕，避免闪烁</td></tr>
+  <tr><td>裁剪（Clip）</td><td>限制"只能画在某块区域里"，超出部分不画</td></tr>
+  <tr><td>脏区</td><td>需要重绘的那一小块区域。只重绘脏区能大幅省时间</td></tr>
+  <tr><td>帧预算</td><td>60fps 意味着每帧只有 16.7ms，所有绘制必须在此之内完成</td></tr>
+  <tr><td>缓存失效</td><td>缓存的内容过时了、不能再用。需要一个机制判断"还能不能用"</td></tr>
+  <tr><td>签名</td><td>把一组状态压缩成一个数字，用它快速判断"缓存是否需要重建"</td></tr>
+  <tr><td>命中测试</td><td>判断"鼠标点在了哪个对象上"</td></tr>
+  <tr><td>状态机</td><td>用"当前处于哪个状态"来决定"该响应什么"。状态多时画成图最不容易错</td></tr>
+  <tr><td>Z 序</td><td>窗口的前后层叠顺序</td></tr>
+  <tr><td>置顶（TopMost）</td><td>让窗口始终显示在其它窗口之上</td></tr>
+  <tr><td>焦点</td><td>键盘输入会送到"拥有焦点"的窗口</td></tr>
+  <tr><td>激活</td><td>把某窗口提到前台并给它焦点</td></tr>
+  <tr><td>委托 / 事件</td><td>C 里函数指针的升级版：可以带上下文，事件是"一对多"</td></tr>
+  <tr><td>闭包</td><td>一个函数 + 它记住的外部变量。C 里要手动传结构体才能做到</td></tr>
+  <tr><td>partial 类</td><td>一个类写在多个文件里，编译时合并 —— 用来拆分超大文件</td></tr>
+  <tr><td>DPI 缩放</td><td>高分屏上按比例放大界面。必须统一入口，否则各处尺寸会打架</td></tr>
+  <tr><td>OLE 拖放</td><td>Windows 标准的"拖文件到别的程序"机制</td></tr>
+  <tr><td>OCR</td><td>从图片里识别文字</td></tr>
+  <tr><td>回归（regression）</td><td>改 A 的时候把原本好的 B 弄坏了</td></tr>
+</table>
+
+<h2 id="p7">7 · 通用套路速查卡</h2>
+<div class="lead">这些是跨语言、跨项目都成立的<b>经验</b>。忘了就回来翻。</div>
+
+<h4>关于正确性</h4>
+<ul>
+  <li><b>量了再画，且两件事必须同源</b>（§4.1）</li>
+  <li><b>让错误写不出来</b>，比"记得别写错"可靠得多（§4.1 的封装）</li>
+  <li><b>先想清语义</b>（复制还是移动？谁拥有这块内存？）再写代码（§4.3）</li>
+  <li><b>状态要么完整，要么不存在</b> —— 半途状态最危险（§4.4）</li>
+</ul>
+
+<h4>关于性能</h4>
+<ul>
+  <li><b>先测量，再优化</b>（§4.10）—— 这是最省钱的一条</li>
+  <li><b>只重绘变了的那一块</b>（脏区思维）</li>
+  <li><b>缓存 + 一个明确的失效判据</b>（§4.6：判据漏了就会卡住）</li>
+  <li><b>动画期间用位图，静止时用控件</b>（§3.6）</li>
+</ul>
+
+<h4>关于可维护性</h4>
+<ul>
+  <li><b>可嵌套的资源管理要用计数</b>，不要用"记住原值再恢复"（§4.4）</li>
+  <li><b>能自己说出"我哪里慢、哪里错了"</b> —— 日志与计时是一等功能（<code>05-Err</code>）</li>
+  <li><b>把平台相关的调用集中到一处</b>（<code>10-Native</code>）</li>
+  <li><b>构建脚本是项目的一部分</b>，要能一键复现</li>
+</ul>
+
+<h4>关于工作方式</h4>
+<ul>
+  <li><b>改完就编译验证</b>，别攒着（§4.9：我曾把编译不过的版本推上去两次）</li>
+  <li><b>用"产物"验证，不要解析给人看的输出</b>（§4.9）</li>
+  <li><b>批量替换用完整锚点</b>，改完必编译（§4.2）</li>
+  <li><b>不确定就做个小实验</b> —— 这比争论和猜测都快（§4.10）</li>
+</ul>
+
+<hr>
+<p class="muted">这份手册随项目一起放进了仓库（<code>docs/mobile-handbook.html</code>）。<br>
+配套：<code>docs/LEARNING.md</code>（给 AI 的教材与路线）、<code>docs/ROADMAP.md</code>（版本路线图）。<br>
+看不懂的地方，去那个"学习对话"里问 —— 记得让它先读 LEARNING.md。</p>
+
+</body>
+</html>
