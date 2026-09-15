@@ -341,7 +341,7 @@ namespace SnapWheel
 
         static Font HintFont()
         {
-            try { return new Font(DrawKit.UI, 10.5f); }
+            try { return new Font(DrawKit.UI, 12f); }
             catch { return new Font(FontFamily.GenericSansSerif, 10.5f); }
         }
 
@@ -354,7 +354,7 @@ namespace SnapWheel
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
-                                   b.Color, 11, ClientSize.Width - PadX * 2 + 12, DrawKit.UI, FontStyle.Regular, Align.Center);
+                                   b.Color, 13, ClientSize.Width - PadX * 2 + 12, DrawKit.UI, FontStyle.Regular, Align.Center);
         }
 
         // 不抢焦点：不然用户按 Alt+Tab 切窗口时提示条会把焦点抢回来
