@@ -48,6 +48,24 @@ namespace SnapWheel
             }
         }
 
+        /// <summary>
+        /// 把轮盘滚到第 i 张（0 起）。给传递模式的"换一张"用。
+        /// 改的是 _targetOffset（意图），画面会自己平滑滚过去 —— 和用户滚轮的效果一致。
+        /// </summary>
+        public void SelectIndex(int i)
+        {
+            try
+            {
+                int n = _store == null ? 0 : _store.Items.Count;
+                if (n <= 0) return;
+                if (i < 0) i = 0;
+                if (i > n - 1) i = n - 1;
+                _targetOffset = i;
+                Invalidate();
+            }
+            catch { }
+        }
+
         // 第 i 张缩略图在**屏幕**上的位置（返回矩形，X/Y 存的是中心点）。
         // 传递模式用它当「按下」的起点：传递模式是真的去动鼠标模拟拖放，
         // 起点必须落在那张缩略图真正所在的地方 —— 用窗口中心当起点，

@@ -34,8 +34,8 @@ namespace SnapWheel
         const int ThumbW = 132, ThumbH = 99;   // 吸附的缩略图尺寸
         const int CursorW = 26, CursorH = 26;  // 假光标尺寸
 
-        readonly Bitmap _thumb;
-        readonly Point _origin;          // 起点（轮盘上那张缩略图的位置）—— 模拟拖放时从这里按下
+        Bitmap _thumb;                   // 吸附在假光标上的缩略图（传递中可以换）
+        Point _origin;                   // 起点（轮盘上那张缩略图的位置）—— 模拟拖放时从这里按下
         Point _pos;                      // 假光标的屏幕坐标
         float _fx, _fy;                  // 亚像素累积（不然慢速移动会卡顿或跳格）
         System.Windows.Forms.Timer _tick;
@@ -54,8 +54,31 @@ namespace SnapWheel
         public Point DropPoint;
 
         // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
-        // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
         public bool UseClipboard;
+
+        /// <summary>
+        /// 用户在传递模式里要求换一张图（按 , 或 .）。
+        /// 参数是相对位移：-1 上一张、+1 下一张。
+        /// 由 App 订阅去换图，然后回调 SetThumb 把新的缩略图换上来。
+        /// </summary>
+        public event Action<int> SwitchRequested;
+
+        /// <summary>换掉假光标上吸附的那张图（App 换好之后回调进来）。</summary>
+        public void SetThumb(Bitmap thumb, Point origin)
+        {
+            try { if (_thumb != null) _thumb.Dispose(); } catch { }
+            _thumb = thumb;
+            _origin = origin;
+            try { Invalidate(); } catch { }
+        }
+
+        /// <summary>换提示条上的文字（提示条是独立小窗，转交给它）。</summary>
+        public void SetHintText(string text)
+        {
+            try { if (_hint != null) _hint.SetText(text); } catch { }
+        }
+
+        bool _prevPrev, _prevNext;       // 换图键的边沿状态
 
         public CarryForm(Bitmap thumb, Point origin)
         {
@@ -160,6 +183,11 @@ namespace SnapWheel
                     if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter)) { DoDrop(); return; }
                     if (Rising(ref _prevC, Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
+
+                    // 换一张图（不想传这张了，不用退出去重来）。
+                    // 用逗号/句号而不是左右方向键：方向键已经在负责移动假光标了。
+                    if (Rising(ref _prevPrev, Keys.Oemcomma)) { RaiseSwitch(-1); return; }
+                    if (Rising(ref _prevNext, Keys.OemPeriod)) { RaiseSwitch(1); return; }
                 }
             }
             catch { }
@@ -199,6 +227,12 @@ namespace SnapWheel
             });
             t.IsBackground = true;
             t.Start();
+        }
+
+        /// <summary>通知 App "用户要换图了"（-1 上一张 / +1 下一张）。</summary>
+        void RaiseSwitch(int delta)
+        {
+            try { if (SwitchRequested != null) SwitchRequested(delta); } catch { }
         }
 
         /// <summary>
@@ -332,6 +366,33 @@ namespace SnapWheel
     /// </summary>
     class CarryHintForm : Form
     {
+        string _text;      // 当前显示的说明文字（换图/放下之后会换成别的提示）
+
+        /// <summary>
+        /// 换上新的说明文字。文字长短不同，窗口要**重新量一次**并重新贴到底部居中，
+        /// 不然新文字会被裁掉。
+        /// </summary>
+        public void SetText(string t)
+        {
+            if (string.IsNullOrEmpty(t)) return;
+            _text = t;
+            try
+            {
+                using (Font f = HintFont())
+                using (Bitmap b = new Bitmap(1, 1))
+                using (Graphics g = Graphics.FromImage(b))
+                {
+                    SizeF sz = g.MeasureString(t, f, new PointF(0, 0), StringFormat.GenericTypographic);
+                    ClientSize = new Size((int)Math.Ceiling((double)sz.Width) + PadX * 2,
+                                          (int)Math.Ceiling((double)sz.Height) + PadY * 2);
+                }
+                Rectangle scr = Screen.FromPoint(Cursor.Position).WorkingArea;
+                Location = new Point(scr.Left + (scr.Width - Width) / 2, scr.Bottom - Height - 40);
+                Invalidate();
+            }
+            catch { }
+        }
+
         const int PadX = 22, PadY = 12;
 
         public CarryHintForm()
@@ -344,8 +405,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
-                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            string s = _text ?? Lang.T("WASD / 方向键 移动　·　Shift 加速　·　空格/Enter 放下　·　, . 换一张　·　Esc 取消",
+                                       "WASD / Arrows move  ·  Shift faster  ·  Space/Enter drop  ·  , . switch  ·  Esc cancel");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -370,8 +431,8 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = Lang.T("WASD / 方向键 移动　·　Shift 加速　·　Enter 放下　·　Esc 取消",
-                              "WASD / Arrows move  ·  Shift faster  ·  Enter drop  ·  Esc cancel");
+            string s = _text ?? Lang.T("WASD / 方向键 移动　·　Shift 加速　·　空格/Enter 放下　·　, . 换一张　·　Esc 取消",
+                                       "WASD / Arrows move  ·  Shift faster  ·  Space/Enter drop  ·  , . switch  ·  Esc cancel");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),

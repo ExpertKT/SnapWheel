@@ -375,6 +375,39 @@ namespace SnapWheel
             // 把轮盘句柄交给传递模式：模拟拖放前它要先把轮盘拉到前台，
             // 否则轮盘作为"不激活窗口"会把第一次模拟点击用来激活自己、应用收不到（拖放永远不启动）。
             CarryForm.WheelHandle = _wheel.Handle;
+
+            // 传递模式里按 , . 可以换一张（不用退出去重新选）。
+            // 换图要动轮盘上的选中项、重算起点和缩略图，所以放在 App 这边做，
+            // 做完再把新的缩略图和起点交给 CarryForm。
+            cf.SwitchRequested += new Action<int>(delegate(int delta)
+            {
+                try
+                {
+                    int cnt = st.Items.Count;
+                    if (cnt <= 0) return;
+                    int cur = _wheel.CurrentIndex;
+                    if (cur < 0) cur = 0;
+                    int nx = ((cur + delta) % cnt + cnt) % cnt;
+
+                    _wheel.SelectIndex(nx);                       // 轮盘跟着滚过去（保留原地不动会让人困惑）
+
+                    if (st.Items[nx].Image == null)
+                    {
+                        cf.SetHintText(Lang.T("这一张取不到内容，再用 , . 换一张",
+                                              "This one has no usable content - use , . to pick another"));
+                        return;
+                    }
+                    Bitmap nt = MakeCarryThumb(st.Items[nx].Image, 132, 99);
+                    if (nt == null) return;
+
+                    Rectangle ir2 = _wheel.ItemScreenRect(nx);
+                    Point org2 = (ir2.Width > 2) ? new Point(ir2.X, ir2.Y) : origin;
+                    cf.SetThumb(nt, org2);
+                    cf.SetHintText(Lang.T("第 " + (nx + 1) + " / " + cnt + " 张　·　空格 放下　·　, . 换一张　·　Esc 取消",
+                                          "Image " + (nx + 1) + " / " + cnt + "  ·  Space drop  ·  , . switch  ·  Esc cancel"));
+                }
+                catch (Exception ex) { Err.Log("Carry.Switch", ex); }
+            });
             // 传递期间不能让轮盘自动收起：用户要自己切屏过去，常常超过那 8 秒；
             // 轮盘一藏，"按下"的起点就变成空桌面，目标程序什么都不会发生。
             WheelForm.SuppressAutoHide++;
