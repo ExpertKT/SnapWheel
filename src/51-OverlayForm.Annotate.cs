@@ -392,15 +392,20 @@ namespace SnapWheel
             {
                     case AnnotKind.Emoji:
                     {
-                        // 矢量符号：用 TextRenderer（GDI）画，和 TextSize() 的度量同源，
-                        // 否则框会和符号错位；锚点是 A（中心）。
+                        // ⚠️ 必须用 Graphics.DrawString（GDI+），**不能**用 TextRenderer：
+                        //   合成最终图时这个 Graphics 上有 Translate/Rotate 变换（按选区裁剪+旋转），
+                        //   而 TextRenderer 走 GDI，完全不响应 GDI+ 的变换 —— 于是预览看着正常、
+                        //   一合成符号就跑到图外（用户反馈"贴上去了出图没有"）。文字标注一直用 DrawString，
+                        //   所以从来没这个问题。
                         float sf2 = Math.Max(10f, s.Size * _k);
                         using (Font f = new Font("Segoe UI Symbol", sf2))
+                        using (SolidBrush b = new SolidBrush(s.Color))
                         {
-                            Size gsz = TextRenderer.MeasureText(s.Text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
-                            TextRenderer.DrawText(g, s.Text, f,
-                                new Point((int)Math.Round(s.A.X - gsz.Width / 2f), (int)Math.Round(s.A.Y - gsz.Height / 2f)),
-                                s.Color, TextFormatFlags.NoPadding);
+                            StringFormat fmt = new StringFormat();
+                            fmt.Alignment = StringAlignment.Center;
+                            fmt.LineAlignment = StringAlignment.Center;
+                            g.DrawString(s.Text, f, b,
+                                new RectangleF(s.A.X - sf2, s.A.Y - sf2 * 0.85f, sf2 * 2f, sf2 * 1.7f), fmt);
                         }
                         break;
                     }
