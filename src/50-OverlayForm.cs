@@ -134,9 +134,20 @@ namespace SnapWheel
             return new Rectangle(x, y, panelW, panelH);
         }
 
+        // 开双缓冲的 Panel：_infoPanel 是实心不透明面板，而浮层会频繁重绘，
+        // 没有自己的双缓冲就会和窗体交界处闪烁（用户反馈的"右上角尺寸面板一直在闪"）。
+        class BufferedPanel : Panel
+        {
+            public BufferedPanel()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+                UpdateStyles();
+            }
+        }
+
         void BuildInfoPanel()
         {
-            _infoPanel = new Panel();
+            _infoPanel = new BufferedPanel();
             _panelW = (int)(400 * _k);
             _panelH = (int)(40 * _k);
             _infoPanel.BackColor = Color.FromArgb(210, 18, 20, 24);
@@ -219,10 +230,16 @@ namespace SnapWheel
 
         void AnimTick(object sender, EventArgs e)
         {
+            // 只重绘胶囊那一小块。原来这里是 Invalidate() —— 全窗体重绘，而浮层是**全屏大小**
+            // （2560x1440），比例展开动画每帧重画整个屏幕，用户反馈的"比例动画卡顿"就是它。
+            Rectangle dirty = _panelBounds;
+            dirty.Inflate(60, 60);                 // 展开时两侧还有位移，留点余量
+            if (dirty.Width <= 0 || dirty.Height <= 0) dirty = ClientRectangle;
+
             float tgt = _chipsOpen ? 1f : 0f;
-            if (Math.Abs(_chipsT - tgt) < 0.002f) { _chipsT = tgt; _anim.Stop(); Invalidate(); return; }
+            if (Math.Abs(_chipsT - tgt) < 0.002f) { _chipsT = tgt; _anim.Stop(); Invalidate(dirty); return; }
             _chipsT += (tgt - _chipsT) * 0.26f;
-            Invalidate();
+            Invalidate(dirty);
         }
 
         // ---------- 选区几何 ----------
