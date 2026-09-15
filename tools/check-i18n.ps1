@@ -11,6 +11,10 @@ Set-Location (Join-Path $PSScriptRoot '..')
 $all = @()
 foreach ($f in (Get-ChildItem 'src\*.cs')) {
     $text = [IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8)
+    # 先剥掉注释：注释里会写 Lang.T(...) 作为格式示例，不剥掉会误报
+    # （这个缺陷是本脚本第一次运行时暴露的：它把 14-Lang.cs 注释里的示例当成了真代码）
+    $text = [regex]::Replace($text, '(?s)/\*.*?\*/', '')
+    $text = [regex]::Replace($text, '//[^\r\n]*', '')
     foreach ($m in [regex]::Matches($text, 'Lang\.T\("((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\)')) {
         $all += [pscustomobject]@{
             文件 = $f.Name
