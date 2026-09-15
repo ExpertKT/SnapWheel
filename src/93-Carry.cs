@@ -1,0 +1,260 @@
+using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace SnapWheel
+{
+    // ==================== 传递模式（0.9.0） ====================
+    //
+    // 目标：**不用鼠标也能把一张图"拖"进别的程序**。
+    //
+    // 设计（用户提的方案）：
+    //   ① 在轮盘上用键盘选中一张缩略图
+    //   ② 进入传递模式：缩略图被"提起来"，跟着一个**假光标**走
+    //   ③ 用户自己切到目标窗口（Alt+Tab 或鼠标点都行，随便）
+    //   ④ 用 WASD（或方向键）操控假光标移动，Shift 加速
+    //   ⑤ 按 Enter/空格 = 放下；Esc = 取消
+    //
+    // 为什么"放下"要真的去动鼠标：目标程序只认**真实的拖放**（OLE 拖放 / WM_DROPFILES），
+    // 它没法理解"我这边有个假光标"。所以放下的瞬间，我们做的事是：
+    //   把真实光标挪到假光标的位置 → 左键按下 → 分几步移动过去（模拟人手）→ 左键松开。
+    // 这样目标程序收到的就是一次普普通通的拖放，兼容性最好。
+    //
+    // 关于"怎么知道用户按了 WASD"：**不用低级键盘钩子**，而是定时器轮询 GetAsyncKeyState。
+    // 钩子会插进系统输入链、容易被安全软件盯上、还得保证一定卸载；轮询简单得多，效果一样。
+
+    class CarryForm : Form
+    {
+        const int TickMs = 15;
+        const float SpeedSlow = 6f;      // 像素/帧
+        const float SpeedFast = 20f;     // 按住 Shift
+        const int ThumbW = 132, ThumbH = 99;   // 吸附的缩略图尺寸
+        const int CursorW = 26, CursorH = 26;  // 假光标尺寸
+
+        readonly Bitmap _thumb;
+        readonly Point _origin;          // 起点（轮盘上那张缩略图的位置）—— 模拟拖放时从这里按下
+        Point _pos;                      // 假光标的屏幕坐标
+        float _fx, _fy;                  // 亚像素累积（不然慢速移动会卡顿或跳格）
+        System.Windows.Forms.Timer _tick;
+        DateTime _started;
+        bool _busy;                      // 正在执行"放下"的模拟，别让定时器再插一脚
+
+        /// <summary>用户确认放下了（Enter/空格）。</summary>
+        public bool Confirmed;
+        /// <summary>放下的位置（屏幕坐标）。</summary>
+        public Point DropPoint;
+
+        public CarryForm(Bitmap thumb, Point origin)
+        {
+            _thumb = thumb;
+            _origin = origin;
+            _pos = new Point(origin.X, origin.Y);
+            _fx = origin.X; _fy = origin.Y;
+            _started = DateTime.Now;
+
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            TopMost = true;
+            BackColor = Color.Magenta;          // 透明键：这个颜色会被系统抠掉，只留下光标和缩略图
+            TransparencyKey = Color.Magenta;
+            ClientSize = new Size(ThumbW + CursorW + 24, ThumbH + CursorH + 24);
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+            KeyPreview = true;
+
+            _tick = new System.Windows.Forms.Timer();
+            _tick.Interval = TickMs;
+            _tick.Tick += new EventHandler(OnTick);
+            _tick.Start();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            try
+            {
+                TopMost = true;
+                BringToFront();
+                // 拿一次键盘焦点，这样 Enter / Esc 能直接收到（不动鼠标）
+                Activate();
+                Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                    Native.SWP_NOMOVE | Native.SWP_NOSIZE);
+            }
+            catch { }
+            ApplyPos();
+        }
+
+        static bool Down(Keys k)
+        {
+            try { return (Native.GetAsyncKeyState((int)k) & 0x8000) != 0; }
+            catch { return false; }
+        }
+
+        void OnTick(object sender, EventArgs e)
+        {
+            if (_busy) return;
+            try
+            {
+                // 超时保护：两分钟没有任何确认就自己取消，免得假光标一直赖在屏幕上
+                if ((DateTime.Now - _started).TotalSeconds > 120) { Cancel(); return; }
+
+                float v = Down(Keys.ShiftKey) || Down(Keys.LShiftKey) || Down(Keys.RShiftKey) ? SpeedFast : SpeedSlow;
+                float dx = 0, dy = 0;
+
+                // WASD 和方向键都支持（有人习惯方向键）
+                if (Down(Keys.W) || Down(Keys.Up))    dy -= v;
+                if (Down(Keys.S) || Down(Keys.Down))  dy += v;
+                if (Down(Keys.A) || Down(Keys.Left))  dx -= v;
+                if (Down(Keys.D) || Down(Keys.Right)) dx += v;
+
+                if (dx != 0 && dy != 0) { dx *= 0.7071f; dy *= 0.7071f; }   // 斜着走不要更快
+
+                if (dx != 0 || dy != 0)
+                {
+                    _fx += dx; _fy += dy;
+                    // 夹在虚拟屏幕范围内，别让假光标跑出屏幕
+                    Rectangle vs = SystemInformation.VirtualScreen;
+                    if (_fx < vs.Left) _fx = vs.Left;
+                    if (_fy < vs.Top) _fy = vs.Top;
+                    if (_fx > vs.Right - CursorW) _fx = vs.Right - CursorW;
+                    if (_fy > vs.Bottom - CursorH) _fy = vs.Bottom - CursorH;
+                    _pos = new Point((int)Math.Round(_fx), (int)Math.Round(_fy));
+                    ApplyPos();
+                }
+
+                if (Down(Keys.Enter) || Down(Keys.Space)) { DoDrop(); return; }
+                if (Down(Keys.Escape)) { Cancel(); return; }
+            }
+            catch { }
+        }
+
+        void ApplyPos()
+        {
+            try { Location = _pos; Invalidate(); } catch { }
+        }
+
+        void Cancel()
+        {
+            try { _tick.Stop(); } catch { }
+            Confirmed = false;
+            try { Close(); } catch { }
+        }
+
+        // ---------- 放下：把假光标的位置"演"成一次真实的鼠标拖放 ----------
+        void DoDrop()
+        {
+            _busy = true;
+            try { _tick.Stop(); } catch { }
+            Confirmed = true;
+            DropPoint = _pos;
+
+            // 先在屏幕上把假光标藏起来，接下来的动作交给真实光标
+            try { Opacity = 0; } catch { }
+            try { Hide(); } catch { }
+            Application.DoEvents();
+
+            Thread t = new Thread(delegate()
+            {
+                SimulateDrag(_origin, DropPoint);
+                try { BeginInvoke((MethodInvoker)delegate { try { Close(); } catch { } }); } catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        /// <summary>
+        /// 模拟一次真实的拖放：光标移到起点 → 按下 → 分步移到终点 → 松开。
+        /// 分步移动很重要：一步跳过去的话，多数程序不会把它当成拖放。
+        /// </summary>
+        public static void SimulateDrag(Point from, Point to)
+        {
+            try
+            {
+                Native.SetCursorPos(from.X, from.Y);
+                Thread.Sleep(60);
+                Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+
+                int steps = 14;
+                for (int i = 1; i <= steps; i++)
+                {
+                    int x = from.X + (to.X - from.X) * i / steps;
+                    int y = from.Y + (to.Y - from.Y) * i / steps;
+                    Native.SetCursorPos(x, y);
+                    Thread.Sleep(14);
+                }
+                Thread.Sleep(80);
+                Native.mouse_event(Native.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+                Thread.Sleep(40);
+            }
+            catch { }
+        }
+
+        // ---------- 绘制：缩略图（带阴影）+ 假光标 ----------
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+
+            // 缩略图吸附在假光标右下角
+            int tx = CursorW / 2 + 6;
+            int ty = CursorH / 2 + 6;
+
+            try
+            {
+                // 阴影
+                for (int i = 4; i >= 1; i--)
+                {
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(26, 0, 0, 0)))
+                        g.FillRectangle(sb, tx - i + 2, ty - i + 3, ThumbW + i * 2, ThumbH + i * 2);
+                }
+                // 图
+                if (_thumb != null) g.DrawImage(_thumb, new Rectangle(tx, ty, ThumbW, ThumbH));
+                // 白边（提到"被拿起来"的感觉）
+                using (Pen p = new Pen(Color.FromArgb(230, 255, 255, 255), 2f))
+                    g.DrawRectangle(p, tx, ty, ThumbW, ThumbH);
+            }
+            catch { }
+
+            // 假光标：画一个和系统箭头形状接近的白色箭头 + 黑描边
+            try
+            {
+                PointF[] arrow = new PointF[]
+                {
+                    new PointF(2f, 2f),
+                    new PointF(2f, 20f),
+                    new PointF(7f, 15.5f),
+                    new PointF(10.5f, 23f),
+                    new PointF(14f, 21.5f),
+                    new PointF(10.5f, 14f),
+                    new PointF(17f, 13.5f),
+                };
+                using (GraphicsPath gp = new GraphicsPath())
+                {
+                    gp.AddPolygon(arrow);
+                    using (SolidBrush b = new SolidBrush(Color.White)) g.FillPath(b, gp);
+                    using (Pen p = new Pen(Color.FromArgb(240, 20, 20, 20), 1.6f)) g.DrawPath(p, gp);
+                }
+            }
+            catch { }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            try { _tick.Stop(); _tick.Dispose(); } catch { }
+            base.OnFormClosed(e);
+        }
+
+        // 让窗口不抢焦点也能收到 Esc（保险）
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape) { Cancel(); return true; }
+            if (keyData == Keys.Enter || keyData == Keys.Space) { DoDrop(); return true; }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+    }
+}

@@ -57,6 +57,26 @@ namespace SnapWheel
             }
             catch { return 1f; }
         }
+        // ==================== 传递模式（0.9.0）需要的三个 API ====================
+        //
+        // 关于"怎么知道用户按了 WASD"：项目里**不用**低级键盘钩子（WH_KEYBOARD_LL）——
+        // 钩子会进到系统输入链里，容易被安全软件当成可疑行为，而且必须自己保证一定卸载。
+        // 这里改成**定时器轮询** GetAsyncKeyState：同样能拿到"这个键现在是不是按着"，
+        // 代码少得多、也不需要任何全局钩子。代价是有一点点轮询开销（每 15ms 查几个键，可忽略）。
+
+        [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+
+        // 把真实光标移到指定屏幕坐标 —— 传递模式"放下"时要让目标程序看到光标就在那里
+        [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+
+        // 模拟鼠标按键/移动。mouse_event 虽然被官方标成"过时"（推荐 SendInput），
+        // 但它更简短、在 32/64 位下都能直接用，功能和 SendInput 的鼠标部分是等价的。
+        // 传递模式只用它做一件事：把"按下 → 移动 → 松开"这个真实拖放过程演给目标程序看。
+        [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
+
+        public const uint MOUSEEVENTF_MOVE     = 0x0001;
+        public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        public const uint MOUSEEVENTF_LEFTUP   = 0x0004;
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         public const int WM_HOTKEY = 0x0312;

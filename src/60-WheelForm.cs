@@ -26,6 +26,26 @@ namespace SnapWheel
         int _slots = 5;
         StoreItem _dragOutItem = null;   // item being pulled out (animates away)
         float _offset = 0f, _targetOffset = 0f;
+
+        // 现在停在弧下端的是第几张（0 起）。外部只读 —— 传递模式靠它决定"搬哪一张"。
+        // 注意用的是 _targetOffset（用户意图）而不是 _offset（动画当前值）：
+        // 滚轮刚滚完那一下，动画还在追，但用户心里已经是新那张了。
+        public int CurrentIndex
+        {
+            get
+            {
+                try
+                {
+                    int n = _store == null ? 0 : _store.Items.Count;
+                    if (n <= 0) return -1;
+                    int i = (int)Math.Round(_targetOffset);
+                    if (i < 0) i = 0;
+                    if (i > n - 1) i = n - 1;
+                    return i;
+                }
+                catch { return -1; }
+            }
+        }
         // 删除后让上面的图滑下来用的过渡量：删除瞬间设成 -一个步距（抵消刚发生的那格下移），
         // 再由 AnimTick 每帧衰减回 0 —— 图从旧位置平滑滑到新位置，而不是瞬间跳过去。
         float _phiShift = 0f;

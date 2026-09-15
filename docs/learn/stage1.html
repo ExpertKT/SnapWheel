@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>阶段 1 · Python 速通 — 一个模型，四个坑</title>
+<style>
+  :root{--bg:#fff;--fg:#1c1f24;--muted:#5f6672;--card:#f5f6f8;--line:#e3e6ea;--brand:#007acc;--warn:#b45309;--bad:#c0392b;--good:#1a7f4b;--code-bg:#f0f2f5;--code-fg:#24292f}
+  @media (prefers-color-scheme: dark){:root{--bg:#0f1216;--fg:#e6e8ec;--muted:#98a0ad;--card:#171c22;--line:#232a33;--brand:#5cb8ff;--warn:#f0b429;--bad:#ff7b72;--good:#56d364;--code-bg:#0b0f14;--code-fg:#c9d1d9}}
+  *{box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);font:16px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI",sans-serif;max-width:820px;margin-inline:auto;overflow-wrap:anywhere}
+  h1{font-size:1.42rem;line-height:1.4;margin:0 0 6px}
+  h2{font-size:1.16rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:1.02rem;margin:22px 0 8px}
+  p,li{margin:8px 0}
+  small,.muted{color:var(--muted);font-size:.9rem}
+  a{color:var(--brand);text-decoration:none}
+  code{background:var(--code-bg);color:var(--code-fg);padding:2px 5px;border-radius:4px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:12px;border-radius:8px;overflow-x:auto;font-size:.82rem;line-height:1.65;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-overflow-scrolling:touch}
+  pre code{background:none;padding:0}
+  .lead{background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;padding:10px 12px;margin:12px 0}
+  .bad{border-color:var(--bad)}.good{border-color:var(--good)}.tip{border-color:var(--warn)}
+  .toc{background:var(--card);border-radius:10px;padding:12px 14px;margin:16px 0}
+  .toc ol{margin:6px 0 0;padding-left:22px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.9rem}
+  th,td{border:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+  th{background:var(--card);font-weight:600}
+  details{background:var(--card);border-radius:10px;margin:12px 0;overflow:hidden}
+  details[open]{padding-bottom:10px}
+  summary{padding:12px 14px;cursor:pointer;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--brand)}
+  details[open] summary::before{content:"▾ "}
+  details > *:not(summary){margin-left:14px;margin-right:14px}
+  .analogy{background:var(--card);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:.94rem}
+  .analogy b{color:var(--brand)}
+  .foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+  .pill{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:.8rem;color:var(--muted);margin-right:6px}
+
+  /* ---- narrow screens: tables become stacked cards, nothing gets clipped ---- */
+  @media (max-width:600px){
+    table{display:block}
+    thead{display:none}
+    tbody{display:block}
+    table tr{display:block;border:1px solid var(--line);border-radius:10px;background:var(--card);margin:12px 0;padding:8px 11px}
+    table td{display:block;border:none;padding:3px 0;font-size:.92rem}
+    table td[data-label]::before{content:attr(data-label);display:block;color:var(--muted);font-size:.78rem;letter-spacing:.02em}
+    table td:first-child{font-weight:700;color:var(--brand);font-size:1rem;padding-bottom:6px;border-bottom:1px solid var(--line);margin-bottom:5px}
+    table td:first-child::before{content:none}
+  }
+</style>
+</head>
+<body>
+
+<h1>阶段 1 · Python 速通</h1>
+<p class="muted"><span class="pill">一个模型</span><span class="pill">四个坑</span>从 C 迁移到 Python ｜ 每天 1~2 小时</p>
+
+<div class="lead">
+  <b>今天要带走的一句话：</b><br><br>
+  C 的变量是<b>储物柜</b>，Python 的变量是<b>便签纸</b>。<br>
+  便签可以贴很多张在同一个箱子上 —— 于是「重新绑定」和「原地修改」
+  在代码里长得一样，后果完全不同。<br><br>
+  <span class="muted">文档 §1.2 列的「五个必踩的坑」，其中<b>四个是同一个原因</b>。
+  学一个模型，四个一起会。</span>
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#p1">核心模型：盒子 vs 便签</a></li>
+    <li><a href="#p2">唯一要记的区分：重贴 vs 塞东西</a></li>
+    <li><a href="#p3">一个模型解释四个坑</a></li>
+    <li><a href="#p4">C → Python 对照表（配类比）</a></li>
+    <li><a href="#p5">编译器那条：C 有开关，Python 没有</a></li>
+    <li><a href="#p6">练习：先预测，再运行</a></li>
+    <li><a href="#p7">六个「为什么」</a></li>
+    <li><a href="#p8">验收标准（自己判）</a></li>
+    <li><a href="#p9">今天就做</a></li>
+  </ol>
+</div>
+
+<h2 id="p1">1 · 核心模型：盒子 vs 便签</h2>
+
+<h3>C：变量是储物柜</h3>
+<pre><code>int a = 5;
+int b = a;   /* 再租一个柜子，把 5 抄一份放进去 */
+b = 7;       /* a 还是 5 —— 两个柜子互不相干 */</code></pre>
+<p><code>int a</code> = 租一个柜子，起名 a。两个柜子，两份数据。</p>
+
+<h3>Python：变量是便签纸</h3>
+<pre><code>a = [1, 2]
+b = a
+b.append(3)
+print(a)     # ?</code></pre>
+<p><code>a = [1,2]</code> = 先造一个<b>箱子</b>，写一张便签「a」<b>贴</b>上去。<br>
+<code>b = a</code> = 再写一张便签「b」，<b>贴到同一个箱子上</b>。没有第二个箱子。</p>
+
+<div class="analogy">
+<b>类比</b>：C 的 <code>int b = a</code> 是把东西抄一份放进另一个柜子；
+Python 的 <code>b = a</code> 是在<b>同一个箱子上再贴一张便签</b>。
+你透过 b 往箱子里塞东西，透过 a 也看得见 —— 因为是同一个箱子。
+</div>
+
+<p>所以 <code>b.append(3)</code> 之后 <code>a</code> 也是 <code>[1, 2, 3]</code>。</p>
+
+<details>
+<summary>用你学过的指针说（推荐读）</summary>
+<pre><code>/* a = [1,2]    ≈  int *a = make_list(...);  // 造箱子，a 指向它   */
+/* b = a        ≈  int *b = a;               // 复制地址，不是内容 */
+/* b.append(3)  ≈  list_append(b, 3);        // 改的是同一个箱子  */</code></pre>
+<p>Python 的变量<b>几乎都是指针</b>，只是<b>自动帮你解引用</b>，你看不到 <code>*</code>。</p>
+<div class="bad">
+<b>这就是它骗人的地方</b>：C 里你写 <code>*b</code> 会被提醒「你在动别人的东西」；
+Python 里<b>什么提示都没有</b>。
+</div>
+<p class="muted">这个类比<b>在第 4 题会骗你</b>。到时候回来再看这句。</p>
+</details>
+
+<h2 id="p2">2 · 唯一要记的区分：重贴 vs 塞东西</h2>
+
+<pre><code>b = b + [3]   # 「b + [3]」造了一个新箱子，把便签 b 撕下来贴到新箱子上
+b.append(3)   # 往旧箱子里塞东西，便签没动</code></pre>
+
+<table>
+  <thead>
+    <tr><th>操作</th><th>做什么</th><th>后果</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>重新绑定</b> <span class="muted">rebind</span></td>
+      <td data-label="做什么">把便签撕下来贴到别处</td>
+      <td data-label="后果"><b>别的便签不受影响</b></td>
+    </tr>
+    <tr>
+      <td><b>原地修改</b> <span class="muted">mutate</span></td>
+      <td data-label="做什么">往箱子里塞东西</td>
+      <td data-label="后果"><b>所有贴着这张便签的都看得见</b></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="bad">
+<b>危险在于</b>：这两件事在代码里看起来一样平常 —— 都是一行，都不报错，后果完全不同。
+</div>
+
+<h3>边界：不是所有箱子都能塞东西</h3>
+<table>
+  <tbody>
+    <tr><th>能改（可变）</th><td><code>list</code>　<code>dict</code>　<code>set</code></td></tr>
+    <tr><th>不能改（不可变）</th><td><code>int</code>　<code>str</code>　<code>tuple</code></td></tr>
+  </tbody>
+</table>
+<p><code>b = 7</code> 改不了 7（7 是水泥浇的），Python 只能<b>撕便签重贴</b>。
+所以<b>不可变类型表现得像 C 的复制</b> —— <b>这是巧合，不是规律</b>。</p>
+
+<h2 id="p3">3 · 一个模型解释四个坑</h2>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>坑</th><th>用这个模型看，它是什么</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>坑 1</b></td>
+      <td data-label="坑">可变默认参数累积</td>
+      <td data-label="用这个模型看">
+        <code>def f(lst=[])</code> 里那个 <code>[]</code> 在<b>定义时只造了一个箱子</b>，
+        之后每次调用便签 <code>lst</code> 都贴到<b>同一个箱子</b>上。
+        而且它能塞东西 → 累积。
+      </td>
+    </tr>
+    <tr>
+      <td><b>坑 2</b></td>
+      <td data-label="坑">赋值不是拷贝</td>
+      <td data-label="用这个模型看">就是「便签可以贴很多张」。</td>
+    </tr>
+    <tr>
+      <td><b>坑 3</b></td>
+      <td data-label="坑">闭包循环变量全是最后一个值</td>
+      <td data-label="用这个模型看">
+        lambda <b>捕获的是便签（变量名），不是箱子里的内容</b>。
+        等它被调用时，便签 <code>i</code> 早被撕到最后一次的箱子上了。
+      </td>
+    </tr>
+    <tr>
+      <td><b>坑 4</b></td>
+      <td data-label="坑"><code>is</code> 和 <code>==</code> 不是一回事</td>
+      <td data-label="用这个模型看">
+        <code>is</code> 问「<b>是同一个箱子吗</b>」，<code>==</code> 问「<b>箱子里的东西一样吗</b>」。
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="good">
+<b>漂亮的发现</b>：坑 1 的<b>病因</b>（默认参数在<b>定义时</b>求值）<b>正是坑 3 的解药</b>。
+<pre><code>funcs.append(lambda i=i: i)   # i=i 让 i 在定义时就绑死到当时的箱子</code></pre>
+同一条规则，一处害你、一处救你。这说明这些<b>不是零散的注意事项，是一个统一模型的推论</b>。
+<b>你要记模型，不要背清单。</b>
+</div>
+
+<p><b>第 5 个坑（GIL）</b>性质不同 —— 它是<b>引擎实现</b>层面，不是引用模型。
+它在阶段 3~4（网络等待、并发重试）才真正咬到你，到时单独讲。</p>
+
+<h2 id="p4">4 · C → Python 对照表（配类比）</h2>
+
+<table>
+  <thead>
+    <tr><th>C</th><th>Python</th><th>大白话 + 类比</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>int a[10]</code></td><td data-label="Python"><code>a = [0]*10</code></td>
+        <td data-label="大白话 + 类比">不是固定长度的柜子，是<b>能自己变长的箱子</b>；还能整段切 <code>a[1:3]</code></td></tr>
+    <tr><td><code>struct</code></td><td data-label="Python"><code>dict</code> / <code>class</code> / <code>dataclass</code></td>
+        <td data-label="大白话 + 类比"><code>dict</code> = 贴了名字标签的格子柜；<code>class</code> = 设计图，能造很多箱子并规定它们会做什么</td></tr>
+    <tr><td><code>malloc/free</code></td><td data-label="Python">自动回收</td>
+        <td data-label="大白话 + 类比">餐厅有服务员收盘子。<b>但「还有便签贴着的箱子」不会被收</b> —— 内存泄漏变成<b>引用泄漏</b></td></tr>
+    <tr><td>函数指针</td><td data-label="Python">函数是一等公民</td>
+        <td data-label="大白话 + 类比">函数本身就是箱子，可以贴便签、可以传参：<code>f = print</code></td></tr>
+    <tr><td><code>char*</code></td><td data-label="Python"><code>str</code>（<b>不可变</b>）</td>
+        <td data-label="大白话 + 类比">字符串是<b>水泥浇的</b>，改不了只能造新的；拼接用 <code>"".join(list)</code></td></tr>
+    <tr><td><code>NULL</code></td><td data-label="Python"><code>None</code></td>
+        <td data-label="大白话 + 类比">可以当「没值」，但<b>不要当可变默认参数</b></td></tr>
+    <tr><td>错误码</td><td data-label="Python">异常</td>
+        <td data-label="大白话 + 类比">出错就「扔」、就近接住；<code>finally</code> 一定执行</td></tr>
+    <tr><td>头文件 + 声明</td><td data-label="Python"><code>import</code></td>
+        <td data-label="大白话 + 类比"><b>运行时</b>行为，不是编译期</td></tr>
+    <tr><td>缩进无所谓</td><td data-label="Python"><b>缩进就是语法</b></td>
+        <td data-label="大白话 + 类比">tab 和空格混用直接报错</td></tr>
+    <tr><td><b>编译期检查</b></td><td data-label="Python"><b>运行时才报错</b></td>
+        <td data-label="大白话 + 类比"><b>← 见下一节</b></td></tr>
+  </tbody>
+</table>
+
+<h2 id="p5">5 · 编译器那条：C 有开关，Python 没有</h2>
+
+<p>上表最后一行是语言切换里<b>后果最严重</b>的一条。</p>
+
+<p>C 的编译器替你干了多少活：类型对不对、变量声明了吗、名字拼错了吗、这条分支有返回值吗……
+<b>Python 全都不管。</b></p>
+
+<p>刚才写 <code>00-toolchain-check.py</code> 时，文档字符串里写了 <code>tests\learn</code>，Python 报：</p>
+<pre><code>SyntaxWarning: "\l" is an invalid escape sequence.</code></pre>
+<p>然后<b>照常运行</b>。</p>
+
+<div class="tip">
+<b>我本来要说「在 C 里这是 error」—— 但我去试了，结果和我预想的不一样：</b>
+<table>
+  <thead><tr><th>命令</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><code>gcc e.c</code>（默认）</td><td data-label="结果"><b>只有警告，exit 0，照样生成 exe</b></td></tr>
+    <tr><td><code>gcc -Wall -Werror e.c</code></td><td data-label="结果"><b>error，编译失败</b></td></tr>
+  </tbody>
+</table>
+所以准确的结论不是「C 报错、Python 警告」，而是：<br><br>
+<b>C 给了你一个开关，能把警告升级成错误（<code>-Wall -Werror</code>）；
+Python 默认连一个统一的编译器都没有，你得自己把开关装上。</b>
+</div>
+
+<p class="muted">（顺带：上面那个动作本身就是「<b>不确定就做个小实验，比猜快，也比猜可靠</b>」的示范 —— 反例 #10。）</p>
+
+<div class="lead">
+<b>阶段 2 整章都在干「装开关」这件事</b>：类型注解 + <code>mypy</code>/<code>pyright</code> +
+<code>ruff</code> + <code>pytest</code>。<br><br>
+它们不是「好习惯」，它们是在<b>还债</b> —— 还 C 的编译器替你付掉、而 Python 让你自己付的那笔债。
+</div>
+
+<h2 id="p6">6 · 练习：先预测，再运行</h2>
+
+<p><code>tests/learn/stage1-predict.py</code> 出题，<b>5 道，每题是一个能跑的迷你程序</b>。</p>
+
+<div class="bad"><b>规则只有一条：先写下预测，再运行。</b></div>
+
+<p>它会<b>拒绝运行</b>，直到你写出 <code>tests/learn/stage1-predictions.md</code>（至少 400 字）。
+闸门已验证：没文件 → 拒绝并 exit 1；有文件 → 正常出题。</p>
+
+<div class="analogy">
+<b>为什么要有闸门？</b> 这是反例 #1 的教训用在你自己身上。<br><br>
+反例 #1 说：靠「记得别写错」不可靠，<b>好的设计让错误写不出来</b>。<br><br>
+学习一样。你现在觉得「我知道 <code>b.append</code> 会改到 a」—— 那是<b>看到答案之后</b>的错觉。
+把预测写下来、跑出来、发现错了，<b>那个错才真的属于你</b>。<br>
+所以闸门不是刁难，是把「先预测」变成<b>你绕不过去的结构</b>。
+</div>
+
+<h3>流程</h3>
+<ol>
+  <li>写 <code>stage1-predictions.md</code>：5 题各写<b>你预测的完整输出</b> + <b>一句话说为什么</b></li>
+  <li><code>python stage1-predict.py 1</code> 逐题跑（1~5）</li>
+  <li>在同一文件里写<b>差异分析</b>：哪里错了、为什么错、现在你怎么理解</li>
+</ol>
+
+<div class="tip">
+<b>前提</b>：<b>先不要读 <code>docs/LEARNING.md</code> 的 §1.2</b>，那里有答案。
+等你写完预测、跑完、分析完<b>再回去对照</b> —— 那时它是答案对照表，不是剧透。
+</div>
+
+<h2 id="p7">7 · 六个「为什么」</h2>
+<p class="muted">我要你的话，不要术语堆砌。</p>
+
+<ol>
+  <li>第 1 题里 <code>b = b + [3]</code> 和 <code>d.append(3)</code> 长得几乎一样，为什么结果不同？用「箱子/便签」讲。</li>
+  <li>第 2 题两个函数都在「改」<code>lst</code>，为什么只有一个真改到了外面？</li>
+  <li>第 3 题改成 <code>tags=None</code> + <code>if tags is None: tags = {}</code> 就好了。
+      <b>为什么这个改法有效？它和第 5 题 B 版的 <code>lambda i=i</code> 是同一个机制吗？</b></li>
+  <li>第 4 题里 <code>1000</code> 和 <code>1000</code> 是「同一个箱子」，但 <code>1000</code> 和
+      <code>int("1000")</code> 不是。<b>同一个数字，为什么「是不是同一个箱子」会不一样？</b>
+      那么 —— <b>什么时候才该用 <code>is</code>？</b></li>
+  <li>第 5 题 B 版修好了。为什么说「<b>坑 1 的病因正是坑 5 的解药</b>」？</li>
+  <li><b>（C 对照题）</b> 用指针说：<code>b = a</code>（a 是列表）最接近 C 里哪一句？
+      <code>b.append(3)</code> 又最接近哪一句？
+      <b>Python 把 <code>*</code> 和解引用都藏起来了 —— 这让你更容易出错，还是更不容易？说出理由。</b></li>
+</ol>
+<p class="muted">第 6 题没有标准答案。我要看你怎么想。</p>
+
+<h2 id="p8">8 · 验收标准（自己判，别问「我算过了吗」）</h2>
+
+<table>
+  <thead>
+    <tr><th>项</th><th>要做什么</th><th>产出</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>A</b></td>
+      <td data-label="要做什么">预测练习做完</td>
+      <td data-label="产出"><code>stage1-predictions.md</code>（含预测 + 差异分析）</td>
+    </tr>
+    <tr>
+      <td><b>B</b></td>
+      <td data-label="要做什么">六个问题用自己的话答完</td>
+      <td data-label="产出">同上文件</td>
+    </tr>
+    <tr>
+      <td><b>C</b></td>
+      <td data-label="要做什么">
+        <b>用 Python 写一个链表</b><br>
+        插入、删除、遍历、反转，每个都真的能跑（写几行调用它）<br>
+        <b>然后对照你 C 里写过的版本</b>：哪里变简单了？哪里变危险了？<br>
+        特别是 —— <b>C 里你必须手写的 <code>free</code>，Python 里谁负责？
+        删除节点时你还需要做什么？</b>
+      </td>
+      <td data-label="产出"><code>stage1-linked-list.py</code></td>
+    </tr>
+    <tr>
+      <td><b>D</b></td>
+      <td data-label="要做什么">
+        写 <code>stage1-验收.md</code>，<b>不看任何资料</b>：<br>
+        ① 什么是「引用」？什么是「值」？差别在哪？<br>
+        ② 举一个<b>你在 C 里不会犯、但在 Python 里会犯</b>的具体错误<br>
+        ③ §1.2 那五个坑里，哪几个是同一个原因？那个原因是什么？
+      </td>
+      <td data-label="产出"><code>stage1-验收.md</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="good">
+<b>能不看资料把 D 讲清楚，阶段 1 就过了。</b><br>
+讲不清就是没过 —— 这不丢人，说明该回头再看一遍。
+</div>
+
+<h2 id="p9">9 · 今天就做（约 1~2 小时）</h2>
+<ol>
+  <li><b>10 分钟</b>：<b>重开终端</b>，跑 <code>python 00-toolchain-check.py</code></li>
+  <li><b>40 分钟</b>：读第 1~3 节，<b>然后写 <code>stage1-predictions.md</code></b>（别读 §1.2）</li>
+  <li><b>剩下</b>：<code>python stage1-predict.py 1</code> 到 <code>5</code>，写差异分析</li>
+</ol>
+
+<div class="tip">
+<b>下次带回来</b>：<code>stage1-predictions.md</code>（含差异分析）+ 六个问题的答案。<br><br>
+<b>第 4 题你大概会错</b> —— 我提前说，因为那个「意外」正是这节课的重点。
+</div>
+
+<div class="foot">
+<b>本课引用的真实反例</b>（<code>docs/LEARNING.md</code> §2.1）：
+#1 度量与绘制不同源（约定没强制 → 让错误写不出来）、
+#10 先测量再优化（报错信息会骗你，测量不会）。<br>
+<b>练习区</b>：<code>tests/learn/</code>　<b>环境提醒</b>：终端要重开才认新 PATH。<br>
+<span class="muted">阶段 1 / 共 8 阶段 ｜ 下一阶段：Python 工程化（venv + 类型注解 + pytest）</span>
+</div>
+
+</body>
+</html>

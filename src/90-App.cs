@@ -67,6 +67,10 @@ namespace SnapWheel
             menu.Items.Add(Lang.T("管理 Wheel…", "Manage wheels…"), null, new EventHandler(OnWheels));
             menu.Items.Add(Lang.T("反馈 / 报告问题…", "Feedback / report a problem…"), null, new EventHandler(OnFeedback));
             menu.Items.Add(Lang.T("设置…", "Settings…"), null, new EventHandler(OnSettings));
+            menu.Items.Add(Lang.T("传递模式（键盘搬图）", "Carry mode (keyboard)"), null, new EventHandler(delegate(object o, EventArgs e2)
+            {
+                try { StartCarry(); } catch (Exception ex) { Err.Log("Carry", ex); }
+            }));
             menu.Items.Add(Lang.T("检查更新", "Check for updates"), null, new EventHandler(delegate(object o, EventArgs e2)             {                 try { CheckUpdate(true); } catch { }             }));             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(Lang.T("打开项目主页", "Open project page"), null, new EventHandler(delegate(object o, EventArgs e) {
                 try { System.Diagnostics.Process.Start("https://github.com/" + AppInfo.Repo); } catch { }
@@ -300,6 +304,56 @@ namespace SnapWheel
         // manual=true：用户点了托盘菜单 —— 必须有反馈（已是最新 / 发现新版 / 下载 / 失败）。
         // manual=false：启动时的静默检查 —— 只在真有新版时提一句，其余一律不打扰。
         // 检查、下载都在后台线程，界面操作统一切回 UI 线程（Ui()）。
+        // 传递模式：把轮盘上"当前这张"用键盘搬到别的窗口去。
+        // 流程：取图 → 生成吸附用的小图 → 开假光标窗口 → 用户自己切屏、WASD 移动、Enter 放下。
+        void StartCarry()
+        {
+            Store st = _wheels.ActiveStore;
+            int idx = _wheel.CurrentIndex;
+            if (st == null || idx < 0 || idx >= st.Items.Count)
+            {
+                MessageBox.Show(_wheel,
+                    Lang.T("轮盘上没有可以传递的图。先截一张，或者用滚轮选一张。",
+                           "There is nothing on the ring to carry. Capture something, or pick one with the wheel."),
+                    AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            StoreItem item = st.Items[idx];
+            Bitmap thumb = MakeCarryThumb(item.Image, 132, 99);
+            if (thumb == null) return;
+
+            // 起点：轮盘上那张缩略图大致所在的位置。模拟拖放时要从这里"按下"，
+            // 目标程序才会认为图是从轮盘里拖出来的。
+            Point origin = new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);
+
+            CarryForm cf = new CarryForm(thumb, origin);
+            try { cf.ShowDialog(_wheel); }
+            finally { try { thumb.Dispose(); } catch { } }
+        }
+
+        // 生成"吸附在假光标上"的小图：按比例填满目标框、居中裁切，不变形
+        static Bitmap MakeCarryThumb(Bitmap src, int w, int h)
+        {
+            if (src == null) return null;
+            try
+            {
+                Bitmap dst = new Bitmap(w, h);
+                using (Graphics g = Graphics.FromImage(dst))
+                {
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                    float k = Math.Max((float)w / src.Width, (float)h / src.Height);
+                    int sw = (int)Math.Min(src.Width, Math.Ceiling(w / k));
+                    int sh = (int)Math.Min(src.Height, Math.Ceiling(h / k));
+                    int sx = (src.Width - sw) / 2, sy = (src.Height - sh) / 2;
+                    g.DrawImage(src, new Rectangle(0, 0, w, h), new Rectangle(sx, sy, sw, sh), GraphicsUnit.Pixel);
+                }
+                return dst;
+            }
+            catch { return null; }
+        }
+
         void CheckUpdate(bool manual)
         {
             try
