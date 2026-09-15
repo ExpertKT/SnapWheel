@@ -85,15 +85,15 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
 
                 int y = hero ? 416 : 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
-                using (Font fl = new Font(FONT, hero ? 40 : 36))
+                using (Font fl = new Font(FONT, FitSize(g, line1, hero ? 40 : 36, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { g.DrawString(line1, fl, sb, 84, y); }
-                using (Font fs = new Font(FONT, 28))
+                using (Font fs = new Font(FONT, FitSize(g, line2, 28, 1080 - 168)))
                 using (SolidBrush sb = new SolidBrush(Sub))
                 { g.DrawString(line2, fs, sb, 84, y + (hero ? 78 : 58)); }
 
                 // 右上角标（hero 打新，其它打卖点）
-                if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 84, y + 112, 24);
+                if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 1080 - 300, 122, 22);   // 右上角：原来贴在文案下，会压住第二行
 
                 // 界面渲染：贴在下方（hero 靠右放小一点，避免压住文案）
                 if (no == 4) LongDemo(g);          // 长截图没有现成渲染图，现场画个示意
@@ -230,6 +230,19 @@ namespace SnapWheel
             {
                 g.DrawString("一屏一屏自动滚", f, sb, cx - 360, top + 350);
                 g.DrawString("无缝拼成一张长图", f, sb, cx + 90, top + 400);
+            }
+        }
+        // 画文字之前**实测宽度**：超了就按比例缩字号（可用宽度由调用方给）。
+        // 以前靠"字数 × 估的每字宽"判断，中文实际比估的宽，于是图7/图8 的第一行被右边缘切掉。
+        static float FitSize(Graphics g, string text, float pt, int maxW)
+        {
+            if (string.IsNullOrEmpty(text)) return pt;
+            using (Font f = new Font(FONT, pt))
+            {
+                float w = g.MeasureString(text, f).Width;
+                if (w <= maxW || w <= 0) return pt;
+                float np = pt * (maxW / w);
+                return np < 12f ? 12f : np;
             }
         }
         static void Backdrop(Graphics g, int w, int h, int seed)
