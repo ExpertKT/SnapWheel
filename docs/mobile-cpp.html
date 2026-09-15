@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>从一个小程序学 C++ · 手机版</title>
+<style>
+  :root{--bg:#fff;--fg:#1c1f24;--muted:#5f6672;--card:#f5f6f8;--line:#e3e6ea;--brand:#007acc;--warn:#b45309;--bad:#c0392b;--good:#1a7f4b;--code-bg:#f0f2f5;--code-fg:#24292f}
+  @media (prefers-color-scheme: dark){:root{--bg:#0f1216;--fg:#e6e8ec;--muted:#98a0ad;--card:#171c22;--line:#232a33;--brand:#5cb8ff;--warn:#f0b429;--bad:#ff7b72;--good:#56d364;--code-bg:#0b0f14;--code-fg:#c9d1d9}}
+  *{box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{margin:0;padding:16px 14px 64px;background:var(--bg);color:var(--fg);font:16px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI",sans-serif;max-width:820px;margin-inline:auto}
+  h1{font-size:1.42rem;line-height:1.4;margin:0 0 6px}
+  h2{font-size:1.16rem;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:1.02rem;margin:22px 0 8px}
+  p,li{margin:8px 0}
+  small,.muted{color:var(--muted);font-size:.9rem}
+  a{color:var(--brand);text-decoration:none}
+  code{background:var(--code-bg);color:var(--code-fg);padding:2px 5px;border-radius:4px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:12px;border-radius:8px;overflow-x:auto;font-size:.82rem;line-height:1.65;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-overflow-scrolling:touch}
+  pre code{background:none;padding:0}
+  .lead{background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .tip,.bad,.good{border-left:4px solid var(--brand);background:var(--card);border-radius:0 8px 8px 0;padding:10px 12px;margin:12px 0}
+  .bad{border-color:var(--bad)}.good{border-color:var(--good)}.tip{border-color:var(--warn)}
+  .toc{background:var(--card);border-radius:10px;padding:12px 14px;margin:16px 0}
+  .toc ol{margin:6px 0 0;padding-left:22px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.88rem}
+  th,td{border:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  details{background:var(--card);border-radius:10px;margin:12px 0;overflow:hidden}
+  details[open]{padding-bottom:10px}
+  summary{padding:12px 14px;cursor:pointer;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--brand)}
+  details[open] summary::before{content:"▾ "}
+  details > *:not(summary){margin-left:14px;margin-right:14px}
+  .analogy{background:var(--card);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:.94rem}
+  .analogy b{color:var(--brand)}
+  .num{display:inline-block;min-width:1.5em;color:var(--brand);font-weight:700}
+  hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+</style>
+</head>
+<body>
+
+<h1>从一个小程序学 C++</h1>
+<p class="muted">手机离线版 ｜ 写给学过 C、想往 C++ 走的人 ｜ 不需要 C++ 基础</p>
+
+<div class="lead">
+  这是真实项目 <b>SnapWheel</b>（Windows 截图工具）：截完图不用保存，图直接变成屏幕角上的小卡片，拖进聊天窗口就发出去了。<br><br>
+  它本体是 <b>C#</b> 写的。但你已经有 <b>C</b> 的底子，而 <b>C++ 正好卡在 C 和 C# 中间</b> —— 借这个项目，你可以把三者一次看清楚：<b>哪些是 C 就有的、哪些是 C++ 加的、哪些是 C# 又换了个做法的。</b><br><br>
+  <b>看清三者的关系，比死记 C++ 语法有用得多。</b>
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#p1">C / C++ / C# 三者关系（核心）</a></li>
+    <li><a href="#p2">从项目代码看 C++ 的写法</a></li>
+    <li><a href="#p3">C++ 的六个关键概念（配类比）</a></li>
+    <li><a href="#p4">五个能直接学走的故事（不用写代码也能懂）</a></li>
+    <li><a href="#p5">C++ 特有的六个坑</a></li>
+    <li><a href="#p6">项目怎么组织 + 给你的练习</a></li>
+  </ol>
+</div>
+
+<h2 id="p1">1 · C / C++ / C# 三者关系</h2>
+
+<div class="analogy">
+<b>一句话</b>：<b>C++ 是 C 的"带类的超集"</b>（几乎能编译所有 C 代码）；<b>C# 是微软参照 C++ 做的新语言</b>，把 C++ 里最容易出事的部分（手动内存、指针、头文件）换成了自动的。
+</div>
+
+<table>
+  <tr><th></th><th>C</th><th>C++</th><th>C#</th></tr>
+  <tr><td>出身</td><td>1972，系统编程</td><td>C 加面向对象</td><td>2000，微软，参照 C++/Java</td></tr>
+  <tr><td>内存</td><td><code>malloc/free</code></td><td><b>RAII + 智能指针</b>（仍是手动，但更安全）</td><td><b>GC 全自动</b></td></tr>
+  <tr><td>指针</td><td>到处是</td><td>有，但推荐用<b>引用</b>和智能指针</td><td>有"引用"，没有指针算术</td></tr>
+  <tr><td>字符串</td><td><code>char*</code> + 手动</td><td><code>std::string</code>（自动管理）</td><td><code>string</code>（不可变 + GC）</td></tr>
+  <tr><td>数组</td><td>裸数组</td><td><code>std::vector</code>（能自动扩容）</td><td><code>List&lt;T&gt;</code></td></tr>
+  <tr><td>面向对象</td><td>没有</td><td>有（多继承、虚函数）</td><td>有（单继承 + 接口）</td></tr>
+  <tr><td>编译</td><td>编译成机器码</td><td>编译成机器码</td><td>编译成中间码，运行时再编译</td></tr>
+  <tr><td>头文件</td><td>有</td><td>有（还更复杂）</td><td><b>没有</b></td></tr>
+  <tr><td>运行速度</td><td>最快</td><td>最快（和 C 同级）</td><td>略慢（有虚拟机）</td></tr>
+  <tr><td>谁在用</td><td>内核、驱动、单片机</td><td>游戏引擎、浏览器、数据库、交易系统</td><td>Windows 应用、Unity 脚本、企业后端</td></tr>
+</table>
+
+<div class="good">
+<b>记住这条主线</b>：<br>
+C 关心<b>机器怎么跑</b> → C++ 在 C 上加了一层"<b>用对象和自动清理来管资源</b>" → C# 把"自动"推到极致（连内存都不用管了）。<br>
+所以：<b>从 C 学 C++，你要学的是"怎么让对象负责资源的生死"；从 C++ 看 C#，你会发现 C# 把这件事交给了 GC。</b>
+</div>
+
+<h2 id="p2">2 · 从项目代码看 C++ 的写法</h2>
+<p class="muted">左边是这个项目（C#）的真实写法，右边是 C++ 的等价写法。<b>看懂差异，就懂了两种语言的核心取舍。</b></p>
+
+<table>
+  <tr><th>要做的事</th><th>项目里（C#）</th><th>C++</th></tr>
+  <tr><td>定义一个类</td><td><code>class Pic { }</code></td><td><code>class Pic { };</code> ⚠️ 结尾要 <b>分号</b></td></tr>
+  <tr><td>声明和实现</td><td>一个文件里都写</td><td>通常 <code>.h</code> 声明 + <code>.cpp</code> 实现</td></tr>
+  <tr><td>继承</td><td><code>class A : B { }</code></td><td><code>class A : public B { };</code> ⚠️ 要写 <b>public</b></td></tr>
+  <tr><td>虚函数</td><td><code>virtual void f();</code>（默认虚）</td><td><code>virtual void f() override;</code> ⚠️ 要显式 <b>virtual</b></td></tr>
+  <tr><td>动态数组</td><td><code>List&lt;Pic&gt; a = new List&lt;Pic&gt;();</code></td><td><code>std::vector&lt;Pic&gt; a;</code> ⚠️ 直接就是一个对象</td></tr>
+  <tr><td>字符串</td><td><code>string s = "hi";</code></td><td><code>std::string s = "hi";</code> ✅ 很像</td></tr>
+  <tr><td><b>自动释放</b></td><td><code>using (var b = new Bitmap()) { }</code></td><td><code>{ auto b = std::make_unique&lt;Bitmap&gt;(); }</code> ⚠️ <b>作用域结束自动释放</b></td></tr>
+  <tr><td>拷贝</td><td>默认传引用（不复制）</td><td>⚠️ <b>默认会复制整个对象！</b>要 <code>const&amp;</code> 才不复制</td></tr>
+  <tr><td>遍历</td><td><code>foreach (var x in list)</code></td><td><code>for (const auto&amp; x : list)</code> ✅ 概念一样</td></tr>
+  <tr><td>函数对象</td><td><code>delegate(...) { }</code> / Lambda</td><td><code>[&](int x) { }</code> ✅ Lambda 就是 C++ 先有的</td></tr>
+</table>
+
+<div class="tip">
+<b>看这段时的重点</b>：<br>
+① 项目里到处出现的 <code>using (Font f = new Font(...)) { ... }</code>，在 C++ 里叫 <b>RAII</b> —— 但 C++ 是<b>靠构造函数和析构函数自动完成</b>的，一个花括号就够，不需要 <code>using</code> 关键字。<br>
+② <b>最大的思维差异</b>：C++ 里 <code>Pic a = b;</code> 是<b>真的复制了一份</b>，C# 里只是多了一个引用。这条不搞清楚，会写出莫名其妙的性能问题和 bug。
+</div>
+
+<h2 id="p3">3 · C++ 的六个关键概念</h2>
+
+<details open>
+<summary><span class="num">1</span>RAII：让对象管资源的生死（C++ 的灵魂）</summary>
+<p>名字很吓人，意思很朴素：<b>把资源（内存、文件、锁）交给一个对象，对象一死，资源就自动释放。</b></p>
+<pre><code>{
+    std::ifstream f("data.txt");   // 构造：打开文件
+    // ... 用 f 读数据 ...
+}                                  // 离开花括号：析构函数自动关闭文件
+// 哪怕中间 throw 异常抛出去，也一样会关闭</code></pre>
+<div class="analogy"><b>类比</b>：像住酒店 —— <b>退房时服务员自动来收拾</b>，你不用记得"我借过毛巾要去还"。<br>C 里你得手动 <code>fclose</code>；C# 里靠 <code>using</code> 或 GC；<b>C++ 靠析构函数，而且不依赖 GC。</b></div>
+<div class="good"><b>为什么这是 C++ 最重要的东西</b>：它是 C++ 能在"没有垃圾回收"的前提下还比较安全的原因。你看到项目里的 <code>using (...)</code>，就该想到"这在 C++ 里是自动的"。</div>
+</details>
+
+<details>
+<summary><span class="num">2</span>智能指针：不用 delete，也基本不会内存泄漏</summary>
+<pre><code>{
+    auto a = std::make_unique&lt;Pic&gt;();   // 独占：只有一个主人
+    auto b = std::make_shared&lt;Pic&gt;();   // 共享：引用计数（像 C# 的 GC 计数思路）
+    a->save("1.png");
+}   // 自动 delete，不用你写</code></pre>
+<p>C 里你写 <code>malloc</code> 就必须写 <code>free</code>；<b>C++ 里你几乎可以不写 <code>new/delete</code></b> —— 交给智能指针。</p>
+<div class="analogy"><b>类比</b>：<code>unique_ptr</code> 像"<b>唯一的钥匙</b>"（不能复制，只能转移）；<code>shared_ptr</code> 像"<b>合租登记表</b>"（每个人走时划掉自己，最后一个走的负责锁门）。</div>
+</details>
+
+<details>
+<summary><span class="num">3</span>值语义 vs 引用语义（最容易搞混的一点）</summary>
+<pre><code>// C++：默认是"复制一个"
+std::vector&lt;int&gt; a = {1,2,3};
+std::vector&lt;int&gt; b = a;      // b 是独立的副本！改 b 不影响 a
+void f(std::vector&lt;int&gt; v) { }        // 传参：复制一份（慢！）
+void g(const std::vector&lt;int&gt;&amp; v) { }  // 传引用：不复制（推荐）</code></pre>
+<p>而 C# 里 <code>List a = b;</code> 只是多了一个引用，改一个另一个也变。</p>
+<div class="good"><b>能学走的</b>：写 C++ 时，<b>传参默认加 <code>const&amp;</code></b>（引用且不修改）—— 这既是性能习惯，也避免了很多意外修改。</div>
+</details>
+
+<details>
+<summary><span class="num">4</span>虚函数与多态：同一个调用，不同行为</summary>
+<pre><code>class Shape { public: virtual void draw() = 0; };       // 接口：必须自己实现
+class Circle : public Shape { public: void draw() override { /* 画圆 */ } };
+class Square : public Shape { public: void draw() override { /* 画方 */ } };
+
+std::vector&lt;std::unique_ptr&lt;Shape&gt;&gt; list;
+for (auto&amp; s : list) s->draw();    // 同一句，各画各的</code></pre>
+<div class="analogy"><b>类比</b>：你喊"开动" —— 厨师去做菜、司机去开车、学生去写作业。<b>下达的是同一个命令，执行因人而异。</b></div>
+<p>C 里要实现这个，得用"函数指针放进结构体"（很像手写虚表）。<b>C++ 把它做进了语言里。</b></p>
+</details>
+
+<details>
+<summary><span class="num">5</span>模板：写一次，适配任意类型</summary>
+<pre><code>template &lt;typename T&gt;
+T maxOf(T a, T b) { return a &gt; b ? a : b; }
+
+maxOf(3, 5);          // T = int
+maxOf(2.5, 1.5);      // T = double
+maxOf(std::string("a"), std::string("b"));   // T = string</code></pre>
+<div class="analogy"><b>类比</b>：模具 —— 换原料就能压出不同产品。<b>编译时"按需生成"</b>，所以比运行时泛型（C#）更快，但代码体积会变大、报错信息很长。</div>
+</details>
+
+<details>
+<summary><span class="num">6</span>移动语义：把资源"搬走"而不是"复制一份"</summary>
+<pre><code>std::vector&lt;int&gt; makeVec() {
+    std::vector&lt;int&gt; v(1000000);
+    return v;                   // 现代 C++ 会"移动"而不是复制（几乎零成本）
+}
+std::vector&lt;int&gt; w = makeVec();   // 内部指针被搬过来，不是拷贝一百万个元素</code></pre>
+<div class="analogy"><b>类比</b>：复制一箱书 = 一本本抄；<b>移动 = 直接把箱子搬走</b>。箱子还是那个箱子，只是换了位置。</div>
+<p>这是 C++11 之后最重要的特性之一（<code>std::move</code>）。C# 里没有直接对应物（有 GC，不太需要）。</p>
+</details>
+
+<h2 id="p4">4 · 五个能直接学走的故事</h2>
+<p class="muted">都是这个项目开发中<b>真实发生的事</b>。不用写代码也能懂，而且<b>在 C++ 里一模一样适用</b>。</p>
+
+<details open>
+<summary><span class="num">1</span>「先量一量，再动手」—— 猜了三次都没对</summary>
+<p>有个动画很卡。开发者<b>凭经验猜了三次</b>：先猜"每帧重画整屏"，改了；还卡；再猜两个原因，都改了；还是卡。</p>
+<p>后来他决定<b>先测量</b>：给程序加计时，看每一帧到底花在哪。结果 ——</p>
+<ul>
+  <li>他以为的元凶：实测只占 <b>0.3 毫秒</b>（可忽略）；</li>
+  <li>真正的大头在别处：<b>22 毫秒</b>；</li>
+  <li>再往下拆，真凶是<b>一个绘图函数调用，在 2560×1440 的画布上要 9 毫秒</b>，而同样操作在小画布上只要 0.4 毫秒 —— <b>相差 21 倍</b>。</li>
+</ul>
+<div class="good"><b>能学走的</b>：<b>遇到"为什么这么慢"，先量再改。</b>靠感觉猜，往往改半天改错地方。<br>
+C++ 里工具更多（<code>perf</code>、VTune、<code>-pg</code> 采样、<code>chrono</code> 计时），<b>没有理由靠猜</b>。</div>
+</details>
+
+<details>
+<summary><span class="num">2</span>「说好一起做的事，两边标准得一样」</summary>
+<p>要把文字画到图上，得先<b>问"这段字有多宽"</b>好给它留位置。开发者用<b>一种方式</b>去量，却用<b>另一种方式</b>去画 —— 量出 100 像素、实际画出 118 像素，<b>字被裁掉半截</b>。</p>
+<p>同一个错误，他犯了<b>四次</b>（字体不同、度量方式不同、对齐基准不同、甚至两套绘图 API 混用）。</p>
+<div class="analogy"><b>类比</b>：裁布时用<b>市尺</b>量、拿<b>英寸</b>尺剪 —— 长度必然对不上。<b>量用哪把尺，裁就得用哪把。</b></div>
+<div class="good"><b>能学走的</b>：很多 bug 不是"写错了"，而是<b>"两边约定不一致"</b>。更好的做法是<b>把它封装成一个函数，让调用方没法写错</b> —— <b>好的设计能让错误写不出来。</b>（这个项目后来真的抽了这样一层。）</div>
+</details>
+
+<details>
+<summary><span class="num">3</span>「复制」和「移动」不是一回事</summary>
+<p>用户把图从环上拖到聊天窗口，图就发出去了。但开发者发现：<b>拖完之后环上那张也没了</b>，想再发一次就没有了。</p>
+<p>原因：这个"拖"在系统里是<b>复制</b>语义（对方拿到副本），而代码在成功之后把原件删了 —— <b>把复制当成了移动</b>。</p>
+<div class="good"><b>能学走的</b>：写代码前先问<b>"这是复制还是移动？谁拥有这份数据？"</b><br>
+<b>而这条对 C++ 尤其重要</b>：C++ 里"拷贝构造 / 移动构造"就是专门表达这件事的 —— 语义不清，就会出现"偷偷复制了 100 万条数据"或者"资源被搬走后原对象还被人用"。</div>
+</details>
+
+<details>
+<summary><span class="num">4</span>「进的时候记一笔，走的时候还一笔」—— 嵌套时容易丢</summary>
+<p>项目有"总在最前面"的功能。打开设置窗口时主窗口让位，关掉再回最前。</p>
+<p>原实现：<b>让位前记住"我在最前"，结束时恢复成记住的值。</b>看着对，但——<b>如果让位期间又发生一次让位</b>（截图时又打开设置），恢复出来的就是"后面的状态"，主窗口<b>永远回不到最前</b>了。</p>
+<div class="good"><b>正确做法</b>：用<b>计数</b> —— 第一个进来的人保存原状态，最后一个离开的人恢复，中间的人只加减数字。<br>
+<b>C++ 里这个模式到处都是</b>：<code>shared_ptr</code> 的引用计数、锁的嵌套管理、资源池…… 而且 C++ 的 RAII 让它写起来特别自然（进入构造 +1，析构 −1）。</div>
+</details>
+
+<details>
+<summary><span class="num">5</span>「中文排得好好的，换成英文就挤爆了」</summary>
+<p>项目原只有中文界面。加英文时发现<b>所有文字都被裁掉、互相压在一起</b> —— 因为当初排版是按"中文字数"估宽度的。</p>
+<div class="analogy"><b>类比</b>：按"中文 8 个字"留位置，换成 "Screenshots will appear here"（30 字符）当然放不下。</div>
+<div class="good"><b>能学走的</b>：① 宽度要<b>实际量</b>，别数个数；② 做界面<b>一开始就用最长的语言试</b>；③ 放不下时，正确做法是<b>截断加省略号</b>，而不是压到别的控件上。</div>
+</details>
+
+<h2 id="p5">5 · C++ 特有的六个坑</h2>
+<p class="muted">这些是 C++ 独有的（C 和 C# 里没有或不一样），提前知道能省很多时间。</p>
+
+<table>
+  <tr><th>坑</th><th>说明</th><th>怎么避免</th></tr>
+  <tr><td><b>悬垂指针/引用</b></td><td>对象已经销毁，你还拿着指向它的指针或引用去用</td><td>用智能指针；不要让引用活得比对象长</td></tr>
+  <tr><td><b>默认拷贝的隐形开销</b></td><td><code>void f(vector&lt;int&gt; v)</code> 会复制整个 vector</td><td>传参用 <code>const&amp;</code>；返回时依赖移动语义</td></tr>
+  <tr><td><b>拷贝构造 / 析构不配对</b></td><td>类里有裸指针却没写析构和拷贝构造 → 双重释放</td><td>能用智能指针就别用裸指针（"三/五法则"）</td></tr>
+  <tr><td><b>未定义行为（UB）</b></td><td>越界访问、用未初始化变量… 有时"看起来能跑"</td><td>开 <code>-Wall -Wextra</code>，用 sanitizer（<code>-fsanitize=address,undefined</code>）</td></tr>
+  <tr><td><b>头文件的连锁编译</b></td><td>改一个 .h，所有包含它的文件全部重编，越编越慢</td><td>头文件只放声明；用前置声明；必要时用 PIMPL</td></tr>
+  <tr><td><b>模版报错看不懂</b></td><td>一行错误信息可能上百行</td><td>从<b>最后一行</b>"实际错误"开始读，再从第一行找"哪个类型不对"</td></tr>
+</table>
+
+<div class="tip"><b>和 C# 最大的心态差别</b>：C# 里"写错了"通常是<b>运行时抛异常</b>（你能看见）；<b>C++ 里"写错了"常常是"现在能跑，换个编译器/换个优化等级就崩"</b>。所以 C++ 里 <b>"能跑"不等于"对"</b> —— 这就是为什么 C++ 更依赖工具（编译器警告、sanitizer、静态分析）和纪律。</div>
+
+<h2 id="p6">6 · 项目怎么组织 + 给你的练习</h2>
+
+<h3>项目的组织方式（C++ 项目也适用）</h3>
+<table>
+  <tr><th>做法</th><th>为什么</th><th>C++ 里对应</th></tr>
+  <tr><td>按职责分文件，文件名带编号当阅读顺序</td><td>好找、好读</td><td>同样的做法在 C++ 里很常见</td></tr>
+  <tr><td>和系统打交道的代码集中到一个文件</td><td>换平台只改一处</td><td>通常叫 <code>platform_xx.cpp</code></td></tr>
+  <tr><td>程序要能自己说出"我哪里错了、哪里慢了"</td><td>日志与计时是一等功能</td><td>用 <code>spdlog</code> 之类，或自己封一个</td></tr>
+  <tr><td>一键构建脚本</td><td>别人（和三个月后的你）能复现</td><td>CMake（现代 C++ 的事实标准）</td></tr>
+  <tr><td>自动化测试</td><td>改坏了立刻知道</td><td>Catch2 / GoogleTest</td></tr>
+</table>
+
+<h3>给你的练习（按难度，都能独立完成）</h3>
+<table>
+  <tr><th>练习</th><th>你会学到</th></tr>
+  <tr><td><b>把一段 C 代码改成 C++</b>：手写的动态数组换成 <code>std::vector</code>，<code>char*</code> 换成 <code>std::string</code></td><td>标准库替你做掉了哪些手工活</td></tr>
+  <tr><td><b>写一个 RAII 包装</b>：把 <code>fopen/fclose</code> 包成一个类，构造开、析构关</td><td><b>RAII 的核心</b>（C++ 最重要的思想）</td></tr>
+  <tr><td><b>用智能指针管一个对象数组</b>，故意让它抛异常，观察有没有泄漏</td><td>智能指针为什么能免掉 delete</td></tr>
+  <tr><td><b>写一组"形状"类</b>（圆、方），用 <code>virtual</code> 让它们各自算面积</td><td>多态与虚函数</td></tr>
+  <tr><td><b>做一个能显示窗口的小程序</b>（可选 SFML 或 raylib）</td><td>你会发现"画东西"和故事 2 是同一回事</td></tr>
+</table>
+
+<div class="tip">
+<b>三条建议</b>：<br>
+① <b>先把 RAII 和智能指针搞懂再往下走</b> —— 它们是 C++ 的地基，跳过会一直别扭；<br>
+② <b>永远开编译器警告</b>（<code>-Wall -Wextra</code>），把警告当错误看；<br>
+③ <b>"能跑"不等于"对"</b> —— 多写测试、多用 sanitizer，这是 C++ 里最重要的自我保护。
+</div>
+
+<hr>
+<p class="muted">项目：<b>SnapWheel（快照轮环）</b>，Windows 截图工具，单体 exe、零第三方依赖，界面全部由代码绘制。<br>
+本册由项目作者整理 —— 目的是让学 C++ 的人也能从真实项目里学到东西：<b>C++ 是 C 的进化，C# 是另一种取舍，而工程上的功课三者共通。</b></p>
+
+</body>
+</html>
