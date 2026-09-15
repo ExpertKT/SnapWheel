@@ -84,7 +84,7 @@ namespace SnapWheel
                 using (SolidBrush sb = new SolidBrush(Color.White))
                     TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
 
-                int y = hero ? 470 : 330;      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
+                int y = hero ? 440 : 330;      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
                 using (Font fl = new Font(FONT, hero ? 40 : 36))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { g.DrawString(line1, fl, sb, 84, y); }
@@ -93,7 +93,7 @@ namespace SnapWheel
                 { g.DrawString(line2, fs, sb, 84, y + (hero ? 66 : 58)); }
 
                 // 右上角标（hero 打新，其它打卖点）
-                if (no == 1 || no == 4 || no == 6) Chip(g, no == 1 ? "免安装 · 274 KB" : "0.6.0 新增", 84, y + (hero ? 138 : 112), 24);
+                if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 84, y + 112, 24);
 
                 // 界面渲染：贴在下方（hero 靠右放小一点，避免压住文案）
                 if (no == 4) LongDemo(g);          // 长截图没有现成渲染图，现场画个示意
@@ -102,7 +102,7 @@ namespace SnapWheel
                 {
                     // 所有图的界面渲染放进**同一条横向带**：同高上限、水平居中、带内垂直居中 ——
                     // 原来按各自比例算尺寸和位置，九张摆一起就是参差不齐的，图1 的卡片还会压住文案。
-                    const int bandTop = 580, bandH = 430;
+                    const int bandTop = 548, bandH = 440;
                     float s = Math.Min((float)(1080 - 240) / im.Width, (float)bandH / im.Height);
                     int dw = (int)(im.Width * s), dh = (int)(im.Height * s);
                     int dx = (1080 - dw) / 2;
