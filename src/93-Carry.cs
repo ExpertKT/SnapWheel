@@ -47,7 +47,6 @@ namespace SnapWheel
         // 窗口一出现就检测到 C 是按下状态，立刻当成"复制到剪贴板"并关闭，
         // 表现就是"闪了一下就没了"（用户实测出来的）。
         bool _prevEnter, _prevEsc, _prevC, _prevSpace;
-        int _dropCount;                 // 这次传递里按了几次"放下"（显示在提示条上，帮用户判断要不要改用剪贴板）
 
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
@@ -180,55 +179,24 @@ namespace SnapWheel
         // ---------- 放下：把假光标的位置"演"成一次真实的鼠标拖放 ----------
         void DoDrop()
         {
-            if (_busy) return;              // 正在放就别重复触发
             _busy = true;
+            try { _tick.Stop(); } catch { }
             Confirmed = true;
             DropPoint = _pos;
 
-            // 剪贴板模式：不动鼠标，直接收摊，剩下的交给 App 去写剪贴板
-            if (UseClipboard)
-            {
-                try { _tick.Stop(); } catch { }
-                try { if (_hint != null) _hint.Close(); } catch { }
-                try { Close(); } catch { }
-                return;
-            }
-
-            // 关键：**不要**在这里把窗口藏起来。
-            // 原来这里是 Hide() + Opacity = 0，用户看到的是"假光标消失了、鼠标自己动了几下、
-            // 然后就什么都干不了了" —— 既看不到结果，也没法重试（用户反馈）。
-            // 现在改成：假光标留在原地，模拟拖放在后台跑，跑完还能再按空格重试。
-            // 定时器也不停：还要继续读按键（空格重试 / C 复制 / Esc 退出）。
-            _dropCount++;
-            SetHint(_dropCount == 1
-                ? Lang.T("正在放下…　（没收到就按 C 复制到剪贴板，或再按一次空格重试）",
-                         "Dropping…  (if nothing arrived, press C to copy to the clipboard, or press Space again to retry)")
-                : Lang.T("已尝试放下 " + _dropCount + " 次　（建议按 C 复制到剪贴板 —— 那一定有效）",
-                         "Drop attempted " + _dropCount + " time(s)  (press C to copy to the clipboard instead - that always works)"));
+            // 先在屏幕上把假光标藏起来，接下来的动作交给真实光标
+            try { if (_hint != null) _hint.Close(); } catch { }
+            try { Opacity = 0; } catch { }
+            try { Hide(); } catch { }
+            Application.DoEvents();
 
             Thread t = new Thread(delegate()
             {
                 SimulateDrag(_origin, DropPoint);
-                try
-                {
-                    BeginInvoke((MethodInvoker)delegate
-                    {
-                        _busy = false;      // 允许再按空格重试
-                        Confirmed = false;  // 还没真正离开传递模式
-                        SetHint(Lang.T("放下动作已完成。收到图了就按 Esc 退出；没收到就按 C 复制到剪贴板。",
-                                       "Drop finished. If the image arrived, press Esc to exit; if not, press C to copy to the clipboard."));
-                    });
-                }
-                catch { }
+                try { BeginInvoke((MethodInvoker)delegate { try { Close(); } catch { } }); } catch { }
             });
             t.IsBackground = true;
             t.Start();
-        }
-
-        /// <summary>改提示条上的文字（提示条是独立的小窗，这里转交给它）。</summary>
-        void SetHint(string text)
-        {
-            try { if (_hint != null) _hint.SetText(text); } catch { }
         }
 
         /// <summary>
@@ -346,39 +314,6 @@ namespace SnapWheel
     {
         const int PadX = 22, PadY = 12;
 
-        string _text;      // 当前显示的说明文字（按下"放下"之后会换成结果提示）
-
-        /// <summary>
-        /// 换上新的说明文字。
-        /// 注意文字长短不同，窗口要**重新量一次**并重新贴到底部居中 —— 不然新文字会被裁掉。
-        /// </summary>
-        public void SetText(string t)
-        {
-            if (string.IsNullOrEmpty(t)) return;
-            _text = t;
-            try
-            {
-                using (Font f = HintFont())
-                using (Bitmap b = new Bitmap(1, 1))
-                using (Graphics g = Graphics.FromImage(b))
-                {
-                    SizeF sz = g.MeasureString(t, f, new PointF(0, 0), StringFormat.GenericTypographic);
-                    ClientSize = new Size((int)Math.Ceiling((double)sz.Width) + PadX * 2,
-                                          (int)Math.Ceiling((double)sz.Height) + PadY * 2);
-                }
-                Rectangle scr = Screen.FromPoint(Cursor.Position).WorkingArea;
-                Location = new Point(scr.Left + (scr.Width - Width) / 2, scr.Bottom - Height - 40);
-                Invalidate();
-            }
-            catch { }
-        }
-
-        static string DefaultText()
-        {
-            return Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
-                          "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
-        }
-
         public CarryHintForm()
         {
             FormBorderStyle = FormBorderStyle.None;
@@ -389,7 +324,8 @@ namespace SnapWheel
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             DoubleBuffered = true;
 
-            string s = DefaultText();
+            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
+                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
             using (Font f = HintFont())
             {
                 SizeF sz;
@@ -414,7 +350,8 @@ namespace SnapWheel
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            string s = _text ?? DefaultText();
+            string s = Lang.T("① WASD / 方向键 移动（Shift 加速）　→　② Alt+Tab 切到目标窗口　→　③ 空格 放下　　（C 复制到剪贴板　·　Esc 取消）",
+                               "1) WASD / arrows move (Shift = faster)  ->  2) Alt+Tab to the target window  ->  3) Space to drop    (C = copy, Esc = cancel)");
             using (Font f = HintFont())
             using (SolidBrush b = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
                 DrawKit.DrawFitted(g, s, new RectangleF(PadX - 6, PadY - 4, ClientSize.Width - PadX * 2 + 12, ClientSize.Height - PadY * 2 + 8),
