@@ -523,7 +523,38 @@ namespace SnapWheel
                     });
                 }
                 // 依次尝试几个候选热键，用第一个注册成功的。
-                // 为什么要这样：RegisterHotKey 失败不会有任何报错（只返回 false），用户看到的就是                 "按了没反应"。而 Ctrl+Alt+C 特别容易被占用（QQ、微信、输入法、录屏都用它）——                 第一次就是栽在这里：日志里一条 Carry 记录都没有，说明回调压根没被触发过。                 uint[][] cands = new uint[][]                 {                     new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.C },                     new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.W },                     new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.F9 },                     new uint[] { Native.MOD_CONTROL | Native.MOD_SHIFT, (uint)Keys.F9 },                     new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.F10 },                 };                 string[] names = new string[] { "Ctrl+Alt+C", "Ctrl+Alt+W", "Ctrl+Alt+F9", "Ctrl+Shift+F9", "Ctrl+Alt+F10" };                 CarryHotkeyName = "";                 for (int ci = 0; ci < cands.Length; ci++)                 {                     if (_carryKey.Register(cands[ci][0], cands[ci][1])) { CarryHotkeyName = names[ci]; break; }                 }                 if (CarryHotkeyName.Length == 0)                 {                     // 一个都没注册上：主动告诉用户去用托盘菜单，别让他对着键盘干等                     try                     {                         if (_settings.ShowBalloon) _tray.ShowBalloonTip(8000,                             Lang.T("传递模式的热键被占用了", "Carry-mode hotkey unavailable"),                             Lang.T("Ctrl+Alt+C、Ctrl+Alt+W 等组合都被别的程序占着。请用托盘菜单里的「传递模式」。",                                    "Ctrl+Alt+C, Ctrl+Alt+W and the other candidates are all taken. Use the tray menu item instead."),                             ToolTipIcon.Warning);                     }                     catch { }                 }
+                // 依次尝试几个候选热键，用第一个注册成功的。
+                // 为什么要这样：RegisterHotKey 失败不会有任何报错（只返回 false），用户看到的就是
+                // "按了没反应"。而 Ctrl+Alt+C 特别容易被占用（QQ、微信、输入法、录屏都用它）。
+                uint[][] cands = new uint[][]
+                {
+                    new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.C },
+                    new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.W },
+                    new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.F9 },
+                    new uint[] { Native.MOD_CONTROL | Native.MOD_SHIFT, (uint)Keys.F9 },
+                    new uint[] { Native.MOD_CONTROL | Native.MOD_ALT,   (uint)Keys.F10 },
+                };
+                string[] names = new string[] { "Ctrl+Alt+C", "Ctrl+Alt+W", "Ctrl+Alt+F9", "Ctrl+Shift+F9", "Ctrl+Alt+F10" };
+
+                CarryHotkeyName = "";
+                for (int ci = 0; ci < cands.Length; ci++)
+                {
+                    if (_carryKey.Register(cands[ci][0], cands[ci][1])) { CarryHotkeyName = names[ci]; break; }
+                }
+                Err.Log("Carry.Register", new Exception("传递热键注册结果: [" + CarryHotkeyName + "]"));   // 必定落盘
+                if (CarryHotkeyName.Length == 0)
+                {
+                    // 一个都没注册上：主动告诉用户去用托盘菜单，别让他对着键盘干等
+                    try
+                    {
+                        if (_settings.ShowBalloon) _tray.ShowBalloonTip(8000,
+                            Lang.T("传递模式的热键被占用了", "Carry-mode hotkey unavailable"),
+                            Lang.T("Ctrl+Alt+C、Ctrl+Alt+W 等组合都被别的程序占着。请用托盘菜单里的「传递模式」。",
+                                   "Ctrl+Alt+C, Ctrl+Alt+W and the other candidates are all taken. Use the tray menu item instead."),
+                            ToolTipIcon.Warning);
+                    }
+                    catch { }
+                }
             }
             catch { }
         }
