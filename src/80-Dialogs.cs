@@ -256,9 +256,11 @@ namespace SnapWheel
             _scrollHint.Location = new Point(mL, btnY + (go.Height - _scrollHint.Font.Height) / 2);
             Add2Raw(_scrollHint);
 
-            // ---- 定尺寸：按内容长高，但绝不超过屏幕工作区 ----
-            int idealH = contentH + btnRowH;
-            int maxH = wa.Height - Ui.S(24);
+            // ---- 定尺寸：按内容长高，但绝不超过屏幕的 72% ----
+            // 上限不能贴着屏幕高度（原来是 wa.Height - 24）：内容一多窗口就顶满整个屏幕，
+            // 看着非常压迫（用户反馈"新手引导的窗口也太长了"）。内容超出时靠滚轮翻看就够了。
+            int idealH = contentH;                             // contentH 里已经含了按钮行，别再重复加
+            int maxH = (int)(wa.Height * 0.72);
             if (maxH < Ui.S(260)) maxH = Ui.S(260);
             int winH = Math.Min(idealH, maxH);
             ClientSize = new Size(winW, winH);
