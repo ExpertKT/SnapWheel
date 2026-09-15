@@ -29,3 +29,6 @@ AGENT-BRIEF.md
 
 # 本地旧版本归档（体积大，不进仓库）
 历史/
+
+# 演示视频（本地产物，55MB；需要时用 tests/demo-video.cs 重新生成，不进仓库）
+docs/*.avi
