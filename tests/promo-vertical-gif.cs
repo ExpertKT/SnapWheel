@@ -69,6 +69,18 @@ namespace SnapWheel
         }
 
         // 静态底：渐变背景 + 品牌行 + 大标题 + 副标题（每帧都用它，只有轮盘区是变的）
+        // 实测宽度，超了就缩字号（和竖版 PNG 生成器同一套：GDI 量、GDI 画）
+        static float FitSize(Graphics g, string text, float pt, int maxW)
+        {
+            if (string.IsNullOrEmpty(text)) return pt;
+            using (Font f = new Font(FONT, pt))
+            {
+                float w = TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width;
+                if (w <= maxW || w <= 0) return pt;
+                float np = pt * (maxW / w);
+                return np < 14f ? 14f : np;
+            }
+        }
         static Bitmap BuildStatic()
         {
             Bitmap b = new Bitmap(W, H, PixelFormat.Format32bppPArgb);
@@ -107,11 +119,11 @@ namespace SnapWheel
                     }
                     TextRenderer.DrawText(g, "看一眼就懂", fc, new Point(r.X + 22, r.Y + 10), Color.FromArgb(240, 225, 240, 252), TextFormatFlags.NoPadding);
                 }
-                using (Font ft = new Font(FONT, 104, FontStyle.Bold))
+                using (Font ft = new Font(FONT, FitSize(g, "截完图", 104, 765), FontStyle.Bold))
                     TextRenderer.DrawText(g, "截完图", ft, new Point(180, 246), Color.White, TextFormatFlags.NoPadding);
-                using (Font ft2 = new Font(FONT, 76, FontStyle.Bold))
+                using (Font ft2 = new Font(FONT, FitSize(g, "拖一下就发出去了", 76, 765), FontStyle.Bold))
                     TextRenderer.DrawText(g, "拖一下就发出去了", ft2, new Point(180, 396), Color.White, TextFormatFlags.NoPadding);
-                using (Font fs = new Font(FONT, 36))
+                using (Font fs = new Font(FONT, FitSize(g, "不用保存、不用切窗口、不用翻文件夹", 36, 765)))
                     TextRenderer.DrawText(g, "不用保存、不用切窗口、不用翻文件夹", fs, new Point(180, 512), Sub, TextFormatFlags.NoPadding);
                 using (Font fd = new Font(FONT, 28))
                     TextRenderer.DrawText(g, "免费 · 开源 · 单文件，双击就能用", fd, new Point(180, 1210), Color.FromArgb(200, 150, 165, 190), TextFormatFlags.NoPadding);

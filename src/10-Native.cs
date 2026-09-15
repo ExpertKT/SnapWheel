@@ -23,6 +23,11 @@ namespace SnapWheel
         // 0.6.0 滚动长截图：给目标窗口发合成的滚轮消息（这是产品功能，不是测试里的模拟输入）
         [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
         public const uint WM_MOUSEWHEEL = 0x020A;
+        // 置顶但**不激活**：TopMost=false/true 或 BringToFront() 会抢一次前台焦点，
+        // 那样托盘右键菜单、打赏窗口这些"一失焦就自动关闭"的界面点出来就会过一会儿自己没了。
+        [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
         [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);

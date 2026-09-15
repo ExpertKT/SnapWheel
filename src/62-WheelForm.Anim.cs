@@ -131,7 +131,7 @@ namespace SnapWheel
         {
             // 0.6.0：每次唤出都重新抢一次最顶层 —— 双击打开图片、图片查看器关掉之后，
             // 轮盘会被压在别的置顶窗口下面（用户反馈：关掉窗口后轮盘回不到最顶层）。
-            try { TopMost = false; TopMost = true; BringToFront(); } catch { }
+            try { Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE); } catch { }
             if (!Visible) { RequestBackdropAsync(); _show = 0f; _rendered = false; Show(); }
             SetShow(1f);
             _lastActive = DateTime.Now;
@@ -355,7 +355,7 @@ namespace SnapWheel
             if (Visible && _settings.AlwaysOnTop && (DateTime.Now - _topMostAt).TotalSeconds > 2.0)
             {
                 _topMostAt = DateTime.Now;
-                try { TopMost = false; TopMost = true; } catch { }
+            try { Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE); } catch { }
             }
             if (_phiShift != 0f)
             {
