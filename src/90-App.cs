@@ -370,6 +370,7 @@ namespace SnapWheel
                         SelfClipboard.Note(item.Image);
                         Clipboard.SetImage(item.Image);
                         SelfClipboard.NoteSequence();
+                        Err.Log("Carry.Clipboard", new Exception("已把图写入剪贴板（Image 非空=" + (item.Image != null) + "）"));
                         if (_settings.ShowBalloon) _tray.ShowBalloonTip(6000,
                             Lang.T("已复制到剪贴板", "Copied to clipboard"),
                             Lang.T("切到目标窗口按 Ctrl+V 就能粘贴。", "Switch to the target window and press Ctrl+V."),

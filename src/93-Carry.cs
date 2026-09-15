@@ -47,6 +47,7 @@ namespace SnapWheel
         // 窗口一出现就检测到 C 是按下状态，立刻当成"复制到剪贴板"并关闭，
         // 表现就是"闪了一下就没了"（用户实测出来的）。
         bool _prevEnter, _prevEsc, _prevC, _prevSpace;
+        bool _tickAlive;                // 只为了写一条"定时器在跑、保护期已过"的日志（诊断用）
 
         /// <summary>用户确认放下了（Enter/空格）。</summary>
         public bool Confirmed;
@@ -152,11 +153,30 @@ namespace SnapWheel
                 // 另外刚显示后的 350ms 里不响应按键 —— 用户刚按完热键，
                 // 手指还压在键上，那段窗口期不该被当成"用户操作"。
                 bool warmed = (DateTime.Now - _started).TotalMilliseconds > 350;
+                if (warmed && !_tickAlive)
+                {
+                    // 只写一条：确认定时器真的在跑、保护期也过了。
+                    // 之前"按 C 没反应"这种问题，缺的就是这个证据 —— 到底是没跑到这里，
+                    // 还是跑到了但按键判断没通过。
+                    _tickAlive = true;
+                    Err.Log("Carry.Tick", new Exception("定时器在跑，保护期已过（按键开始生效）"));
+                }
                 if (warmed)
                 {
                     // 空格是主要的「放下」键（用户要求：比 Enter 顺手）；Enter 保留作为等价键。
-                    if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter)) { DoDrop(); return; }
-                    if (Rising(ref _prevC, Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板
+                    if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter))
+                    {
+                        Err.Log("Carry.Key", new Exception("空格 触发放下"));
+                        DoDrop();
+                        return;
+                    }
+                    if (Rising(ref _prevC, Keys.C))
+                    {
+                        Err.Log("Carry.Key", new Exception("C 触发复制到剪贴板"));
+                        UseClipboard = true;
+                        DoDrop();
+                        return;
+                    }
                     if (Rising(ref _prevEsc, Keys.Escape)) { Cancel(); return; }
                 }
             }
