@@ -57,6 +57,8 @@ namespace SnapWheel
         // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
         // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
         public bool UseClipboard;
+        /// <summary>true = 写完剪贴板后，再自动按一次 Ctrl+V（空格走这条；C 只复制不粘贴）。</summary>
+        public bool AutoPaste;
 
         public CarryForm(Bitmap thumb, Point origin)
         {
@@ -163,17 +165,22 @@ namespace SnapWheel
                 }
                 if (warmed)
                 {
-                    // 空格是主要的「放下」键（用户要求：比 Enter 顺手）；Enter 保留作为等价键。
+                    // 空格 = 放下：把图放进剪贴板，**并自动按一次 Ctrl+V**。
+                    // 这是"把图送进目标程序"最可靠的方式 —— 粘贴是所有程序都支持的标准操作。
                     if (Rising(ref _prevSpace, Keys.Space) || Rising(ref _prevEnter, Keys.Enter))
                     {
-                        Err.Log("Carry.Key", new Exception("空格 触发放下"));
+                        Err.Log("Carry.Key", new Exception("空格 触发：复制并粘贴"));
+                        UseClipboard = true;
+                        AutoPaste = true;
                         DoDrop();
                         return;
                     }
+                    // C = 只复制到剪贴板，不自动粘贴（需要自己控制粘贴时机时用）
                     if (Rising(ref _prevC, Keys.C))
                     {
-                        Err.Log("Carry.Key", new Exception("C 触发复制到剪贴板"));
+                        Err.Log("Carry.Key", new Exception("C 触发：只复制到剪贴板"));
                         UseClipboard = true;
+                        AutoPaste = false;
                         DoDrop();
                         return;
                     }
@@ -217,6 +224,27 @@ namespace SnapWheel
             });
             t.IsBackground = true;
             t.Start();
+        }
+
+        /// <summary>
+        /// 模拟一次 Ctrl+V。
+        /// 传递模式的"放下"最终就靠它：图已经写进剪贴板，再按一下粘贴，
+        /// 目标程序收到的就是标准操作，不依赖任何拖放协议的配合。
+        /// </summary>
+        public static void SimulatePaste()
+        {
+            try
+            {
+                Native.keybd_event(Native.VK_CONTROL, 0, 0, IntPtr.Zero);
+                Thread.Sleep(30);
+                Native.keybd_event(Native.VK_V, 0, 0, IntPtr.Zero);
+                Thread.Sleep(50);
+                Native.keybd_event(Native.VK_V, 0, Native.KEYEVENTF_KEYUP, IntPtr.Zero);
+                Thread.Sleep(30);
+                Native.keybd_event(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP, IntPtr.Zero);
+                Err.Log("Carry.Paste", new Exception("已模拟 Ctrl+V"));
+            }
+            catch (Exception ex) { Err.Log("Carry.Paste", ex); }
         }
 
         /// <summary>

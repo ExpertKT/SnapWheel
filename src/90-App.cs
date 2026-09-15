@@ -387,6 +387,14 @@ namespace SnapWheel
                             Clipboard.SetDataObject(dob, true);
                             SelfClipboard.NoteSequence();
                             Err.Log("Carry.Clipboard", new Exception("已写入剪贴板：位图 + 文件[" + file + "]"));
+
+                            // 空格走的是"放下"：写完之后自动按一次 Ctrl+V，把图直接粘到目标窗口里。
+                            // 等一小会儿是让剪贴板数据真正就位（立刻粘贴偶尔会粘到上一次的内容）。
+                            if (cf.AutoPaste)
+                            {
+                                System.Threading.Thread.Sleep(180);
+                                CarryForm.SimulatePaste();
+                            }
                         }
                         catch (Exception cex) { Err.Log("Carry.Clipboard", cex); }
                         if (_settings.ShowBalloon) _tray.ShowBalloonTip(6000,
