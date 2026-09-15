@@ -92,7 +92,8 @@ namespace SnapWheel
 
         int _contentW;              // 已乘 K 的内容宽（= 窗口宽 - 左右边距）
         int _tipCount;              // 已经加了几条说明（首次安装时只显示前 3 条，见 AddTip）
-        bool _markNew;              // true = 升级后的"这次多了什么"（它要展示全部，不受 3 条限制）
+        bool _markNew;              // true = 升级后的"这次多了什么"（它要把新增的标上【新】）
+        bool _brief;                // true = 首次安装的欢迎引导：**只显示前 3 条**，别一上来丢长文
         readonly UiScroll _sc = new UiScroll();
         Label _scrollHint;
 
@@ -119,18 +120,20 @@ namespace SnapWheel
             base.OnMouseWheel(e);
         }
 
-        public GuideForm() : this(AppInfo.Name + " 快照轮环 · 使用说明", Lang.T("轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", "The ring sits in a screen corner; scroll the mouse wheel over it to browse."), false) { }
+        public GuideForm() : this(AppInfo.Name + " 快照轮环 · 使用说明", Lang.T("轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", "The ring sits in a screen corner; scroll the mouse wheel over it to browse."), false, false) { }
 
-        // firstEver=true：全新安装的欢迎引导；false：升级后自动弹的"这次多了什么"
+        // firstEver=true：全新安装的欢迎引导（**只给三步上手**，不丢长文）；
+        // false：升级后自动弹的"这次多了什么"（要展示全部，新增的带【新】）
         public GuideForm(bool firstEver) : this(
             firstEver ? Lang.T("欢迎用 SnapWheel 快照轮环", "Welcome to SnapWheel") : (Lang.T("SnapWheel 更新到 v", "SnapWheel updated to v") + AppInfo.Version),
-            firstEver ? Lang.T("轮盘平时就待在屏幕角落里，用鼠标滚轮就能翻图。", "The ring sits in a screen corner; scroll the mouse wheel over it to browse.")
-                      : Lang.T("这次加了新东西 —— 下面标了「新」的两条就是，一分钟看完就能用上。", "Something new in this version - the two items marked [NEW] below; a minute to read and you are using them."),
-            !firstEver) { }
+            firstEver ? Lang.T("三件事就能用起来：下面这三条。更多细节在「设置 → 新手引导」里。", "Three things and you are set - see below. More detail is in Settings > Getting started.")
+                      : Lang.T("这次加了新东西 —— 下面标了「新」的几条就是，一分钟看完就能用上。", "Something new in this version - the items marked [NEW] below; a minute to read and you are using them."),
+            !firstEver, firstEver) { }
 
-        GuideForm(string title, string subtitle, bool markNew)
+        GuideForm(string title, string subtitle, bool markNew, bool brief)
         {
             _markNew = markNew;
+            _brief = brief;
             Text = AppInfo.Name + " 新手上路";
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
@@ -228,8 +231,10 @@ namespace SnapWheel
             Add2(tip);
             y += TxtH(tip, tipW);
 
-            int contentH = y;                                  // 内容理想高度
             int btnRowH = Ui.S(10) + Ui.S(BtnH) + Ui.S(22);     // 底部按钮行占的高度（含上下留白）
+            // 内容总高要把**按钮行**也算进去：按钮是贴底固定的、不参与滚动，
+            // 不算的话滚到最后几行会被按钮压住（用户反馈"字被确认按钮遮住"）。
+            int contentH = y + btnRowH;
 
             int btnY = contentH + Ui.S(10);                    // 按钮的"内容坐标"
             RoundButton go = new RoundButton();
@@ -284,14 +289,14 @@ namespace SnapWheel
 
         // 一条说明：粗体小标题 + 一段正文，两行都自己折行、自己报高度
         //
-        // 关于 _tipCount 这个上限：**全新安装时只显示前 3 条**（就是"三步上手"），
-        // 后面那一大串留到「设置 → 新手引导」里看。
-        // 原因很直接：第一次打开的人不会读一页长文（用户原话"开头一长串没人看的"），
-        // 而三步能让他立刻用起来。升级提示（markNew=true）不受这个限制。
+        // 关于 _brief 这个上限：**只有"全新安装的欢迎引导"才只显示前 3 条**（三步上手），
+        // 其余情况（设置里调出的说明、升级后的"这次多了什么"）都完整显示。
+        // 注意别用 _markNew 来判：设置里调出的那次 markNew 也是 false，
+        // 之前就是拿它当条件，结果设置里的说明反而被截成了 3 条（用户反馈"引导超级长一串"反过来）。
         void AddTip(int x, ref int y, string title, string body)
         {
             _tipCount++;
-            if (!_markNew && _tipCount > 3) return;      // 首次安装：只给头三步
+            if (_brief && _tipCount > 3) return;         // 首次安装：只给头三步
 
             int mkW = _contentW - Ui.S(3);
             Label t = new Label();
