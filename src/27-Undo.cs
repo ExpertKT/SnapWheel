@@ -50,9 +50,9 @@ namespace SnapWheel
             {
                 if (_stack.Count == 0) return "";
                 Batch b = _stack[_stack.Count - 1];
-                string what = b.ClearAll ? "清空的 " : "删掉的 ";
+                string what = b.ClearAll ? Lang.T("清空的 ", "Cleared ") : "删掉的 ";
                 int n = b.Shots.Count;
-                return what + n + " 张" + (string.IsNullOrEmpty(b.WheelName) ? "" : "（「" + b.WheelName + "」）");
+                return what + n + Lang.T(" 张", " item(s)") + (string.IsNullOrEmpty(b.WheelName) ? "" : "（「" + b.WheelName + "」）");
             }
         }
 

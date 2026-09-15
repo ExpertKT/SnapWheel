@@ -219,7 +219,7 @@ namespace SnapWheel
                 try
                 {
                     MessageBox.Show(Lang.T("剪贴板里没有图片。先复制一张图（或截图），再来点这里。", "No image in the clipboard. Copy one (or take a screenshot) and try again."),
-                        AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        AppInfo.Name + Lang.T(" 取字", " OCR"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch { }
                 return;
@@ -233,7 +233,7 @@ namespace SnapWheel
 
             if (txt == null)
             {
-                try { MessageBox.Show(err ?? "识别失败了", AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
+                try { MessageBox.Show(err ?? Lang.T("识别失败了", "Recognition failed"), AppInfo.Name + Lang.T(" 取字", " OCR"), MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
                 return;
             }
             try

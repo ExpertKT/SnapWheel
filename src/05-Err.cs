@@ -68,7 +68,7 @@ namespace SnapWheel
             try
             {
                 if (Notify != null && ShouldNotify())
-                    Notify(where + "：" + (ex == null ? "未知错误" : ex.Message));
+                    Notify(where + "：" + (ex == null ? Lang.T("未知错误", "Unknown error") : ex.Message));
             }
             catch { }
         }
@@ -153,7 +153,7 @@ namespace SnapWheel
             lock (_lock)
             {
                 StringBuilder sb = new StringBuilder();
-                sb.Append("分段耗时 — ").Append(title).Append("\r\n");
+                sb.Append(Lang.T("分段耗时 — ", "Stage timings - ")).Append(title).Append("\r\n");
                 for (int i = 0; i < _order.Count; i++)
                 {
                     string n = _order[i];

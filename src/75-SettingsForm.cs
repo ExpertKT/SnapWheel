@@ -785,7 +785,7 @@ namespace SnapWheel
             _cmbAccent.Width = S(170);
             _cmbAccent.Margin = new Padding(0, 6, 0, 0);
             _cmbAccent.Items.Add(Lang.T("跟随 Wheel 颜色", "Follow wheel colour"));
-            for (int i = 0; i < Palette.Names.Length; i++) _cmbAccent.Items.Add("统一：" + Palette.Names[i]);
+            for (int i = 0; i < Palette.Names.Length; i++) _cmbAccent.Items.Add(Lang.T("统一：", "Uniform: ") + Palette.Names[i]);
             _cmbAccent.SelectedIndex = (s.AccentIndex >= 0 && s.AccentIndex < Palette.Names.Length) ? s.AccentIndex + 1 : 0;
             Control styleRow = Row(MkLabel(Lang.T("界面风格", "UI style")), _cmbStyle, Gap(24), MkLabel(Lang.T("主题色", "Accent colour")), _cmbAccent);
             g.Controls.Add(styleRow, 0, 1);

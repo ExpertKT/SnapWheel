@@ -128,7 +128,7 @@ namespace SnapWheel
 
         GuideForm(string title, string subtitle, bool markNew)
         {
-            Text = AppInfo.Name + " 新手上路";
+            Text = AppInfo.Name + Lang.T(" 新手上路", " Getting started");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -322,7 +322,7 @@ namespace SnapWheel
 
         public AdminForm()
         {
-            Text = AppInfo.Name + " 管理员模式";
+            Text = AppInfo.Name + Lang.T(" 管理员模式", " Administrator mode");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);

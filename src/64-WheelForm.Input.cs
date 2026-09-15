@@ -417,7 +417,7 @@ namespace SnapWheel
             }
             FollowNewest();                                           // 视口跟到最后一张（设置里可关）
             _hover = -1; _enlarged = -1;
-            if (ok > 0) ShowToast(Lang.T("已加入 ", "Added ") + ok + Lang.T(" 张图片", " image(s)") + (bad > 0 ? "（" + bad + Lang.T(" 张读不了）", " unreadable)") : ""));
+            if (ok > 0) ShowToast(Lang.T("已加入 ", "Added "), "Added ") + ok + Lang.T(" 张图片", " image(s)"), " image(s)") + (bad > 0 ? "（" + bad + Lang.T(" 张读不了）", " unreadable)"), " unreadable)") : ""));
             else ShowToast(Lang.T("这些文件读不出图片", "None of these files could be read as images"));
             Render();
         }
@@ -717,10 +717,10 @@ namespace SnapWheel
             try
             {
                 string[] fmts = data.GetFormats(false);
-                _lastDragInfo = "给了 " + fmts.Length + " 种格式(" + string.Join("/", fmts) + ") 结果=" + eff +
-                                (returned ? " 拖回了轮盘" : "") + (_settings.DragOutAsFile ? "" : " 未带文件格式");
+                _lastDragInfo = Lang.T("给了 ", "Offered ") + fmts.Length + Lang.T(" 种格式(", " formats (") + string.Join("/", fmts) + ") 结果=" + eff +
+                                (returned ? Lang.T(" 拖回了轮盘", " dragged back onto the ring") : "") + (_settings.DragOutAsFile ? "" : Lang.T(" 未带文件格式", " no file format"));
             }
-            catch { _lastDragInfo = "结果=" + eff; }
+            catch { _lastDragInfo = Lang.T("结果=", "result=") + eff; }
             if (!taken && !returned) NotifyAdminDragBlocked();
             _returnedToWheel = false;
             _dragOutItem = null;
