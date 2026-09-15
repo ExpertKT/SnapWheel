@@ -86,7 +86,7 @@ namespace SnapWheel
             y = Card(g, pad, y, "0.9", "键盘也能把图送出去",
                      "传递模式：按 Ctrl+Alt+C，方向键控制「假光标」，空格放下", true);
 
-            y = Card(g, pad, y, "0.9", "引导改版 · 自动更新",
+            y = Card(g, pad, y, "0.9.x", "引导改版 · 自动更新",
                      "首次打开只给三步；托盘可一键检查更新，免费、免安装", false);
 
             // ---------- 底部：正式版预告 ----------
@@ -101,7 +101,7 @@ namespace SnapWheel
                 DrawKit.DrawFitted(g, "1.0 正式版 · 即将发布", new RectangleF(pad + 34, by + 26, W - pad * 2 - 68, 52),
                                    Color.White, 40, W - pad * 2 - 68, DrawKit.UI, FontStyle.Bold, Align.Center);
             using (Font fv2 = new Font(DrawKit.UI, 20f))
-                DrawKit.DrawFitted(g, "摘掉 beta 标记 —— 功能已齐，正在做最后的稳定性验证",
+                DrawKit.DrawFitted(g, "功能已齐 —— 正在做最后的稳定性验证",
                                    new RectangleF(pad + 34, by + 80, W - pad * 2 - 68, 32),
                                    Color.FromArgb(225, 240, 252), 20, W - pad * 2 - 68, DrawKit.UI, FontStyle.Regular, Align.Center);
 
