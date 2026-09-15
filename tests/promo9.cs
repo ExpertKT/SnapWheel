@@ -79,7 +79,7 @@ namespace SnapWheel
                     TextRenderer.DrawText(g, no + " / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
                 // 标题（hero 那张更大）
-                float ts = hero ? 96 : 62;      // 统一 62：76 太大（长标题会被右边缘裁），62 既齐又放得下 11 字
+                float ts = hero ? 72 : 62;   // 主图 96 太大（压住副文案），收到 72 与其余统一      // 统一 62：76 太大（长标题会被右边缘裁），62 既齐又放得下 11 字
                 using (Font ft = new Font(FONT, ts, FontStyle.Bold))
                 using (SolidBrush sb = new SolidBrush(Color.White))
                     TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
