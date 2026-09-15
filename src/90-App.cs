@@ -329,7 +329,7 @@ namespace SnapWheel
 
         void OnImport(object sender, EventArgs e)
         {
-            using (OpenFileDialog d = new OpenFileDialog())
+            using (System.Windows.Forms.OpenFileDialog d = new System.Windows.Forms.OpenFileDialog())
             {
                 d.Title = "把图片加入轮盘";
                 d.Multiselect = true;

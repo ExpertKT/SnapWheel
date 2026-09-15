@@ -56,11 +56,13 @@ namespace SnapWheel
 
         static Bitmap Render(string glyph, int px)
         {
-            // ⚠️ 已知限制：这里用的是 FormattedText，它走低层文本路径，会把彩色 emoji 画成**单色剪影**
-            //    （形状是对的，但只有一种颜色）。彩色需要 TextBlock 那种完整排版管线，而那条路要引
-            //    PresentationFramework.dll + System.Xaml.dll，并且它自带的 Microsoft.Win32.OpenFileDialog
-            //    会和 WinForms 的同名类型撞车（90-App.cs 当场报二义性），牵动面太大，
-            //    所以这一版先保持单色，把彩色留给专门一轮处理。
+            // ⚠️ 已知限制（试过并确认）：Windows 的彩色 emoji 靠 Segoe UI Emoji 的 COLR/CPAL 表，
+            //   而 .NET Framework 的文本栈**整条都不支持**这两张表：
+            //     · GDI  / GDI+  → 黑色轮廓
+            //     · WPF FormattedText → 黑色剪影
+            //     · WPF TextBlock（引 PresentationFramework）→ 仍然是黑色剪影（做过像素分析确认）
+            //   所以这里用最轻的 FormattedText（只依赖 PresentationCore + WindowsBase）。
+            //   真彩色需要 Direct2D/DirectWrite 的 COM 互操作，那是另一个量级的工程。
             System.Windows.Media.FormattedText ft = new System.Windows.Media.FormattedText(
                 glyph, CultureInfo.InvariantCulture,
                 System.Windows.FlowDirection.LeftToRight,

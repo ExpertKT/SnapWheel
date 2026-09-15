@@ -327,7 +327,7 @@ namespace SnapWheel
             if (bmp == null) return;
             try
             {
-                using (SaveFileDialog d = new SaveFileDialog())
+                using (System.Windows.Forms.SaveFileDialog d = new System.Windows.Forms.SaveFileDialog())
                 {
                     d.Title = Lang.T("另存为", "Save as");
                     d.Filter = "PNG|*.png|JPEG|*.jpg|BMP|*.bmp";
