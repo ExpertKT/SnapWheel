@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Windows.Forms;
@@ -20,7 +21,7 @@ namespace SnapWheel
     //   选中一个图元后：拖动 = 移动，滚轮 = 改字号（文字）/ 粗细（其它），Del = 删除
     partial class OverlayForm
     {
-        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4, Ocr = 5 }
+        enum AnnotKind { Select = 0, Arrow = 1, Rect = 2, Mosaic = 3, Text = 4, Ocr = 5, Emoji = 6 }
 
         class Shape
         {
@@ -62,7 +63,9 @@ namespace SnapWheel
         const int IdxSizeUp = IdxBg + 2;
         const int IdxUndo = IdxBg + 3;
         const int IdxLong = IdxBg + 4;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
-        const int BtnCount = IdxBg + 5;
+        const int IdxSave = IdxBg + 5;     // 0.7.0：另存为（把当前框选含标注存到指定位置）
+        const int IdxEmoji = IdxBg + 6;    // 0.7.0：贴 emoji（弹面板选一个，插入后可拖可缩放）
+        const int BtnCount = IdxBg + 7;
 
         // ---------- 几何 / 命中 ----------
         static RectangleF RectOf(PointF a, PointF b)
@@ -89,7 +92,7 @@ namespace SnapWheel
         RectangleF ShapeBounds(Shape s)
         {
             if (s == null) return RectangleF.Empty;
-            if (s.Kind != AnnotKind.Text) return RectOf(s.A, s.B);
+            if (!IsTextLike(s)) return RectOf(s.A, s.B);
             SizeF sz = TextSize(s);
             return new RectangleF(s.A.X - 3 * _k, s.A.Y - 2 * _k, sz.Width + 7 * _k, sz.Height + 5 * _k);
         }
@@ -101,7 +104,7 @@ namespace SnapWheel
             {
                 Shape s = _shapes[i];
                 RectangleF r = ShapeBounds(s);
-                if (s.Kind != AnnotKind.Text)
+                if (!IsTextLike(s))
                 {
                     float pad = Math.Max(6f, s.W * _k + 3f);
                     r.Inflate(pad, pad);
@@ -121,7 +124,7 @@ namespace SnapWheel
         void MoveShape(Shape s, float dx, float dy)
         {
             s.A = new PointF(s.A.X + dx, s.A.Y + dy);
-            if (s.Kind != AnnotKind.Text) s.B = new PointF(s.B.X + dx, s.B.Y + dy);
+            if (!IsTextLike(s)) s.B = new PointF(s.B.X + dx, s.B.Y + dy);
             if (s.Cache != null) { try { s.Cache.Dispose(); } catch { } s.Cache = null; }   // 马赛克跟着挪，得重算
         }
 
@@ -129,7 +132,7 @@ namespace SnapWheel
         void ResizeShape(Shape s, float delta)
         {
             if (s == null) return;
-            if (s.Kind == AnnotKind.Text)
+            if (IsTextLike(s))
             {
                 s.Size = Math.Max(9f, Math.Min(160f, s.Size + delta * 2f));
                 _textSize = s.Size;          // 下一个新文字也用这个大小
@@ -313,12 +316,96 @@ namespace SnapWheel
             if (_drawing != null) DrawOne(g, _drawing);
         }
 
+        // 文字类图元（文字 / emoji）：都按"位置 + 字号"描述，命中与拖动逻辑相同
+        static bool IsTextLike(Shape s) { return s.Kind == AnnotKind.Text || s.Kind == AnnotKind.Emoji; }
+
+        // 0.7.0：另存为 —— 把当前框选（含标注）存到用户指定的位置。这一张仍然留在轮盘里。
+        void SaveAs()
+        {
+            if (!_hasSel || _vs.Width < 4 || _vs.Height < 4) return;
+            Bitmap bmp = CropSelection(true);      // true = 标注一起合成进去
+            if (bmp == null) return;
+            try
+            {
+                using (SaveFileDialog d = new SaveFileDialog())
+                {
+                    d.Title = Lang.T("另存为", "Save as");
+                    d.Filter = "PNG|*.png|JPEG|*.jpg|BMP|*.bmp";
+                    d.FileName = "SnapWheel_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png";
+                    if (d.ShowDialog(this) != DialogResult.OK) return;
+                    string ext = (Path.GetExtension(d.FileName) ?? "").ToLowerInvariant();
+                    if (ext == ".jpg" || ext == ".jpeg")
+                    {
+                        // JPEG 不支持透明：先铺白底，否则透明区会变黑
+                        using (Bitmap flat = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format24bppRgb))
+                        {
+                            using (Graphics gg = Graphics.FromImage(flat)) { gg.Clear(Color.White); gg.DrawImage(bmp, 0, 0); }
+                            flat.Save(d.FileName, ImageFormat.Jpeg);
+                        }
+                    }
+                    else if (ext == ".bmp") bmp.Save(d.FileName, ImageFormat.Bmp);
+                    else bmp.Save(d.FileName, ImageFormat.Png);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, Lang.T("保存失败：", "Save failed: ") + ex.Message, AppInfo.Name);
+            }
+            finally { bmp.Dispose(); }
+        }
+
+        // 0.7.0：贴 emoji —— 弹出面板选一个，插到选区中心；之后和文字一样可拖动、可缩放、可删除
+        void PickEmoji()
+        {
+            using (EmojiPicker pk = new EmojiPicker((int)Math.Round(_k * 100)))
+            {
+                try
+                {
+                    Rectangle r = _toolBtns[IdxEmoji];
+                    Point sp = PointToScreen(new Point(r.Left, r.Bottom + 4));
+                    Rectangle scr = Screen.FromPoint(sp).WorkingArea;
+                    if (sp.X + pk.Width > scr.Right) sp.X = Math.Max(scr.Left, scr.Right - pk.Width);
+                    if (sp.Y + pk.Height > scr.Bottom) sp.Y = Math.Max(scr.Top, r.Top - pk.Height - 4);
+                    pk.Location = sp;
+                }
+                catch { }
+                pk.ShowDialog(this);
+                if (pk.Picked != null)
+                {
+                    Shape s = new Shape();
+                    s.Kind = AnnotKind.Emoji;
+                    s.Text = pk.Picked;
+                    s.Size = Math.Max(24f, _textSize * 1.5f);     // emoji 通常要比文字大一点才好看
+                    s.Color = _annotColor;
+                    float cx = _hasSel ? _c.X : _vs.Width / 2f;
+                    float cy = _hasSel ? _c.Y : _vs.Height / 2f;
+                    s.A = new PointF(cx, cy);
+                    s.B = s.A;
+                    _shapes.Add(s);
+                    _sel = s;
+                    _tool = AnnotKind.Select;
+                }
+            }
+        }
         void DrawOne(Graphics g, Shape s)
         {
             if (s == null) return;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             switch (s.Kind)
             {
+                case AnnotKind.Emoji:
+                    {
+                        // 用 TextRenderer（GDI）画：GDI+ 会把 Windows 的彩色 emoji 画成黑白
+                        float ef = Math.Max(8f, s.Size * _k);
+                        using (Font f = new Font("Segoe UI Emoji", ef))
+                        {
+                            Size esz = TextRenderer.MeasureText(s.Text, f);
+                            TextRenderer.DrawText(g, s.Text, f,
+                                new Point((int)(s.A.X - esz.Width / 2f), (int)(s.A.Y - esz.Height / 2f)),
+                                Color.White, TextFormatFlags.NoPadding);
+                        }
+                        break;
+                    }
                 case AnnotKind.Arrow:
                     {
                         using (Pen p = new Pen(s.Color, s.W * _k))
@@ -577,6 +664,33 @@ namespace SnapWheel
                         g.DrawLine(pl, lx + 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
                     }
                     break;
+                    case IdxSave:       // 另存为：向下箭头 + 底线（存盘）
+                    {
+                        float sx = d2.Left + d2.Width / 2f, sy = d2.Top + d2.Height / 2f;
+                        using (Pen ps = new Pen(Color.FromArgb(226, 232, 240), 1.6f))
+                        {
+                            g.DrawLine(ps, sx, sy - 8f * _k, sx, sy + 3f * _k);
+                            g.DrawLine(ps, sx - 4f * _k, sy - 1f * _k, sx, sy + 3f * _k);
+                            g.DrawLine(ps, sx + 4f * _k, sy - 1f * _k, sx, sy + 3f * _k);
+                            g.DrawLine(ps, sx - 7f * _k, sy + 8f * _k, sx + 7f * _k, sy + 8f * _k);
+                        }
+                    }
+                    break;
+                    case IdxEmoji:      // 贴 emoji：画一张笑脸（比任何图标都好认）
+                    {
+                        float ex = d2.Left + d2.Width / 2f, ey = d2.Top + d2.Height / 2f, er = 8f * _k;
+                        using (Pen pe = new Pen(Color.FromArgb(238, 200, 90), 1.5f))
+                        {
+                            g.DrawEllipse(pe, ex - er, ey - er, er * 2f, er * 2f);
+                            using (SolidBrush be = new SolidBrush(Color.FromArgb(238, 200, 90)))
+                            {
+                                g.FillEllipse(be, ex - 3.4f * _k, ey - 3.2f * _k, 2f * _k, 2f * _k);
+                                g.FillEllipse(be, ex + 1.4f * _k, ey - 3.2f * _k, 2f * _k, 2f * _k);
+                            }
+                            g.DrawArc(pe, ex - 4.4f * _k, ey - 1.6f * _k, 8.8f * _k, 6f * _k, 20, 140);
+                        }
+                    }
+                    break;
                     case 5:             // 取字工具：一个"字"比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb((int)(120 * a / 255f), 255, 255, 255)))
@@ -724,6 +838,8 @@ namespace SnapWheel
                         Close();
                     }
 
+                    else if (i == IdxSave) { SaveAs(); Invalidate(); return true; }
+                    else if (i == IdxEmoji) { PickEmoji(); Invalidate(); return true; }
                     else Undo();
                     Invalidate();
                     return true;
