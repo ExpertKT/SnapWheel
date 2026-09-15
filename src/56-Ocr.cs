@@ -381,6 +381,14 @@ namespace SnapWheel
                 if (own) { try { work.Dispose(); } catch { } }
                 if (px != null)
                 {
+                    // 0.6.0：又高又长的图（滚动长截图拼出来的那种）先**切条**再识别 ——
+                    // 整张丢给引擎会被降采样，小字全糊（见 92-OcrTall.cs）。
+                    if (OcrTall.ShouldSplit(pw, ph))
+                    {
+                        string tall = OcrTall.Recognize(px, pw, ph, out error);
+                        if (tall != null) return tall;
+                        error = null;      // 切条没成功就退回整张识别，至少能出点东西
+                    }
                     string r = RecognizePixels(px, pw, ph, out error);
                     if (r != null || error == null) return r;
                     // 直接喂像素失败就退回老路（PNG）
