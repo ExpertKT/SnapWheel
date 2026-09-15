@@ -795,7 +795,7 @@ namespace SnapWheel
         void BuildPage4()
         {
             TableLayoutPanel g = _pages[3];
-            SetupRows(g, 10);            // 0.6.0：多了两行翻译接口（URL/模型 一行、API Key 一行）
+            SetupRows(g, 11);            // 0.6.0：多了两行翻译接口（URL/模型 一行、API Key 一行）
             Settings s = _s;
 
             g.Controls.Add(Section("万能键"), 0, 0);
@@ -904,6 +904,25 @@ namespace SnapWheel
             Control keyRow = Row(MkLabel("API Key"), _txtLlmKey, Gap(10), llmKeyHint);
             g.Controls.Add(keyRow, 0, 9);
             g.SetColumnSpan(keyRow, 2);
+
+            // 反馈入口（0.6.0）：一键提 issue（预填环境信息）+ 复制诊断信息。
+            // 放在"高级"页最下面：不占常用路径，但用户真遇到问题时找得到。
+            RoundButton fb = new RoundButton();
+            fb.Text = "反馈 / 报告问题…";
+            fb.Font = new Font("Microsoft YaHei UI", 10f);
+            fb.Fill = Color.FromArgb(238, 240, 245);
+            fb.FillHover = Color.FromArgb(226, 230, 238);
+            fb.TextColor = Color.FromArgb(60, 64, 74);
+            fb.Size = new Size(S(170), S(34));
+            fb.Click += new EventHandler(delegate(object o, EventArgs e2)
+            {
+                FeedbackForm ff = new FeedbackForm();
+                try { ff.ShowDialog(this); } catch { }
+                try { ff.Dispose(); } catch { }
+            });
+            Control fbRow = Row(fb);
+            g.Controls.Add(fbRow, 0, 10);
+            g.SetColumnSpan(fbRow, 2);
         }
 
         // ============================ 翻页 ============================

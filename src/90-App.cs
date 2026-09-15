@@ -62,6 +62,7 @@ namespace SnapWheel
             menu.Items.Add("取字：识别剪贴板里的图", null, new EventHandler(OnOcrClipboard));
             menu.Items.Add("撤销上一次删除", null, new EventHandler(OnUndoDelete));
             menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
+            menu.Items.Add("反馈 / 报告问题…", null, new EventHandler(OnFeedback));
             menu.Items.Add("设置…", null, new EventHandler(OnSettings));
             menu.Items.Add("打开项目主页", null, new EventHandler(delegate(object o, EventArgs e) {
                 try { System.Diagnostics.Process.Start("https://github.com/" + AppInfo.Repo); } catch { }
@@ -135,6 +136,14 @@ namespace SnapWheel
                 });
                 g.Start();
             }
+        }
+
+        // 托盘入口：一键提 issue（预填环境信息）+ 复制诊断信息（0.6.0）
+        void OnFeedback(object sender, EventArgs e)
+        {
+            FeedbackForm ff = new FeedbackForm();
+            try { ff.ShowDialog(_wheel); } catch { }
+            try { ff.Dispose(); } catch { }
         }
 
         void OnGuide(object sender, EventArgs e)
