@@ -118,17 +118,36 @@ namespace SnapWheel
                 // 按比例算一次往往还差几个像素 —— 测试就抓到过这个：773px 的文本缩进 192px 的框，
                 // 按比例算完仍溢出 8px。所以这里**迭代缩小 + 留 2% 余量**，最多试 4 轮。
                 int use = pt;
-                for (int iter = 0; iter < 4; iter++)
+                for (int iter = 0; iter < 6; iter++)
                 {
                     SizeF sz;
                     using (Font probe = new Font(fontName, use, style))
                         sz = g.MeasureString(text, probe, new PointF(0, 0), StringFormat.GenericTypographic);
                     if (sz.Width <= maxW || use <= 6) break;
-                    int next = (int)Math.Floor(use * (maxW / sz.Width) * 0.98);
+                    int next = (int)Math.Floor(use * (maxW / sz.Width) * 0.90);   // 留 10% 余量：小字号下 MeasureString 的舍入误差占比很大（测试实测仍溢出 8px）
                     if (next >= use) next = use - 1;
                     use = Math.Max(6, next);
                 }
-                DrawInternal(g, text, use, fontName, style, box, color, align);
+                // 缩到最小字号仍放不下（文字太长或框太窄）→ 逐字截断 + 省略号。
+                // UI 常识：宁可少显示几个字，也不要让文字压到别的控件上。
+                // 这条是被自动化测试逼出来的：测试里 30 个中文字塞进 192px 的框，
+                // 即使缩到下限 6pt 也需要约 232px —— 原来的实现只会一直溢出。
+                string show = text;
+                using (Font pf = new Font(fontName, use, style))
+                {
+                    SizeF sz2 = g.MeasureString(show, pf, new PointF(0, 0), StringFormat.GenericTypographic);
+                    if (sz2.Width > maxW)
+                    {
+                        int n = show.Length;
+                        while (n > 1)
+                        {
+                            n--;
+                            string t2 = show.Substring(0, n) + "…";
+                            if (g.MeasureString(t2, pf, new PointF(0, 0), StringFormat.GenericTypographic).Width <= maxW) { show = t2; break; }
+                        }
+                    }
+                }
+                DrawInternal(g, show, use, fontName, style, box, color, align);
             }
             catch { }
         }
