@@ -346,6 +346,21 @@ namespace SnapWheel
 
                 Native.SetCursorPos(from.X, from.Y);
                 Thread.Sleep(100);
+
+                // 核对坐标：我们**以为**移到了起点，实际落在哪？
+                // 目的是判断坐标基准问题 —— 如果 WinForms 给的坐标和 SetCursorPos 用的不是同一套
+                // （150% 缩放下逻辑/物理差 1.5 倍），落点就会整体偏掉：鼠标看着动了，
+                // 但按下的地方根本不在缩略图上，拖放自然不会启动。
+                try
+                {
+                    Point actual = Cursor.Position;
+                    Rectangle vs = SystemInformation.VirtualScreen;
+                    Err.Log("Carry.Drag", new Exception(
+                        "移到起点 " + from.X + "," + from.Y + " → 实际光标 " + actual.X + "," + actual.Y +
+                        "　虚拟屏幕=" + vs.Width + "x" + vs.Height));
+                }
+                catch { }
+
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
 
                 int steps = 22;      // 步数多一些、每步慢一些，更像人手（一步跳过去多数程序不认）
