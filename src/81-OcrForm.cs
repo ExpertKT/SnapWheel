@@ -39,7 +39,7 @@ namespace SnapWheel
             try { Clipboard.SetText(text); copied = true; } catch { }
 
             int chars = text.Replace("\r", "").Replace("\n", "").Length;
-            Text = AppInfo.Name + " 取字";
+            Text = AppInfo.Name + Lang.T(" 取字", " OCR");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -71,7 +71,7 @@ namespace SnapWheel
             SuspendLayout();
 
             Label head = new Label();
-            head.Text = chars > 0 ? ("认出来 " + chars + " 个字") : "没认出文字";
+            head.Text = chars > 0 ? (Lang.T("认出来 ", "Recognised ") + chars + Lang.T(" 个字", " characters")) : Lang.T("没认出文字", "No text found");
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             Controls.Add(head);
@@ -94,9 +94,9 @@ namespace SnapWheel
 
             Label sub = new Label();
             sub.Text = chars > 0
-                ? (copied ? "原文已复制到剪贴板；要用译文点下面的「翻译」"
-                          : "下面就是识别结果，可以改完再复制")
-                : "换一块更清晰、字更大的区域再试试；倾斜或花哨的字体识别率会低一些";
+                ? (copied ? Lang.T("原文已复制到剪贴板；要用译文点下面的「翻译」", "Original copied to the clipboard; click Translate below for the translation")
+                          : Lang.T("下面就是识别结果，可以改完再复制", "The recognised text is below - edit it if needed, then copy"))
+                : Lang.T("换一块更清晰、字更大的区域再试试；倾斜或花哨的字体识别率会低一些", "Try a clearer area with larger text; slanted or decorative fonts are recognised less reliably");
             sub.ForeColor = Color.FromArgb(120, 124, 134);
             // 这句最长（没认出字那版有 33 个字）：原来 AutoSize 不封顶，150% 下它比窗口还宽，右半边整句被切掉。
             // Wrap = AutoSize + MaximumSize(内容宽, 0)：放得下就是一行，放不下自己折行、自己报出真实高度。
@@ -104,7 +104,7 @@ namespace SnapWheel
             Controls.Add(sub);
 
             Label l1 = new Label();
-            l1.Text = "原文";
+            l1.Text = Lang.T("原文", "Original");
             l1.ForeColor = Color.FromArgb(120, 124, 134);
             Ui.OneLine(l1);                                      // 短标签：AutoSize 就够，行高别再写死
             Controls.Add(l1);
@@ -121,17 +121,17 @@ namespace SnapWheel
             // 「文字实测 + 内边距」里的大者。字体先在这里建出来，是为了在摆控件之前就能算准按钮高度。
             Font fBtn = new Font("Microsoft YaHei UI", 10f);
             Font fBtnB = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            string trText = chars > 0 ? ("翻译成" + Translate.TargetLabel(text)) : "翻译";
+            string trText = chars > 0 ? (Lang.T("翻译成", "Translate to") + Translate.TargetLabel(text)) : Lang.T("翻译", "Translate");
             int trW = BtnW(fBtnB, trText, 132);
             int trH = BtnH(fBtnB, trText, 34);
-            string copySrcText = "复制原文";
+            string copySrcText = Lang.T("复制原文", "Copy original");
             int copySrcW = BtnW(fBtn, copySrcText, 102);
             int copySrcH = BtnH(fBtn, copySrcText, 34);
             int rowH = Math.Max(trH, copySrcH);                  // 按钮行的行高：按这一行里最高的按钮算
-            string copyDstText = "复制译文";
+            string copyDstText = Lang.T("复制译文", "Copy translation");
             int copyDstW = BtnW(fBtn, copyDstText, 102);
             int copyDstH = BtnH(fBtn, copyDstText, 34);
-            string closeText = "关闭";
+            string closeText = Lang.T("关闭", "Close");
             int closeW = BtnW(fBtnB, closeText, 96);
             int closeH = BtnH(fBtnB, closeText, 36);
             int bottomH = Math.Max(copyDstH, closeH);            // 底部那排的行高
@@ -205,22 +205,22 @@ namespace SnapWheel
             copySrc.Location = new Point(_tr.Right + Ui.S(8), rowY);   // 原来写死 164 = 24 + 132 + 8
             copySrc.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
-                try { Clipboard.SetText(_src.Text); _trState.Text = "原文已复制"; } catch { }
+                try { Clipboard.SetText(_src.Text); _trState.Text = Lang.T("原文已复制", "Original copied"); } catch { }
             });
             Controls.Add(copySrc);
 
             _trState = new Label();
-            _trState.Text = "译文";
+            _trState.Text = Lang.T("译文", "Translation");
             _trState.ForeColor = Color.FromArgb(120, 124, 134);
             _trState.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             Controls.Add(_trState);
             int stateX = copySrc.Right + Ui.S(14);                      // 原来写死 280 = 164 + 102 + 14
             int stateW = Math.Max(Ui.S(80), clientW - pad - stateX);     // 右边不许越过窗口边距
             Ui.Wrap(_trState, stateW);
-            // 这行字运行中会变长（"翻译中…（用 MyMemory 免费接口，要联网）"、失败原因），所以
+            // 这行字运行中会变长（Lang.T("翻译中…（用 MyMemory 免费接口，要联网）", "Translating… (free MyMemory endpoint, needs internet)")、失败原因），所以
             // ①宽度封顶让它能折行；②这一行的**行高按已知最长的那句预留**（Ui.TextH 量），
             // 免得它突然折成两行、压在下面的译文框上。文字本身不动，只是把位置算出来。
-            int stateH = Ui.TextH(_trState, "翻译中…（用 MyMemory 免费接口，要联网）", stateW);
+            int stateH = Ui.TextH(_trState, Lang.T("翻译中…（用 MyMemory 免费接口，要联网）", "Translating… (free MyMemory endpoint, needs internet)"), stateW);
             int stateY = rowY + Math.Max(0, (rowH - stateH) / 2);        // 原来 284：按钮行(274 高 34)里垂直居中
             _trState.Location = new Point(stateX, stateY);
 
@@ -252,8 +252,8 @@ namespace SnapWheel
             // 位置在最后统一排：这排按钮贴的是窗口**底边**，而 ClientSize 到最后一刻才定
             copyDst.Click += new EventHandler(delegate(object o, EventArgs e2)
             {
-                if (_translated.Length == 0) { _trState.Text = "还没翻译呢"; return; }
-                try { Clipboard.SetText(_translated); _trState.Text = "译文已复制"; } catch { }
+                if (_translated.Length == 0) { _trState.Text = Lang.T("还没翻译呢", "Nothing translated yet"); return; }
+                try { Clipboard.SetText(_translated); _trState.Text = Lang.T("译文已复制", "Translation copied"); } catch { }
             });
             Controls.Add(copyDst);
 
@@ -328,10 +328,10 @@ namespace SnapWheel
         {
             if (_busy) return;
             string text = _src.Text;
-            if (text.Trim().Length == 0) { _trState.Text = "没有要翻译的文字"; return; }
+            if (text.Trim().Length == 0) { _trState.Text = Lang.T("没有要翻译的文字", "Nothing to translate"); return; }
             _busy = true;
             _tr.Enabled = false;
-            _trState.Text = "翻译中…（用 MyMemory 免费接口，要联网）";
+            _trState.Text = Lang.T("翻译中…（用 MyMemory 免费接口，要联网）", "Translating… (free MyMemory endpoint, needs internet)");
             _dst.Text = "";
             _translated = "";
 
@@ -348,14 +348,14 @@ namespace SnapWheel
                         _tr.Enabled = true;
                         if (result == null)
                         {
-                            _trState.Text = err ?? "翻译失败";
-                            _dst.Text = "（翻译失败：" + (_trState.Text) + "）";
+                            _trState.Text = err ?? Lang.T("翻译失败", "Translation failed");
+                            _dst.Text = Lang.T("（翻译失败：", "(translation failed: ") + (_trState.Text) + "）";
                         }
                         else
                         {
                             _translated = result;
                             _dst.Text = result;
-                            _trState.Text = "译文（已可复制）";
+                            _trState.Text = Lang.T("译文（已可复制）", "Translation (ready to copy)");
                         }
                     }));
                 }

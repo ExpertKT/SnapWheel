@@ -694,14 +694,14 @@ namespace SnapWheel
                         }
                     }
                     break;
-                    case 5:             // 取字工具：一个"字"比任何图标都好认
+                    case 5:             // 取字工具：一个Lang.T("字", "Aa")比任何图标都好认
                         using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                         using (SolidBrush b = new SolidBrush(Ocr.Available ? ic : Color.FromArgb((int)(120 * a / 255f), 255, 255, 255)))
                         {
                             StringFormat sf = new StringFormat();
                             sf.Alignment = StringAlignment.Center;
                             sf.LineAlignment = StringAlignment.Center;
-                            g.DrawString("字", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
+                            g.DrawString(Lang.T("字", "Aa"), f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
                         }
                         break;
                     default:     // 撤销
@@ -732,8 +732,8 @@ namespace SnapWheel
                 p.DashStyle = DashStyle.Dash;
                 g.DrawRectangle(p, r.X - 3 * _k, r.Y - 3 * _k, r.Width + 6 * _k, r.Height + 6 * _k);
             }
-            string hint = (_sel.Kind == AnnotKind.Text) ? "拖动移动　·　滚轮 / A+/A- 改字号　·　Del 删除"
-                                                        : "拖动移动　·　滚轮改粗细　·　Del 删除";
+            string hint = (_sel.Kind == AnnotKind.Text) ? Lang.T("拖动移动　·　滚轮 / A+/A- 改字号　·　Del 删除", "Drag to move · wheel or A+/A- to resize · Del to delete")
+                                                        : Lang.T("拖动移动　·　滚轮改粗细　·　Del 删除", "Drag to move · wheel to change thickness · Del to delete");
             using (Font f = new Font("Microsoft YaHei UI", 9f * _k, FontStyle.Bold))
             {
                 SizeF sz = g.MeasureString(hint, f);
@@ -776,16 +776,16 @@ namespace SnapWheel
             int pad = (int)(22 * _k);
             using (Font ft = new Font("Microsoft YaHei UI", 15f * _k, FontStyle.Bold))
             using (SolidBrush bt = new SolidBrush(Color.White))
-                g.DrawString("截图浮层：三步搞定", ft, bt, x + pad, y + pad - 4 * _k);
+                g.DrawString(Lang.T("截图浮层：三步搞定", "The capture overlay in three steps"), ft, bt, x + pad, y + pad - 4 * _k);
 
             string[] lines = {
-                "①  按住左键拖出要截的区域（四角缩放、圆点旋转、中间拖动）",
-                "②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T",
-                "      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销",
-                "      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉",
-                "③  选「字」工具（或按 O）拖一个框圈住文字 = 取字，框越小越准；",
-                "      取字窗口里还能一键翻译成中文/英文",
-                "④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘"
+                Lang.T("①  按住左键拖出要截的区域（四角缩放、圆点旋转、中间拖动）", "1. Drag with the left button to pick an area (corners resize, the dot rotates, the middle moves it)"),
+                Lang.T("②  用下面的工具条标注：箭头 A · 方框 R · 马赛克 M · 文字 T", "2. Annotate with the toolbar below: arrow A · box R · mosaic M · text T"),
+                Lang.T("      颜色 1~4 · 文字底 B · 字号 A+/A- 或滚轮 · Ctrl+Z 撤销", "      colours 1-4 · text background B · size A+/A- or wheel · Ctrl+Z to undo"),
+                Lang.T("      画完的文字/方框可以直接拖动、滚轮改大小，Del 删掉", "      drawn text and boxes can be dragged, resized with the wheel, deleted with Del"),
+                Lang.T("③  选「字」工具（或按 O）拖一个框圈住文字 = 取字，框越小越准；", "3. Pick the OCR tool (or press O) and drag a box around text; the tighter the box, the better"),
+                Lang.T("      取字窗口里还能一键翻译成中文/英文", "      the OCR window can also translate to Chinese or English in one click"),
+                Lang.T("④  双击选区或按回车 = 确认（Esc 取消），图直接进轮盘", "4. Double-click the selection or press Enter to confirm (Esc cancels); the image goes into the ring")
             };
             int ly = y + pad + (int)(34 * _k);
             using (Font fl = new Font("Microsoft YaHei UI", 10f * _k))
@@ -802,11 +802,11 @@ namespace SnapWheel
             {
                 StringFormat sf = new StringFormat();
                 sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center;
-                g.DrawString("开始用", fb, bb, btn, sf);
+                g.DrawString(Lang.T("开始用", "Start using it"), fb, bb, btn, sf);
             }
             using (Font fh = new Font("Microsoft YaHei UI", 8.5f * _k))
             using (SolidBrush bh = new SolidBrush(Color.FromArgb(150, 255, 255, 255)))
-                g.DrawString("点一下面板或按任意键就开始（只提示这一次）", fh, bh, x + pad, y + h - pad - (int)(18 * _k));
+                g.DrawString(Lang.T("点一下面板或按任意键就开始（只提示这一次）", "Click the panel or press any key to begin (shown once)"), fh, bh, x + pad, y + h - pad - (int)(18 * _k));
         }
 
         // ---------- 鼠标 / 键盘钩子（由 OverlayForm 主文件调进来） ----------
@@ -819,7 +819,7 @@ namespace SnapWheel
                 bool inPanel = _introRect.Contains(e.Location);
                 _annotHint = false;
                 Invalidate();
-                if (inPanel) return true;        // 点面板本身：就当作"我知道了"
+                if (inPanel) return true;        // 点面板本身：就当作Lang.T("我知道了", "Got it")
             }
 
             if (ToolbarVisible())
@@ -1004,11 +1004,11 @@ namespace SnapWheel
             return true;
         }
 
-        // "取字中…"的小提示：识别在后台跑，但得让用户看见"它在干活"（不显示的话还是像卡住）
+        // Lang.T("取字中…", "Recognising…")的小提示：识别在后台跑，但得让用户看见"它在干活"（不显示的话还是像卡住）
         void PaintOcrBusy(Graphics g)
         {
             if (!_ocrBusy) return;
-            string txt = "取字中…";
+            string txt = Lang.T("取字中…", "Recognising…");
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using (Font f = new Font("Microsoft YaHei UI", 11f * _k, FontStyle.Bold))
             {
@@ -1075,7 +1075,7 @@ namespace SnapWheel
             if (px == null) { try { crop.Dispose(); } catch { } _ocrBusy = false; return; }
             try { crop.Dispose(); } catch { }        // 像素到手，位图就可以扔了
 
-            Invalidate();                            // 让"取字中…"立刻显示出来
+            Invalidate();                            // 让Lang.T("取字中…", "Recognising…")立刻显示出来
             byte[] data = px; int w = pw, h = ph;
             System.Threading.Thread th = new System.Threading.Thread(new System.Threading.ThreadStart(delegate()
             {
@@ -1102,7 +1102,7 @@ namespace SnapWheel
             {
                 try
                 {
-                    MessageBox.Show(this, err ?? "识别失败了", "取字", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, err ?? Lang.T("识别失败了", "Recognition failed"), Lang.T("取字", "OCR"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch { }
                 return;

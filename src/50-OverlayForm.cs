@@ -144,7 +144,7 @@ namespace SnapWheel
             Panel panel = _infoPanel;
             PlaceInfoPanel();
 
-            Label l1 = new Label(); l1.Text = "宽"; l1.ForeColor = Color.White;
+            Label l1 = new Label(); l1.Text = Lang.T("宽", "W"); l1.ForeColor = Color.White;
             l1.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
             l1.Bounds = new Rectangle((int)(10 * _k), (int)(10 * _k), (int)(20 * _k), (int)(22 * _k)); panel.Controls.Add(l1);
             _inW = new TextBox(); _inW.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
@@ -153,7 +153,7 @@ namespace SnapWheel
             _inW.BorderStyle = BorderStyle.FixedSingle; _inW.TextAlign = HorizontalAlignment.Center;
             panel.Controls.Add(_inW);
 
-            Label l2 = new Label(); l2.Text = "高"; l2.ForeColor = Color.White;
+            Label l2 = new Label(); l2.Text = Lang.T("高", "H"); l2.ForeColor = Color.White;
             l2.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
             l2.Bounds = new Rectangle((int)(108 * _k), (int)(10 * _k), (int)(20 * _k), (int)(22 * _k)); panel.Controls.Add(l2);
             _inH = new TextBox(); _inH.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
@@ -163,14 +163,14 @@ namespace SnapWheel
             panel.Controls.Add(_inH);
 
             RoundButton apply = new RoundButton();
-            apply.Text = "应用"; apply.Size = new Size((int)(58 * _k), (int)(26 * _k)); apply.Location = new Point((int)(204 * _k), (int)(7 * _k));
+            apply.Text = Lang.T("应用", "Apply"); apply.Size = new Size((int)(58 * _k), (int)(26 * _k)); apply.Location = new Point((int)(204 * _k), (int)(7 * _k));
             apply.Fill = Color.FromArgb(0, 122, 204); apply.FillHover = Color.FromArgb(0, 140, 232);
             apply.Font = new Font("Microsoft YaHei UI", 9f * _k, FontStyle.Bold);
             apply.Click += new EventHandler(delegate(object o, EventArgs e2) { ApplySizeFromBoxes(); });
             panel.Controls.Add(apply);
 
             RoundButton reset = new RoundButton();
-            reset.Text = "角度归零"; reset.Size = new Size((int)(84 * _k), (int)(26 * _k)); reset.Location = new Point((int)(268 * _k), (int)(7 * _k));
+            reset.Text = Lang.T("角度归零", "Reset angle"); reset.Size = new Size((int)(84 * _k), (int)(26 * _k)); reset.Location = new Point((int)(268 * _k), (int)(7 * _k));
             reset.Fill = Color.FromArgb(70, 74, 84); reset.FillHover = Color.FromArgb(92, 98, 110);
             reset.Font = new Font("Microsoft YaHei UI", 9f * _k);
             reset.Click += new EventHandler(delegate(object o, EventArgs e2) { _ang = 0f; Invalidate(); SyncInfo(); });
@@ -214,7 +214,7 @@ namespace SnapWheel
             if (!_inW.Focused) _inW.Text = ((int)Math.Round(_sz.Width)).ToString();
             if (!_inH.Focused) _inH.Text = ((int)Math.Round(_sz.Height)).ToString();
             string a = ((int)Math.Round(_ang * 180f / (float)Math.PI)).ToString();
-            _lblAngle.Text = "角度 " + a + "°" + (_locked ? "　·　比例已锁定" : "") + (_hasSel ? "" : "　·　拖拽以框选");
+            _lblAngle.Text = Lang.T("角度 ", "Angle ") + a + "°" + (_locked ? Lang.T("　·　比例已锁定", " · aspect locked") : "") + (_hasSel ? "" : Lang.T("　·　拖拽以框选", " · drag to select"));
         }
 
         void AnimTick(object sender, EventArgs e)
@@ -296,7 +296,7 @@ namespace SnapWheel
         // ---------- 比例胶囊 ----------
         void MeasureChips()
         {
-            string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
+            string[] labels = { Lang.T("自由", "Free"), "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
             _chipW = new int[labels.Length];
             using (Font f = new Font("Microsoft YaHei UI", 10f * _k))
             using (Graphics g = CreateGraphics())
@@ -339,7 +339,7 @@ namespace SnapWheel
 
         void PlaceChips()
         {
-            string[] labels = { "自由", "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
+            string[] labels = { Lang.T("自由", "Free"), "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
             float[] ratios = { 0f, 1f, 16f / 9f, 9f / 16f, 4f / 3f, 3f / 4f, 21f / 9f };
             if (_chipW == null) MeasureChips();
             _toggleW = (int)Math.Round(92 * _k);
@@ -418,7 +418,7 @@ namespace SnapWheel
                 using (GraphicsPath p2 = Gfx.Round(tr, 9f))
                 using (Pen pen = new Pen(Color.FromArgb(130, 255, 255, 255), 1.2f))
                     g.DrawPath(pen, p2);
-                TextRenderer.DrawText(g, _chipsOpen ? "比例 ▼" : "比例 ▶", f, tr, Color.White,
+                TextRenderer.DrawText(g, _chipsOpen ? Lang.T("比例 ▼", "Ratio ▼") : Lang.T("比例 ▶", "Ratio ▶"), f, tr, Color.White,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
         }
@@ -505,7 +505,7 @@ namespace SnapWheel
                     g.DrawString(txt, f, fg, tx + 5, ty + 1);
                 }
 
-                string hint = "双击保存　·　拖角缩放　·　拖圆点旋转　·　Esc 取消";
+                string hint = Lang.T("双击保存　·　拖角缩放　·　拖圆点旋转　·　Esc 取消", "Double-click to save · corners resize · dot rotates · Esc cancels");
                 using (Font f2 = new Font("Microsoft YaHei UI", 10f * _k))
                 using (SolidBrush fg2 = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
                 using (SolidBrush bg2 = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
@@ -809,7 +809,7 @@ namespace SnapWheel
         {
             if (_shot == null || !_hasSel) { Close(); return; }
             EndText(true);                       // 还在输入框里的文字也算数
-            if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }   // 记住"文字底"的选择
+            if (_set != null) { try { _set.TextBg = _textBg; _set.Save(); } catch { } }   // 记住Lang.T("文字底", "Text background")的选择
             Result = CropSelection(true);
 
             // 顺手把这张图放进剪贴板。"截完立刻粘一次"（Win+Shift+S 之后 Ctrl+V）是最高频的用法，
