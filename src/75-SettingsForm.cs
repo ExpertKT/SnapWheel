@@ -37,6 +37,7 @@ namespace SnapWheel
         // ---- 第 1 页「行为与快捷键」 ----
         CheckBox _chkDisk, _chkAutoStart, _chkAuto, _chkTop, _chkClip, _chkCopy, _chkBalloon, _chkUpdate, _chkDragFile;
         CheckBox _chkKeep;                   // 拖出后是否在环上留一份（0.6.0）
+        ComboBox _cbLang;                    // 界面语言（0.6.0）
         TextBox _txtDir;
         NumericUpDown _numSec;
         ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch;
@@ -500,7 +501,7 @@ namespace SnapWheel
         void BuildPage1()
         {
             TableLayoutPanel g = _pages[0];
-            SetupRows(g, 9);   // 0.6.0：多了"拖出后保留一份"
+            SetupRows(g, 10);   // 0.6.0：多了"拖出后保留一份"
             Settings s = _s;
 
             g.Controls.Add(Section("行为"), 0, 0);
@@ -624,6 +625,24 @@ namespace SnapWheel
             _chkKeep.Text = "缩略图拖出去后，环上保留一份（关掉就是拖出去即从环上移走）";
             _chkKeep.Checked = s.KeepAfterDragOut;
             g.Controls.Add(Row(_chkKeep), 0, 8);
+
+            // 界面语言（0.6.0 第一轮 i18n）：启动时生效，切换后要重启
+            Label lbLang = new Label();
+            lbLang.AutoSize = true;
+            lbLang.Text = Lang.T("界面语言（切换后重启生效）", "Language (restart to apply)");
+            lbLang.ForeColor = Color.FromArgb(60, 64, 74);
+            _cbLang = new ComboBox();
+            _cbLang.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cbLang.Items.AddRange(new object[] { "中文", "English" });
+            _cbLang.SelectedIndex = (s.UiLanguage == "en") ? 1 : 0;
+            _cbLang.Width = S(150);
+            Panel langRow = new Panel();
+            langRow.AutoSize = true;
+            lbLang.Location = new Point(0, S(4));
+            _cbLang.Location = new Point(lbLang.PreferredWidth + S(10), S(1));
+            langRow.Controls.Add(lbLang);
+            langRow.Controls.Add(_cbLang);
+            g.Controls.Add(Row(langRow), 0, 9);
 
             _chkDragFile = new CheckBox();
             _chkDragFile.AutoSize = true;
@@ -1147,6 +1166,7 @@ namespace SnapWheel
                 s.CheckUpdate = _chkUpdate.Checked;
                 s.DragOutAsFile = _chkDragFile.Checked;
                 s.KeepAfterDragOut = _chkKeep.Checked;   // 0.6.0：拖出后是否留一份
+                s.UiLanguage = (_cbLang.SelectedIndex == 1) ? "en" : "zh";   // 0.6.0：界面语言
             }
             if (_built[1])
             {

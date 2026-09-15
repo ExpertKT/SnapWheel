@@ -44,6 +44,8 @@ namespace SnapWheel
         public bool IntroAnim = true;         // 启动时播开启动画
         // ---- 外观风格（新拟态 + 扁平化 + 毛玻璃）----
         public string UiStyle = "neu";        // neu=新拟态+毛玻璃(默认) / flat=纯扁平 / solid=高对比不透明
+        // 界面语言："zh" / "en"（0.6.0 第一轮 i18n；切换后重启生效）
+        public string UiLanguage = "zh";
         public int GlassPercent = 40;         // 玻璃面板不透明度 20..100
         public int CardRadius = 14;           // 卡片圆角（占最小边的百分比）0..30
         public int ShadowPercent = 55;        // 阴影强度 0..100
@@ -138,6 +140,7 @@ namespace SnapWheel
                         else if (k == "IntroSeen") s.IntroSeen = (v == "1");
                         else if (k == "IntroAnim") s.IntroAnim = (v == "1");
                         else if (k == "UiStyle" && (v == "neu" || v == "flat" || v == "solid")) s.UiStyle = v;
+                else if (k == "UiLanguage" && (v == "zh" || v == "en")) s.UiLanguage = v;
                         else if (k == "GlassPercent") { int n; if (int.TryParse(v, out n) && n >= 20 && n <= 100) s.GlassPercent = n; }
                         else if (k == "CardRadius") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 30) s.CardRadius = n; }
                         else if (k == "ShadowPercent") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 100) s.ShadowPercent = n; }
@@ -280,6 +283,7 @@ namespace SnapWheel
                 lines.Add("IntroSeen=" + (IntroSeen ? "1" : "0"));
                 lines.Add("IntroAnim=" + (IntroAnim ? "1" : "0"));
                 lines.Add("UiStyle=" + UiStyle);
+                lines.Add("UiLanguage=" + UiLanguage);
                 lines.Add("GlassPercent=" + GlassPercent);
                 lines.Add("CardRadius=" + CardRadius);
                 lines.Add("ShadowPercent=" + ShadowPercent);

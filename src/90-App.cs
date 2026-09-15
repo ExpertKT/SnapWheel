@@ -50,25 +50,27 @@ namespace SnapWheel
                 try { _tray.ShowBalloonTip(4000, "SnapWheel 快照轮环遇到一个问题（已记录）", msg, ToolTipIcon.Warning); }
                 catch { }
             };
+            Lang.Init(_settings.UiLanguage);   // 界面语言：启动时定，切换后重启生效
+
             ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("截图", null, new EventHandler(OnHotkey));
-            menu.Items.Add("导入图片…", null, new EventHandler(OnImport));
-            menu.Items.Add("新手引导", null, new EventHandler(OnGuide));
-            menu.Items.Add("重播开启动画", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
+            menu.Items.Add(Lang.T("截图", "Screenshot"), null, new EventHandler(OnHotkey));
+            menu.Items.Add(Lang.T("导入图片…", "Import images…"), null, new EventHandler(OnImport));
+            menu.Items.Add(Lang.T("新手引导", "Getting started"), null, new EventHandler(OnGuide));
+            menu.Items.Add(Lang.T("重播开启动画", "Replay startup animation"), null, new EventHandler(delegate(object o, EventArgs e) { _wheel.StartIntro(); }));
             if (Elev.Is)
-                menu.Items.Add("管理员模式说明…（拖拽为什么不动）", null, new EventHandler(OnAdminHelp));
-            menu.Items.Add("显示/隐藏轮盘", null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
-            menu.Items.Add("关掉所有贴图", null, new EventHandler(delegate(object o, EventArgs e) { CloseAllPins(); }));
-            menu.Items.Add("取字：识别剪贴板里的图", null, new EventHandler(OnOcrClipboard));
-            menu.Items.Add("撤销上一次删除", null, new EventHandler(OnUndoDelete));
-            menu.Items.Add("管理 Wheel…", null, new EventHandler(OnWheels));
-            menu.Items.Add("反馈 / 报告问题…", null, new EventHandler(OnFeedback));
-            menu.Items.Add("设置…", null, new EventHandler(OnSettings));
-            menu.Items.Add("打开项目主页", null, new EventHandler(delegate(object o, EventArgs e) {
+                menu.Items.Add(Lang.T("管理员模式说明…（拖拽为什么不动）", "Admin mode… (why dragging does not work)"), null, new EventHandler(OnAdminHelp));
+            menu.Items.Add(Lang.T("显示/隐藏轮盘", "Show / hide the ring"), null, new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); }));
+            menu.Items.Add(Lang.T("关掉所有贴图", "Close all pinned images"), null, new EventHandler(delegate(object o, EventArgs e) { CloseAllPins(); }));
+            menu.Items.Add(Lang.T("取字：识别剪贴板里的图", "OCR the clipboard image"), null, new EventHandler(OnOcrClipboard));
+            menu.Items.Add(Lang.T("撤销上一次删除", "Undo last delete"), null, new EventHandler(OnUndoDelete));
+            menu.Items.Add(Lang.T("管理 Wheel…", "Manage wheels…"), null, new EventHandler(OnWheels));
+            menu.Items.Add(Lang.T("反馈 / 报告问题…", "Feedback / report a problem…"), null, new EventHandler(OnFeedback));
+            menu.Items.Add(Lang.T("设置…", "Settings…"), null, new EventHandler(OnSettings));
+            menu.Items.Add(Lang.T("打开项目主页", "Open project page"), null, new EventHandler(delegate(object o, EventArgs e) {
                 try { System.Diagnostics.Process.Start("https://github.com/" + AppInfo.Repo); } catch { }
             }));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("退出", null, new EventHandler(delegate(object o, EventArgs e) { Quit(); }));
+            menu.Items.Add(Lang.T("退出", "Exit"), null, new EventHandler(delegate(object o, EventArgs e) { Quit(); }));
             _tray.ContextMenuStrip = menu;
             _tray.DoubleClick += new EventHandler(delegate(object o, EventArgs e) { _wheel.ToggleWheel(); });
 
