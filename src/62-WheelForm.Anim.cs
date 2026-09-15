@@ -576,7 +576,14 @@ namespace SnapWheel
             }
             else if (_delHalf != -1) { _delHalf = -1; need = true; }
 
-            if (_settings.AutoHide && !_collapsed && _targetShow > 0.5f && _show > 0.99f && !_intro)
+            // 安全阀：正常使用不会抑制超过 2 分钟，超时说明有人忘了减一，强制清零自愈
+            if (SuppressAutoHide > 0)
+            {
+                if (_suppressHideSeen == 0) _suppressHideSeen = Environment.TickCount;
+                else if (Environment.TickCount - _suppressHideSeen > 120000) { SuppressAutoHide = 0; _suppressHideSeen = 0; }
+            }
+            else _suppressHideSeen = 0;
+            if (SuppressAutoHide == 0 && _settings.AutoHide && !_collapsed && _targetShow > 0.5f && _show > 0.99f && !_intro)
                 if ((DateTime.Now - _lastActive).TotalSeconds > _settings.AutoHideSeconds) DismissWheel();
 
             if (_show <= 0.002f && _targetShow <= 0.002f)

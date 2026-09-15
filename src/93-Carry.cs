@@ -48,6 +48,10 @@ namespace SnapWheel
         /// <summary>放下的位置（屏幕坐标）。</summary>
         public Point DropPoint;
 
+        // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
+        // true = 用的是「复制到剪贴板」，而不是模拟拖放（对键盘用户更顺，也更可靠）
+        public bool UseClipboard;
+
         public CarryForm(Bitmap thumb, Point origin)
         {
             _thumb = thumb;
@@ -131,6 +135,7 @@ namespace SnapWheel
                 }
 
                 if (Down(Keys.Enter) || Down(Keys.Space)) { DoDrop(); return; }
+                if (Down(Keys.C)) { UseClipboard = true; DoDrop(); return; }   // 复制到剪贴板（不模拟拖放）
                 if (Down(Keys.Escape)) { Cancel(); return; }
             }
             catch { }
@@ -184,12 +189,12 @@ namespace SnapWheel
                 Thread.Sleep(60);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
 
-                int steps = 14;
+                int steps = 22;      // 步数多一些、每步慢一些，更像人手（一步跳过去多数程序不认）
                 for (int i = 1; i <= steps; i++)
                 {
                     Point p = StepPoint(from, to, i, steps);
                     Native.SetCursorPos(p.X, p.Y);
-                    Thread.Sleep(14);
+                    Thread.Sleep(20);
                 }
                 Thread.Sleep(80);
                 Native.mouse_event(Native.MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);

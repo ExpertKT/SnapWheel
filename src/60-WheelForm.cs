@@ -72,7 +72,14 @@ namespace SnapWheel
         // 置顶抑制计数：>0 时不做周期置顶（截图/设置/打赏/引导期间）。用计数而不是布尔，
         // 这样多处嵌套也不会互相把对方的状态冲掉。
         public static int SuppressTopMost = 0;
+
+        // 传递模式期间抑制"空闲自动收起"。轮盘默认 8 秒不活动就隐藏，
+        // 而传递模式恰恰要求用户自己切屏过去（动不动就超过 8 秒）——
+        // 轮盘一藏，放下的"起点"就落在一片空桌面上，拖放从根上不会开始。
+        // （用户实测"鼠标真的动了、但目标程序不认"，根因就是这个。）
+        public static int SuppressAutoHide = 0;
         static int _suppressSeen = 0;      // 安全阀：抑制计数开始 > 0 的时刻
+        static int _suppressHideSeen = 0;  // 自动收起抑制的安全阀（同上）
         // 三个小按钮的发光进度（0..1 平滑趋近）：悬停时光是淡进来的，不是啪一下亮（用户反馈）
         float _closeGlow = 0f, _gearGlow = 0f, _shootGlow = 0f;   // 上一次校验置顶的时间（见 AnimTick）        // 只给被删那张及其上方的图加补偿：下面的图本来就不该动
         // ---- 省电模式（见 12-Power.cs）----
