@@ -46,7 +46,7 @@ namespace SnapWheel
                 Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口 · 0.6.0 强化", "ocr.png", false);
                 Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "promo_menu.png", false);
                 Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "promo_intro.png", false);
-                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "完整版 / 无万能键版都在 Releases · Windows 免安装", "settings.png", false);
+                Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "完整版 / 无万能键版都在 Releases", "settings.png", false);
                 Merge();
                 Console.WriteLine("完成：9 张图 + 一张九宫格总览已输出到 " + outDir);
             }
