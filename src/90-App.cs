@@ -370,10 +370,24 @@ namespace SnapWheel
             // 目标程序才会认为图是从轮盘里拖出来的。
             // 起点：那张缩略图在屏幕上的真实位置。模拟拖放要从这里「按下」——
             // 有些程序要求按下点确实落在图上，用窗口中心当起点它们不认。
+            //
+            // ⚠️ 必须把矩形**和屏幕求交集**再取中心：
+            // 轮盘贴在屏幕底部，窗口常有一部分在屏幕外（实测起点算出来是 Y=1199，而虚拟屏幕只有 1152 高）。
+            // 直接用中心的话，SetCursorPos 会把光标夹到屏幕边缘，"按下"就落在空白处 ——
+            // 鼠标看着动了，但拖放永远不会启动。取"可见部分"的中心就不会出屏幕。
             Rectangle itemRect = _wheel.ItemScreenRect(idx);
-            Point origin = (itemRect.Width > 2)
-                ? new Point(itemRect.X, itemRect.Y)                                            // Rectangle.X/Y 存的是中心
-                : new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);   // 拿不到就退回中心
+            Point origin;
+            if (itemRect.Width > 2)
+            {
+                Rectangle vis = Rectangle.Intersect(itemRect, SystemInformation.VirtualScreen);
+                origin = (vis.Width > 2 && vis.Height > 2)
+                    ? new Point(vis.X + vis.Width / 2, vis.Y + vis.Height / 2)
+                    : new Point(itemRect.X, itemRect.Y);
+            }
+            else
+            {
+                origin = new Point(_wheel.Left + _wheel.Width / 2, _wheel.Top + _wheel.Height / 2);   // 拿不到就退回中心
+            }
 
             CarryForm cf = new CarryForm(thumb, origin);
             // 把轮盘句柄交给传递模式：模拟拖放前它要先把轮盘拉到前台，
