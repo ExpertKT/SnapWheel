@@ -38,7 +38,7 @@ namespace SnapWheel
 
             try
             {
-                Shot(1, "快照轮环", "截图不落文件，直接变成屏幕角上的一张卡", "拖一下就发出去", "promo_wheel.png", true);
+                Shot(1, "快照轮环", "截图不落文件", "直接变成屏幕角上的一张卡，拖一下就发出去", "", true);
                 Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_bl.png", false);
                 Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "promo_drop.png", false);
                 Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停 · 0.6.0 新增", "wheel_empty.png", false);
@@ -90,7 +90,7 @@ namespace SnapWheel
                 { g.DrawString(line1, fl, sb, 84, y); }
                 using (Font fs = new Font(FONT, 28))
                 using (SolidBrush sb = new SolidBrush(Sub))
-                { g.DrawString(line2, fs, sb, 84, y + (hero ? 66 : 58)); }
+                { g.DrawString(line2, fs, sb, 84, y + (hero ? 78 : 58)); }
 
                 // 右上角标（hero 打新，其它打卖点）
                 if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 84, y + 112, 24);
