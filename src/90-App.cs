@@ -350,7 +350,17 @@ namespace SnapWheel
 
             StoreItem item = st.Items[idx];
             Bitmap thumb = MakeCarryThumb(item.Image, 132, 99);
-            if (thumb == null) return;
+            if (thumb == null)
+            {
+                // 图拿不到（Image 已被释放、或这张本来就不是有效的图）——
+                // 必须明确说出来。原来是静默 return，用户看到的就是"按了传递模式，什么都没发生"，
+                // 完全不知道发生了什么（这条是用户"重新截一张图就能用了"反馈出来的）。
+                MessageBox.Show(_wheel,
+                    Lang.T("这一张图取不到内容，没法传递。换一张（用滚轮换），或者重新截一张。",
+                           "This image has no usable content, so it cannot be carried. Pick another one (scroll) or capture again."),
+                    AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
             // 起点：轮盘上那张缩略图大致所在的位置。模拟拖放时要从这里"按下"，
             // 目标程序才会认为图是从轮盘里拖出来的。
