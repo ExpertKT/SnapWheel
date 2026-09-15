@@ -84,7 +84,7 @@ namespace SnapWheel
                 using (SolidBrush sb = new SolidBrush(Color.White))
                     TextRenderer.DrawText(g, title, ft, new Point(80, hero ? 300 : 216), Color.White, TextFormatFlags.NoPadding);
 
-                int y = hero ? 444 : 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
+                int y = hero ? 416 : 330;   // 主图是纯文字封面：标题(底约390)与第一行之间要留出呼吸感   // 主图文案再上移 30：它的副文案底原本到 536，比卡片顶(526)多出 10px      // 固定行位置：标题底(约300) 之下，所有图的说明文字落在同一条线上
                 using (Font fl = new Font(FONT, hero ? 40 : 36))
                 using (SolidBrush sb = new SolidBrush(Color.FromArgb(228, 236, 244, 252)))
                 { g.DrawString(line1, fl, sb, 84, y); }
@@ -103,7 +103,7 @@ namespace SnapWheel
                     // 所有图的界面渲染放进**同一条横向带**：同高上限、水平居中、带内垂直居中 ——
                     // 原来按各自比例算尺寸和位置，九张摆一起就是参差不齐的，图1 的卡片还会压住文案。
                     const int bandTop = 548, bandH = 440;
-                    float s = Math.Min((float)(1080 - 240) / im.Width, (float)bandH / im.Height);
+                    float s = Math.Min((float)(1080 - 120) / im.Width, (float)bandH / im.Height);   // 宽度上限放宽：只有很宽的图才受它限制，其余都能撑满 440 高
                     int dw = (int)(im.Width * s), dh = (int)(im.Height * s);
                     int dx = (1080 - dw) / 2;
                     int dy = bandTop + (bandH - dh) / 2;
