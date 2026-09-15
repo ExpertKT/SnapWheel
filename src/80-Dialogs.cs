@@ -168,7 +168,7 @@ namespace SnapWheel
             y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
 
             string nw = markNew ? Lang.T("【新】", "[NEW]") : "";
-            AddTip(mL, ref y, Lang.T("第 1 步：截一张", "Step 1: capture"), "按 " + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
+            AddTip(mL, ref y, Lang.T("第 1 步：截一张", "Step 1: capture"), Lang.T("按 ", "Press ") + Settings.Load().Hotkey + " 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。");
             AddTip(mL, ref y, nw + Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
             AddTip(mL, ref y, Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
             AddTip(mL, ref y, nw + Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));

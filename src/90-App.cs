@@ -426,7 +426,12 @@ namespace SnapWheel
             catch { shot.Dispose(); if (wasExpanded) _wheel.ExpandWheel(); return; }
 
             OverlayForm ov = new OverlayForm(vs, shot, _settings);
-            ov.ShowDialog();
+            // 浮层必须是前台：轮盘每 2 秒的周期置顶会把它压下去（用户报的"截图时页面不在最顶层"），
+            // 所以先让轮盘退出置顶，截完再恢复。
+            bool wtWas = _wheel.TopMost;
+            _wheel.TopMost = false;
+            try { ov.ShowDialog(); }
+            finally { try { _wheel.TopMost = wtWas; } catch { } }
             if (ov.WantLongShot)
             {
                 // 0.6.0：在截图浮层里点了「长图」—— 带着他框的那块区域去跑滚动长截图

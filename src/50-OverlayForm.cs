@@ -361,8 +361,10 @@ namespace SnapWheel
                 rowY = (int)bb.Bottom + (int)(14 * _k);
                 // 展开后会变宽、而且和工具栏抢同一条位置（都在选区下方）—— 重叠时往下让开，
                 // 否则一展开就把工具栏盖住（用户反馈"比例的展开会遮挡工具栏"）。
-                if (_panelBounds.Height > 0 && rowY < _panelBounds.Bottom + (int)(8 * _k))
-                    rowY = _panelBounds.Bottom + (int)(8 * _k);
+                    // 避开的是**工具栏** _toolRect，不是 _panelBounds —— 后者是比例胶囊自己上一帧的矩形，
+                    // 拿它比较等于没比（用户反馈比例 bug 没修复）。
+                    if (_toolRect.Width > 0 && rowY + h > _toolRect.Top && rowY < _toolRect.Bottom + (int)(8 * _k))
+                        rowY = _toolRect.Bottom + (int)(8 * _k);
                 if (rowY + h > cb - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
             }
             else
