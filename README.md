@@ -1,4 +1,4 @@
-# SnapWheel：快照轮环
+# “Maybe the best screenshot tool out there” — SnapWheel：快照轮环
 
 **English** ・ [中文说明](#中文说明)
 
