@@ -118,21 +118,6 @@ namespace SnapWheel
             catch { return virtualScreen; }
         }
 
-        // 把"贴屏幕右上角"换算成浮层客户坐标（纯计算，方便测）
-        internal static Rectangle InfoPanelRect(Rectangle virtualScreen, Rectangle screen, int panelW, int panelH)
-        {
-            int margin = 20;
-            int x = (screen.Right - virtualScreen.Left) - panelW - margin;
-            int y = (screen.Top - virtualScreen.Top) + 18;
-            // 夹进这块屏幕里（别压出屏幕边）
-            int minX = screen.Left - virtualScreen.Left, minY = screen.Top - virtualScreen.Top;
-            int maxX = (screen.Right - virtualScreen.Left) - panelW, maxY = (screen.Bottom - virtualScreen.Top) - panelH;
-            if (x < minX) x = minX;
-            if (x > maxX) x = maxX;
-            if (y < minY) y = minY;
-            if (y > maxY) y = maxY;
-            return new Rectangle(x, y, panelW, panelH);
-        }
 
         // 开双缓冲的 Panel：_infoPanel 是实心不透明面板，而浮层会频繁重绘，
         // 没有自己的双缓冲就会和窗体交界处闪烁（用户反馈的"右上角尺寸面板一直在闪"）。
@@ -145,58 +130,6 @@ namespace SnapWheel
             }
         }
 
-        void BuildInfoPanel()
-        {
-            _infoPanel = new BufferedPanel();
-            _panelW = (int)(400 * _k);
-            _panelH = (int)(40 * _k);
-            _infoPanel.BackColor = Color.FromArgb(210, 18, 20, 24);
-            Controls.Add(_infoPanel);
-            Panel panel = _infoPanel;
-            PlaceInfoPanel();
-
-            Label l1 = new Label(); l1.Text = Lang.T("宽", "W"); l1.ForeColor = Color.White;
-            l1.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
-            l1.Bounds = new Rectangle((int)(10 * _k), (int)(10 * _k), (int)(20 * _k), (int)(22 * _k)); panel.Controls.Add(l1);
-            _inW = new TextBox(); _inW.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
-            _inW.Bounds = new Rectangle((int)(32 * _k), (int)(8 * _k), (int)(66 * _k), (int)(24 * _k));
-            _inW.BackColor = Color.FromArgb(38, 40, 46); _inW.ForeColor = Color.White;
-            _inW.BorderStyle = BorderStyle.FixedSingle; _inW.TextAlign = HorizontalAlignment.Center;
-            panel.Controls.Add(_inW);
-
-            Label l2 = new Label(); l2.Text = Lang.T("高", "H"); l2.ForeColor = Color.White;
-            l2.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
-            l2.Bounds = new Rectangle((int)(108 * _k), (int)(10 * _k), (int)(20 * _k), (int)(22 * _k)); panel.Controls.Add(l2);
-            _inH = new TextBox(); _inH.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
-            _inH.Bounds = new Rectangle((int)(130 * _k), (int)(8 * _k), (int)(66 * _k), (int)(24 * _k));
-            _inH.BackColor = Color.FromArgb(38, 40, 46); _inH.ForeColor = Color.White;
-            _inH.BorderStyle = BorderStyle.FixedSingle; _inH.TextAlign = HorizontalAlignment.Center;
-            panel.Controls.Add(_inH);
-
-            RoundButton apply = new RoundButton();
-            apply.Text = Lang.T("应用", "Apply"); apply.Size = new Size((int)(58 * _k), (int)(26 * _k)); apply.Location = new Point((int)(204 * _k), (int)(7 * _k));
-            apply.Fill = Color.FromArgb(0, 122, 204); apply.FillHover = Color.FromArgb(0, 140, 232);
-            apply.Font = new Font("Microsoft YaHei UI", 9f * _k, FontStyle.Bold);
-            apply.Click += new EventHandler(delegate(object o, EventArgs e2) { ApplySizeFromBoxes(); });
-            panel.Controls.Add(apply);
-
-            RoundButton reset = new RoundButton();
-            reset.Text = Lang.T("角度归零", "Reset angle"); reset.Size = new Size((int)(84 * _k), (int)(26 * _k)); reset.Location = new Point((int)(268 * _k), (int)(7 * _k));
-            reset.Fill = Color.FromArgb(70, 74, 84); reset.FillHover = Color.FromArgb(92, 98, 110);
-            reset.Font = new Font("Microsoft YaHei UI", 9f * _k);
-            reset.Click += new EventHandler(delegate(object o, EventArgs e2) { _ang = 0f; Invalidate(); SyncInfo(); });
-            panel.Controls.Add(reset);
-
-            _lblAngle = new Label();
-            _lblAngle.ForeColor = Color.FromArgb(170, 176, 186);
-            _lblAngle.Font = new Font("Microsoft YaHei UI", 9.5f * _k);
-            _lblAngle.Bounds = new Rectangle((int)(10 * _k), (int)(34 * _k), (int)(380 * _k), (int)(20 * _k));
-            panel.Controls.Add(_lblAngle);
-            panel.Height = (int)(58 * _k);
-
-            _inW.KeyDown += new KeyEventHandler(OnBoxKey);
-            _inH.KeyDown += new KeyEventHandler(OnBoxKey);
-        }
 
         void OnBoxKey(object sender, KeyEventArgs e)
         {
@@ -204,29 +137,7 @@ namespace SnapWheel
             else if (e.KeyCode == Keys.Escape) { Cancel(); }
         }
 
-        void ApplySizeFromBoxes()
-        {
-            int w, h;
-            if (!int.TryParse(_inW.Text.Trim(), out w)) w = (int)Math.Round(_sz.Width);
-            if (!int.TryParse(_inH.Text.Trim(), out h)) h = (int)Math.Round(_sz.Height);
-            w = Math.Max(2, Math.Min(_vs.Width, w));
-            h = Math.Max(2, Math.Min(_vs.Height, h));
-            float r = EffRatio();
-            if (r > 0f) h = Math.Max(2, (int)Math.Round(w / r));
-            if (!_hasSel) { _hasSel = true; _c = new PointF(_vs.Width / 2f, _vs.Height / 2f); }
-            _sz = new SizeF(w, h);
-            ClampCenter();
-            SyncInfo();
-            Invalidate();
-        }
 
-        void SyncInfo()
-        {
-            if (!_inW.Focused) _inW.Text = ((int)Math.Round(_sz.Width)).ToString();
-            if (!_inH.Focused) _inH.Text = ((int)Math.Round(_sz.Height)).ToString();
-            string a = ((int)Math.Round(_ang * 180f / (float)Math.PI)).ToString();
-            _lblAngle.Text = Lang.T("角度 ", "Angle ") + a + "°" + (_locked ? Lang.T("　·　比例已锁定", " · aspect locked") : "") + (_hasSel ? "" : Lang.T("　·　拖拽以框选", " · drag to select"));
-        }
 
         void AnimTick(object sender, EventArgs e)
         {
@@ -311,157 +222,9 @@ namespace SnapWheel
             else { if (_c.Y < hh) _c.Y = hh; if (_c.Y > _vs.Height - hh) _c.Y = _vs.Height - hh; }
         }
 
-        // ---------- 比例胶囊 ----------
-        void MeasureChips()
-        {
-            string[] labels = { Lang.T("自由", "Free"), "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
-            _chipW = new int[labels.Length];
-            using (Font f = new Font("Microsoft YaHei UI", 10f * _k))
-            using (Graphics g = CreateGraphics())
-                for (int i = 0; i < labels.Length; i++)
-                    _chipW[i] = (int)g.MeasureString(labels[i], f).Width + (int)(22 * _k);
-        }
 
-        // 把信息面板摆到"当前这块屏幕"的右上角；**被选区盖住时挪到选区外面**（上 → 下）。
-        // 关键是"没被盖住就别动"：拖选区的时候位置一直变，面板跟着跳会很晕。
-        void PlaceInfoPanel()
-        {
-            if (_infoPanel == null) return;
-            Point refPt = _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty;
-            Rectangle scr = ScreenFor(_vs, refPt, _hasSel);
-            Rectangle want = InfoPanelRect(_vs, scr, _panelW, _panelH);
 
-            if (_hasSel)
-            {
-                RectangleF sb = SelBounds();
-                Rectangle cur = new Rectangle(_infoPanel.Left, _infoPanel.Top, _panelW, _panelH);
-                // 现在的位置没被盖住 → 保持不变
-                if (cur.Width > 0 && !cur.IntersectsWith(Rectangle.Round(sb))) { _panelBounds = cur; return; }
-                int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top, cb = scr.Bottom - _vs.Top;
-                int above = (int)sb.Top - _panelH - 10;
-                int below = (int)sb.Bottom + 10;
-                if (above >= ct + 8) want.Y = above;
-                else if (below + _panelH <= cb - 8) want.Y = below;
-                else { _panelBounds = cur; return; }      // 上下都没地方：保持原位（配合工具条变淡，不至于太挡）
-                if (want.X + _panelW > scr.Right - _vs.Left - 12) want.X = scr.Right - _vs.Left - 12 - _panelW;
-                int minX = scr.Left - _vs.Left + 12;
-                if (want.X < minX) want.X = minX;
-            }
-            if (_infoPanel.Bounds != want)
-            {
-                _infoPanel.Bounds = want;
-                try { Invalidate(); } catch { }
-            }
-            _panelBounds = want;
-        }
 
-        void PlaceChips()
-        {
-            string[] labels = { Lang.T("自由", "Free"), "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
-            float[] ratios = { 0f, 1f, 16f / 9f, 9f / 16f, 4f / 3f, 3f / 4f, 21f / 9f };
-            if (_chipW == null) MeasureChips();
-            _toggleW = (int)Math.Round(92 * _k);
-            int h = (int)Math.Round(32 * _k), gap = (int)Math.Round(8 * _k);
-            int chipsW = 0;
-            for (int i = 0; i < _chipW.Length; i++) chipsW += _chipW[i] + gap;
-            chipsW -= gap;
-            int totalW = _toggleW + gap + chipsW;
-
-            int rowX, rowY;
-            // 一直贴"当前这块屏幕"（而不是整个虚拟屏幕）—— 双屏时胶囊才不会卡在两屏中间
-            Rectangle scr = ScreenFor(_vs, _hasSel ? new Point((int)_c.X, (int)_c.Y) : Point.Empty, _hasSel);
-            int cl = scr.Left - _vs.Left, ct = scr.Top - _vs.Top;      // 这块屏幕在客户坐标里的左上角
-            int cr = scr.Right - _vs.Left, cb = scr.Bottom - _vs.Top;
-            if (_hasSel)
-            {
-                RectangleF bb = SelBounds();
-                rowX = (int)bb.Left;
-                rowY = (int)bb.Bottom + (int)(14 * _k);
-                // 展开后会变宽、而且和工具栏抢同一条位置（都在选区下方）—— 重叠时往下让开，
-                // 否则一展开就把工具栏盖住（用户反馈"比例的展开会遮挡工具栏"）。
-                    // 避开的是**工具栏** _toolRect，不是 _panelBounds —— 后者是比例胶囊自己上一帧的矩形，
-                    // 拿它比较等于没比（用户反馈比例 bug 没修复）。
-                    if (_toolRect.Width > 0 && rowY + h > _toolRect.Top && rowY < _toolRect.Bottom + (int)(8 * _k))
-                        rowY = _toolRect.Bottom + (int)(8 * _k);
-                if (rowY + h > cb - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
-            }
-            else
-            {
-                rowX = cl + (scr.Width - totalW) / 2;
-                rowY = cb - h - (int)(44 * _k);
-            }
-            if (rowX < cl + 10) rowX = cl + 10;
-            if (rowX + totalW > cr - 10) rowX = cr - 10 - totalW;
-            if (rowY < ct + 10) rowY = ct + 10;
-            if (rowY + h > cb - 10) rowY = cb - 10 - h;
-
-            _toggleRect = new Rectangle(rowX, rowY, _toggleW, h);
-            int x = rowX + _toggleW + gap;
-            _chips = new Chip[labels.Length];
-            for (int i = 0; i < labels.Length; i++)
-            {
-                _chips[i].Label = labels[i];
-                _chips[i].Ratio = ratios[i];
-                _chips[i].Rect = new Rectangle(x, rowY, _chipW[i], h);
-                x += _chipW[i] + gap;
-            }
-            _panelBounds = new Rectangle(rowX, rowY, totalW, h);
-        }
-
-        void DrawChips(Graphics g)
-        {
-            // 没框选就没有比例可设：不显示胶囊，免得按钮悬在半空（原来按展开后的总宽居中，收起时按钮偏左）
-            if (!_hasSel) { _toggleRect = Rectangle.Empty; _panelBounds = Rectangle.Empty; return; }
-            PlaceChips();
-            PlaceInfoPanel();
-            if (_chips == null) return;
-            using (Font f = new Font("Microsoft YaHei UI", 10f * _k))
-            {
-                int shift = (int)((1f - _chipsT) * 26f);
-                int al = (int)(255 * _chipsT);
-                if (_chipsT > 0.01f)
-                {
-                    foreach (Chip c in _chips)
-                    {
-                        bool act = (_ratio > 0f && Math.Abs(c.Ratio - _ratio) < 0.001f) || (c.Ratio == 0f && _ratio == 0f && !_locked);
-                        Rectangle r = new Rectangle(c.Rect.X - shift, c.Rect.Y, c.Rect.Width, c.Rect.Height);
-                        using (GraphicsPath p = Gfx.Round(r, 8f))
-                        using (SolidBrush b = new SolidBrush(act
-                            ? Color.FromArgb((int)(235 * _chipsT), 0, 122, 204)
-                            : Color.FromArgb((int)(185 * _chipsT), 22, 24, 28)))
-                            g.FillPath(b, p);
-                        using (GraphicsPath p2 = Gfx.Round(r, 8f))
-                        using (Pen pen = new Pen(Color.FromArgb((int)((act ? 255 : 120) * _chipsT), 255, 255, 255), 1.2f))
-                            g.DrawPath(pen, p2);
-                        // 用 DrawString（GDI+）而不是 TextRenderer：GDI 不认半透明色，alpha 被忽略，
-                        // 收起时字不会渐隐、到某一帧直接消失（用户反馈"没有动画过渡"）。
-                        StringFormat sfC = new StringFormat();
-                        sfC.Alignment = StringAlignment.Center;
-                        sfC.LineAlignment = StringAlignment.Center;
-                        using (SolidBrush tb = new SolidBrush(Color.FromArgb(al, 255, 255, 255)))
-                            g.DrawString(c.Label, f, tb, new RectangleF(r.X, r.Y, r.Width, r.Height), sfC);
-                    }
-                }
-                Rectangle tr = _toggleRect;
-                using (GraphicsPath p = Gfx.Round(tr, 9f))
-                using (SolidBrush b = new SolidBrush(_chipsOpen ? Color.FromArgb(225, 0, 122, 204) : Color.FromArgb(185, 22, 24, 28)))
-                    g.FillPath(b, p);
-                using (GraphicsPath p2 = Gfx.Round(tr, 9f))
-                using (Pen pen = new Pen(Color.FromArgb(130, 255, 255, 255), 1.2f))
-                    g.DrawPath(pen, p2);
-                // ⚠️ 这里必须用 DrawString（GDI+），**不能**用 TextRenderer（GDI）：
-                //   实测在 2560x1440 的目标位图上，TextRenderer.DrawText 单次要 9.2ms，
-                //   而 DrawString 只要 0.015ms —— 相差约 600 倍。原因：GDI 的 DrawText 会沿
-                //   着整个目标表面处理裁剪区域，位图越大越慢；GDI+ 与目标大小无关。
-                //   这一处就是"比例动画卡顿"的真正元凶（DrawChips 整体 8.2ms 几乎全在这）。
-                StringFormat sfT = new StringFormat();
-                sfT.Alignment = StringAlignment.Center;
-                sfT.LineAlignment = StringAlignment.Center;
-                using (SolidBrush tbT = new SolidBrush(Color.White))
-                    g.DrawString(_chipsOpen ? Lang.T("比例 ▼", "▼") : Lang.T("比例 ▶", "▶"), f, tbT,
-                        new RectangleF(tr.X, tr.Y, tr.Width, tr.Height), sfT);
-            }
-        }
 
         // ---------- 绘制 ----------
         protected override void OnPaint(PaintEventArgs e)
