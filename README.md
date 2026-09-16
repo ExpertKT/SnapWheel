@@ -105,9 +105,9 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.2-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.3-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-284%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-343%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
@@ -127,9 +127,28 @@ MIT — see [LICENSE](LICENSE).
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 215 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 343 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
-## 这次更新（v0.9.2）
+## 这次更新（v0.9.3）
+
+这一版**不加新功能，只做收尾修复** —— 目标是进「稳定期」前的最后一轮打磨。
+
+| 修的东西 | 一句话 |
+|---|---|
+| **标注工具条：`A-` / `A+` 被挡住** | 字母 `A` 占满整个按钮居中，而减号/加号画在右侧，**两者压在一起**。现在 `A` 缩到左边 3/4 |
+| **标注工具条：撤销图标"异常"** | 用了两轮字符都不行：`↶` 天生只占半格；`⟲` 在对照图里 24pt 很漂亮，但**按钮里只有 17pt，字形被 hinting 简化成"半圆 + 一竖"**。结论是小字号下不该依赖字体字形 —— 改成**手绘**开口圆环 + 向左箭头 |
+| **工具条文字发虚** | `T` / `A` / `字` 是白字深底，ClearType 的彩色次像素边会渲染出红蓝描边，放大看像"字歪了、有重影"。工具条内改用灰度抗锯齿 |
+| **长图图标顶出按钮框** | 上下箭头原来画到 `±14`，而按钮内高只有约 26px |
+| **绘制层一个"整行不画"的隐藏 bug** | 框高比字体实际高度小 1.2px 时，`DrawString` **不裁切、不缩小，而是什么都不画**。已经在 `Font.Height + 2` 兜住，并加了 6 字号 × 6 框高的回归测试 |
+| **`Esc` 取消传递时更有交代** | 缩略图不再瞬间消失，而是**飞回环上**（缓动 + 淡出 + 缩小，320ms） |
+| **测试里的假 FAIL** | 断言写死的"工具条 14 个按钮"是 0.6 之前的旧数，加长图/另存为/emoji 后一直在白报错 —— 改成直接读源码里的常量 |
+
+另外补了两个**「出图验收」工具**，专治"读代码看不出来、量一下就见"的问题：
+
+- `tests/toolbar-zoom.cs` —— 把工具条裁出来**放大 6 倍**出 PNG。工具条按钮只有 34×30 像素，看整屏图根本看不清图标，之前两轮"图标异常"就是靠肉眼猜的，一次也没看准。
+- `tests/ui-probe.cs` —— 把子控件矩形统一换算到窗口坐标系后**两两求交**，专测控件重叠。
+
+## v0.9.x 主要功能
 
 | 新东西 | 一句话 |
 |---|---|
