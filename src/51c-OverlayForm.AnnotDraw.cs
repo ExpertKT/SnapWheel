@@ -236,9 +236,17 @@ namespace SnapWheel
                     case IdxSizeDown:   // A-
                 case IdxSizeUp:     // A+
                         {
+                            // 用"矩形 + StringFormat 居中"来画，和旁边 T / 字 一致。
+                            // 原来用的是 g.DrawString("A", f, b, x, y) —— 那个重载是**左上角定位**、
+                            // 不参与垂直居中，所以 A 看起来偏下、也歪（用户反馈"两个字体大小都偏下歪了"）。
                             using (Font f = new Font("Microsoft YaHei UI", 13f * _k, FontStyle.Bold))
                             using (SolidBrush b = new SolidBrush(ic))
-                                g.DrawString("A", f, b, d2.Left - 1 * _k, d2.Top - 1 * _k);
+                            {
+                                StringFormat sfA = new StringFormat();
+                                sfA.Alignment = StringAlignment.Center;
+                                sfA.LineAlignment = StringAlignment.Center;
+                                g.DrawString("A", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfA);
+                            }
                             using (Pen p = new Pen(ic, 1.8f * _k))
                             {
                                 float mx = d2.Right - 2 * _k, my = d2.Top + d2.Height * 0.34f;
@@ -300,24 +308,17 @@ namespace SnapWheel
                         }
                         break;
                     default:     // 撤销
-                        // 原来的画法有问题（用户反馈"图标偏移、异常"）：
-                        //   弧的矩形下移了 15%、高度只给 90%，而箭头的两根线是**硬编码在左上角**的 ——
-                        //   两者对不上，于是箭头飘在弧外面、弧本身又整体偏下。
-                        // 现在按几何来：先算弧的端点，箭头就画在端点上，保证永远接得住。
-                        using (Pen p = new Pen(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255), 2f * _k))
+                        // 直接用字体里的 ↶ 字符。
+                        // 之前是手绘"圆弧 + 两条箭头线"，但线的坐标和弧的角度很难对齐 ——
+                        // 我调过一次仍然"看着异常"（用户反馈）。换成现成的字符：
+                        // 形状是标准撤销箭头、居中很容易、而且和旁边 T / 字 / A 几个文字图标风格一致。
+                        using (Font f = new Font(DrawKit.Symbol, 15f * _k))
+                        using (SolidBrush b = new SolidBrush(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255)))
                         {
-                            // 弧铺满图标区，缺口留在左上（撤销箭头的经典形状）
-                            float cx = d2.Left + d2.Width / 2f, cy = d2.Top + d2.Height / 2f;
-                            float rx = d2.Width / 2f, ry = d2.Height / 2f;
-                            const float startDeg = -55f, sweepDeg = 265f;
-                            g.DrawArc(p, d2.Left, d2.Top, d2.Width, d2.Height, startDeg, sweepDeg);
-
-                            // 箭头画在弧的起点上（用同样的角度算出来，两端自然对齐）
-                            double rad = startDeg * Math.PI / 180.0;
-                            float ax = cx + (float)(rx * Math.Cos(rad));
-                            float ay = cy + (float)(ry * Math.Sin(rad));
-                            g.DrawLine(p, ax, ay, ax - 2.0f * _k, ay - 5.5f * _k);
-                            g.DrawLine(p, ax, ay, ax + 4.5f * _k, ay - 2.0f * _k);
+                            StringFormat sfU = new StringFormat();
+                            sfU.Alignment = StringAlignment.Center;
+                            sfU.LineAlignment = StringAlignment.Center;
+                            g.DrawString("\u21B6", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfU);   // ↶
                         }
                         break;
                 }
