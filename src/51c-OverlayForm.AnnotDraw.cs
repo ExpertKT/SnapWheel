@@ -248,16 +248,18 @@ namespace SnapWheel
                             break;
                         }
                     case IdxLong:       // 长图：一页纸 + 上下箭头
+                    // 注意：上下箭头原来画到 ±14*k，而按钮内高只有约 26px —— 会顶出按钮框（渲染出来就能看到）。
+                    // 收到 ±11，留出边距。
                     float lx = d2.Left + d2.Width / 2f, ly = d2.Top + d2.Height / 2f;
                     using (Pen pl = new Pen(Color.FromArgb(226, 232, 240), 1.6f))
                     {
-                        g.DrawRectangle(pl, lx - 5f * _k, ly - 8f * _k, 10f * _k, 16f * _k);
-                        g.DrawLine(pl, lx, ly - 9f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx - 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx + 2.4f * _k, ly - 11.5f * _k, lx, ly - 14f * _k);
-                        g.DrawLine(pl, lx, ly + 9f * _k, lx, ly + 14f * _k);
-                        g.DrawLine(pl, lx - 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
-                        g.DrawLine(pl, lx + 2.4f * _k, ly + 11.5f * _k, lx, ly + 14f * _k);
+                        g.DrawRectangle(pl, lx - 5f * _k, ly - 6.5f * _k, 10f * _k, 13f * _k);
+                        g.DrawLine(pl, lx, ly - 7.5f * _k, lx, ly - 11f * _k);
+                        g.DrawLine(pl, lx - 2.2f * _k, ly - 9f * _k, lx, ly - 11f * _k);
+                        g.DrawLine(pl, lx + 2.2f * _k, ly - 9f * _k, lx, ly - 11f * _k);
+                        g.DrawLine(pl, lx, ly + 7.5f * _k, lx, ly + 11f * _k);
+                        g.DrawLine(pl, lx - 2.2f * _k, ly + 9f * _k, lx, ly + 11f * _k);
+                        g.DrawLine(pl, lx + 2.2f * _k, ly + 9f * _k, lx, ly + 11f * _k);
                     }
                     break;
                     case IdxSave:       // 另存为：向下箭头 + 底线（存盘）
