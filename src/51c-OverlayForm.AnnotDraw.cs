@@ -128,6 +128,9 @@ namespace SnapWheel
         {
             if (!ToolbarVisible() || _toolBtns.Length == 0) return;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            // 工具条上的 T / A / 字 是白字深底：ClearType 的彩色次像素边在这上面
+            // 会渲染出红蓝描边，放大看就是"字歪了/有重影"。这里强制灰度抗锯齿。
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
             using (GraphicsPath bgp = Gfx.Round(_toolRect, 10f * _k))
             {
                 using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(238 * alpha / 255f), 22, 24, 28)))
@@ -245,7 +248,8 @@ namespace SnapWheel
                                 StringFormat sfA = new StringFormat();
                                 sfA.Alignment = StringAlignment.Center;
                                 sfA.LineAlignment = StringAlignment.Center;
-                                g.DrawString("A", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfA);
+                                // A 只占左边 3/4：右边要留给减号/加号，否则会被 A 挡住
+                                g.DrawString("A", f, b, new RectangleF(r.X, r.Y, r.Width * 0.75f, r.Height), sfA);
                             }
                             using (Pen p = new Pen(ic, 1.8f * _k))
                             {
@@ -307,17 +311,42 @@ namespace SnapWheel
                             g.DrawString(Lang.T("字", "Aa"), f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
                         }
                         break;
-                    default:     // 撤销
-                        // 字符选择说明（渲染过一版候选对照图挑的）：
-                        //   · ↶ (U+21B6) 只有半个弧、字号天生偏小 —— 用过，看着"异常"；
-                        //   · ⟲ (U+27F2) 是完整的圆环 + 箭头，同样字号下明显更清楚、更像"撤销"。
-                        using (Font f = new Font(DrawKit.Symbol, 17f * _k))
-                        using (SolidBrush b = new SolidBrush(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255)))
+                    default:     // 撤销：手绘「开口圆环 + 向左箭头」
+                        // 为什么不再用字符（走过两轮弯路，都在这里记清楚）：
+                        //   · ↶ (U+21B6)：弧线天生只占半格、字号偏小，看着就是"异常"；
+                        //   · ⟲ (U+27F2)：候选对照图里 24pt 是漂亮圆环，但**按钮里只有 17pt，
+                        //     字形被 hinting 简化成"半圆 + 一竖"**——用户看到的仍然是异常。
+                        // 结论：小字号下依赖字体字形不可靠，改成手绘，尺寸完全由 _k 决定。
+                        //
+                        // 形状：圆弧从左上方（205°）顺时针扫 260°，缺口留在左侧；
+                        //       缺口上端接一个朝左的实心三角 —— 这就是通用的"撤销/回退"符号。
+                        //
+                        // 半径这里**故意写死 8*k，而不是去撑满 d2**：
+                        // d2 = Inset(按钮, 9*k)，34x30 的按钮算出来只有 16x12，
+                        // 撑满它半径只剩 4.8px，放大了看就是一团看不清的小弯钩（第一版踩过）。
+                        // 8*k 和旁边的笑脸(er=8k)、另存为(±8k) 是同一个量级。
                         {
-                            StringFormat sfU = new StringFormat();
-                            sfU.Alignment = StringAlignment.Center;
-                            sfU.LineAlignment = StringAlignment.Center;
-                            g.DrawString("\u27F2", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfU);   // ⟲
+                            Color uc = _shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255);
+                            float cx = d2.Left + d2.Width / 2f, cy = d2.Top + d2.Height / 2f;
+                            float rr = 8f * _k;
+                            using (Pen p = new Pen(uc, 1.8f * _k))
+                            {
+                                p.StartCap = LineCap.Round;
+                                p.EndCap = LineCap.Round;
+                                g.DrawArc(p, cx - rr, cy - rr, rr * 2f, rr * 2f, 205f, 260f);
+                            }
+                            using (SolidBrush b = new SolidBrush(uc))
+                            {
+                                // 三角箭头落在圆弧的起点（205°），尖端朝左
+                                double A0 = 205.0 * Math.PI / 180.0;
+                                float ax = cx + rr * (float)Math.Cos(A0);
+                                float ay = cy + rr * (float)Math.Sin(A0);
+                                float ah = 3.4f * _k;
+                                g.FillPolygon(b, new PointF[] {
+                                    new PointF(ax - ah, ay),
+                                    new PointF(ax + ah * 0.5f, ay - ah * 0.85f),
+                                    new PointF(ax + ah * 0.5f, ay + ah * 0.85f) });
+                            }
                         }
                         break;
                 }

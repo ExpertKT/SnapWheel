@@ -40,6 +40,16 @@ namespace SnapWheel
             return fi.GetValue(o);
         }
 
+        // 工具条按钮数：**从源码里的 BtnCount 常量读，别再写死**。
+        // 写死 14 的后果：0.6 加了「长图」、0.7 加了「另存为」「贴 emoji」之后，
+        // 这条断言一直在报假 FAIL（用户看到的"测试挂了"其实不是功能坏了）。
+        static int ToolbarBtnCount()
+        {
+            FieldInfo fi = typeof(OverlayForm).GetField("BtnCount", BindingFlags.NonPublic | BindingFlags.Static);
+            if (fi == null) throw new Exception("找不到常量 BtnCount");
+            return Convert.ToInt32(fi.GetRawConstantValue());
+        }
+
         static object Call(object o, string name, params object[] args)
         {
             MethodInfo m = o.GetType().GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance);
@@ -890,7 +900,7 @@ namespace SnapWheel
                 Call(o, "PlaceToolbar");
                 Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
                 o.Dispose();
-                if (btns.Length != 14) return "工具条按钮数不对：" + btns.Length + "（应为 14 = 5 工具 + 4 颜色 + 文字底 + A- + A+ + 字 + 撤销）";
+                if (btns.Length != ToolbarBtnCount()) return "工具条按钮数不对：" + btns.Length + "（应为 " + ToolbarBtnCount() + "，即源码里的 BtnCount）";
                 return null;
             });
 
@@ -978,7 +988,7 @@ namespace SnapWheel
                 if (!G(o, "_tool").ToString().Equals("Ocr")) { o.Dispose(); return "按 O 没选中取字工具：" + G(o, "_tool"); }
                 Call(o, "PlaceToolbar");
                 Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
-                if (btns.Length != 14) { o.Dispose(); return "工具条按钮数不对：" + btns.Length; }
+                if (btns.Length != ToolbarBtnCount()) { o.Dispose(); return "工具条按钮数不对：" + btns.Length; }
 
                 Mouse(o, "OnMouseDown", 130, 130);
                 object drawing = G(o, "_drawing");
