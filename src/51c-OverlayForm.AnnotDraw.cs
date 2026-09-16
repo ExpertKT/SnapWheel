@@ -308,17 +308,16 @@ namespace SnapWheel
                         }
                         break;
                     default:     // 撤销
-                        // 直接用字体里的 ↶ 字符。
-                        // 之前是手绘"圆弧 + 两条箭头线"，但线的坐标和弧的角度很难对齐 ——
-                        // 我调过一次仍然"看着异常"（用户反馈）。换成现成的字符：
-                        // 形状是标准撤销箭头、居中很容易、而且和旁边 T / 字 / A 几个文字图标风格一致。
-                        using (Font f = new Font(DrawKit.Symbol, 15f * _k))
+                        // 字符选择说明（渲染过一版候选对照图挑的）：
+                        //   · ↶ (U+21B6) 只有半个弧、字号天生偏小 —— 用过，看着"异常"；
+                        //   · ⟲ (U+27F2) 是完整的圆环 + 箭头，同样字号下明显更清楚、更像"撤销"。
+                        using (Font f = new Font(DrawKit.Symbol, 17f * _k))
                         using (SolidBrush b = new SolidBrush(_shapes.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255)))
                         {
                             StringFormat sfU = new StringFormat();
                             sfU.Alignment = StringAlignment.Center;
                             sfU.LineAlignment = StringAlignment.Center;
-                            g.DrawString("\u21B6", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfU);   // ↶
+                            g.DrawString("\u27F2", f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sfU);   // ⟲
                         }
                         break;
                 }
