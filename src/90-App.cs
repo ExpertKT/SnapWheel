@@ -869,8 +869,14 @@ namespace SnapWheel
     {
         [STAThread]
         static void Main(string[] args)
-            // 更新器模式：由"下载更新"启动的第二个自己。等主进程退出后覆盖文件、再把人重新拉起来。             // 走这条路就完全不碰界面和轮盘，做完就退出。             if (Update.IsApplyMode(args)) { Update.RunApply(args); return; } 
         {
+            // 更新器模式：由「下载更新」启动的第二个自己。等主进程退出后覆盖文件、再把人重新拉起来。
+            // 走这条路就完全不碰界面和轮盘，做完就退出。
+            //
+            // 注意：下面这行在 v0.8.1 到 v0.9.3 之间被挤进了上一行的注释里，整个更新器模式是死代码：
+            // 能编译、0 警告、测试全绿，但「下载并安装更新」永远不会生效。守卫见 tools/check-swallowed.ps1。
+            if (Update.IsApplyMode(args)) { Update.RunApply(args); return; }
+
             bool createdNew;
             System.Threading.Mutex mtx = new System.Threading.Mutex(true, "SnapWheel_SingleInstance", out createdNew);
             if (!createdNew)

@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.3-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.4-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-343%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -129,9 +129,31 @@ MIT — see [LICENSE](LICENSE).
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 343 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
+## 这次更新（v0.9.4）
+
+> ⚠️ **如果你在用 v0.8.1 ~ v0.9.3，这个版本收不到自动更新，必须手动下载。** 原因见下。
+
+**修掉「自动更新永远不会生效」。**
+
+现象：托盘 →「检查更新」→ 下载完成 →「现在重启并安装？」→ 点「是」→ 程序重启 → **版本号一点没变**。
+
+根因：v0.8.1 给 `Main` 插入更新器入口时，那一行被挤进了**同一行前面的注释**里，整行成了注释 ——
+`Update.IsApplyMode` / `Update.RunApply` 定义得好好的，**却从来没有任何地方调用**。
+
+它把所有常规信号都躲过去了：编译通过（注释合法）、**0 警告**、测试全绿（只测了版本比较和 ZIP 解压）、
+README 里功能写得漂漂亮亮。**它不是跑出来的，是逐行读代码读出来的。**
+
+修复之外还加了两样东西：
+
+- **`tools/check-swallowed.ps1`** —— 自动扫描「代码被注释吞掉」这类形状。判据是实测调出来的：
+  先用事故原文验证能命中，再扫全仓库确认 0 误报。已接进构建。
+- **测试不再看运气** —— 同一份代码连跑三次曾报 3 / 2 / 1 个 FAIL（三条抖动测试，
+  都是「隔一段时间采一次样」的写法，机器一快就错过动画）。现在改成把进度**直接拨到指定值**再断言，
+  与机器快慢无关，而且断言更强。
+
 ## 这次更新（v0.9.3）
 
-这一版**不加新功能，只做收尾修复** —— 目标是进「稳定期」前的最后一轮打磨。
+不加新功能，只做收尾修复 —— 目标是进「稳定期」前的最后一轮打磨。
 
 | 修的东西 | 一句话 |
 |---|---|
@@ -154,7 +176,7 @@ MIT — see [LICENSE](LICENSE).
 |---|---|
 | **传递模式：不用鼠标也能把图送出去** | 滚轮选好要发的那张 → 按 `Ctrl+Alt+C` → 屏幕上出现一个「假光标」，右下角吸附着那张缩略图。你自己 `Alt+Tab` 切到微信 / 文档，用**方向键**把它移过去，按**空格**放下 —— 它会**真的替你完成一次鼠标拖放**，所以任何支持拖放的窗口都能用。`[` `]` 换一张、`Shift` 加速、`C` 只复制不粘贴、`Esc` 取消（缩略图会飞回环上） |
 | **引导改版** | 首次安装**只显示 3 条**（三步上手），不再一上来丢一长串没人看；设置里的说明**补全到 20 条**；升级后自动弹「这次多了什么」，新增条目带【新】标记 |
-| **自动更新（不花一分钱）** | 托盘 →「检查更新」→ 下载 → 自动替换并重启，**轮盘和设置都保留**。不需要服务器、不需要代码签名（代价只是首次运行有 SmartScreen 提示） |
+| **自动更新（不花一分钱）** | 托盘 →「检查更新」→ 下载 → 自动替换并重启，**轮盘和设置都保留**。不需要服务器、不需要代码签名（代价只是首次运行有 SmartScreen 提示）。<br>⚠️ 它在 v0.8.1 ~ v0.9.3 里**其实是坏的**（入口被注释吞掉，详见上面 v0.9.4），v0.9.4 起才真正可用 |
 | **界面语言** | 设置第一页可切**跟随系统 / 中文 / English**，380+ 条文案已接入 |
 | **符号标注** | 标注工具条里多了一组**符号**（标记 / 箭头 / 编号），三排可选，颜色和大小都能调、可拖动 |
 | **另存为 / 单击复制** | `Ctrl+S` 另存为（选路径和格式）；**单击缩略图**即复制到剪贴板 |

@@ -648,15 +648,25 @@ namespace SnapWheel
                         return n;
                     };
                     f.StartCollapsed();
-                    float a0 = (float)apF.GetValue(f);
-                    int p0 = nubPix();                       // 刚启动：几乎看不见
-                    for (int k = 0; k < 10; k++) { Application.DoEvents(); Thread.Sleep(15); }   // 推进动画（Sleep 会挡住定时器）
-                    int p1 = nubPix();                       // 中途：一半左右
-                    for (int k = 0; k < 40 && (float)apF.GetValue(f) < 0.999f; k++) { Application.DoEvents(); Thread.Sleep(30); }
-                    int p2 = nubPix();                       // 结束：完全出现
-                    bool ok = a0 < 0.2f && p0 < p1 && p1 < p2 && p2 > 60;
-                    Console.WriteLine("  {0} 启动时把手渐显（起点 ap={1:F2} 像素 {2} -> 中途 {3} -> 完全 {4}）",
-                        ok ? "OK  " : "FAIL", a0, p0, p1, p2);
+                    float a0 = (float)apF.GetValue(f);       // 立刻读字段（不渲染），慢机器上也来得及
+
+                    // ① 进度自己会涨起来 —— 只断言"起点低、终点满"，不对中间采样点提要求。
+                    for (int k = 0; k < 80 && (float)apF.GetValue(f) < 0.999f; k++) { Application.DoEvents(); Thread.Sleep(10); }
+                    float aEnd = (float)apF.GetValue(f);
+                    bool animOk = a0 < 0.2f && aEnd >= 0.999f;
+
+                    // ② 画面是不是真的随进度渐变 —— 把进度直接拨到 0 / 0.5 / 1 再看。
+                    //    原来这里是「隔 150ms 采一次，断言 p0<p1<p2」：动画一旦短于采样间隔，
+                    //    中途就恰好等于结束，同一份代码在快机器上随机 FAIL —— 那测的是运气。
+                    //    拨进度是纯函数，跟机器快慢无关，而且断言更强（真的经过中间态，不是瞬现）。
+                    F(f, "_nubAppearT", 0f);   int q0 = nubPix();
+                    F(f, "_nubAppearT", 0.5f); int q1 = nubPix();
+                    F(f, "_nubAppearT", 1f);   int q2 = nubPix();
+                    bool renderOk = q0 < 60 && q1 > q0 && q1 < q2 && q2 > 60;
+
+                    bool ok = animOk && renderOk;
+                    Console.WriteLine("  {0} 启动时把手渐显（起点 ap={1:F2} 自己涨到 {2:F2}；拨 0/半/满 像素 {3}/{4}/{5}）",
+                        ok ? "OK  " : "FAIL", a0, aEnd, q0, q1, q2);
                     if (ok) pass++; else fail++;
                 }
 
@@ -701,8 +711,8 @@ namespace SnapWheel
                     f.CaptureBackdrop();
                     Application.DoEvents();
                     f.CaptureBackdrop();          // 再抓一次：这一下应该触发交叉淡入
-                    Application.DoEvents();
-                    bool started = ((float)fadeF.GetValue(f)) < 0.999f && oldF.GetValue(f) != null;
+                    float fStart = (float)fadeF.GetValue(f);   // 立刻读，中间不要 DoEvents（那会推进动画）
+                    bool started = fStart < 0.999f && oldF.GetValue(f) != null;
                     // 抓两帧看画面确实在变（而不是"啪"地换掉）
                     Func<byte[]> grab = delegate
                     {
@@ -717,17 +727,44 @@ namespace SnapWheel
                             return raw;
                         }
                     };
-                    byte[] s1 = grab();
-                    Application.DoEvents(); Thread.Sleep(120);
-                    byte[] s2 = grab();
-                    int diff = 0;
-                    for (int k = 0; k < s1.Length; k++) diff += Math.Abs(s1[k] - s2[k]);
+                    // ① 交叉淡入是"渐进"的：把进度直接拨到 0 / 0.5 / 1 再看画面。
+                    //    原来这里靠 Thread.Sleep(120) 抓两帧比差异 —— 动画一旦快于 120ms，
+                    //    两帧就一样、差异为 0，于是同一份代码随机 FAIL。那测的是运气。
+                    //    拨进度是纯函数，与机器快慢无关；而且断言更强：中途那一帧必须
+                    //    既不像旧背景、也不像新背景 —— 这才叫"交叉淡入"。
+                    // ① 直接用**两张颜色明确不同的底**验证混合公式本身。
+                    //    这台离屏测试里 CaptureBackdrop 抓到的背景是空白的，新旧底本来就一模一样，
+                    //    再怎么混都是同一张图 —— 差异恒为 0。也就是说：名字里的"过渡"从来没被验证过
+                    //    （旧版只检查了"淡入变量会动"，而这一点是随机器快慢随机 FAIL 的）。
+                    FieldInfo blurF = wt.GetField("_backdropBlur", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo mixM = wt.GetMethod("BackdropMix", BindingFlags.NonPublic | BindingFlags.Instance);
+                    FieldInfo fnF = wt.GetField("_frameNo", BindingFlags.NonPublic | BindingFlags.Instance);
+                    object keepOld = oldF.GetValue(f), keepBlur = blurF.GetValue(f);
+                    Bitmap seedOld = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb);
+                    Bitmap seedNew = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb);
+                    using (Graphics gs = Graphics.FromImage(seedOld)) gs.Clear(Color.FromArgb(255, 200, 20, 20));
+                    using (Graphics gs = Graphics.FromImage(seedNew)) gs.Clear(Color.FromArgb(255, 20, 20, 200));
+                    oldF.SetValue(f, seedOld); blurF.SetValue(f, seedNew);
+                    Func<float, Color> mixAt = delegate(float fade)
+                    {
+                        F(f, "_backdropFade", fade);
+                        F(f, "_frameNo", (int)fnF.GetValue(f) + 1);   // 绕过缓存：BackdropMix 按帧号缓存，同帧只混一次
+                        object mix = mixM.Invoke(f, null);
+                        if (mix == null) return Color.Empty;
+                        Bitmap mb = (Bitmap)mix;                      // 这是窗体复用的缓存图，只读不释放
+                        return mb.GetPixel(mb.Width / 2, mb.Height / 2);
+                    };
+                    Color c0 = mixAt(0f), cM = mixAt(0.5f), c1 = mixAt(1f);
+                    oldF.SetValue(f, keepOld); blurF.SetValue(f, keepBlur);
+                    // 0 = 全旧底、1 = 全新底、0.5 = 必须**严格夹在两者之间**（真的在混，不是跳变）
+                    bool crossfade = c0.R > 150 && c0.B < 70 && c1.B > 150 && c1.R < 70
+                                     && cM.R < c0.R && cM.R > c1.R && cM.B > c0.B && cM.B < c1.B;
                     // 等淡入结束，确认最终稳定
                     for (int k = 0; k < 40 && (float)fadeF.GetValue(f) < 0.999f; k++) { Application.DoEvents(); Thread.Sleep(30); }
                     float done = (float)fadeF.GetValue(f);
-                    bool ok = started && done >= 0.999f;
-                    Console.WriteLine("  {0} 换背景有淡入过渡（起始淡入中={1}，淡入完成={2:F2}，期间画面差异={3}）",
-                        ok ? "OK  " : "FAIL", started, done, diff);
+                    bool ok = started && done >= 0.999f && crossfade;
+                    Console.WriteLine("  {0} 换背景有淡入过渡（起始淡入中={1}，淡入完成={2:F2}；种红底/蓝底后 fade 0/半/1 = {3} / {4} / {5}）",
+                        ok ? "OK  " : "FAIL", started, done, c0, cM, c1);
                     if (ok) pass++; else fail++;
                 }
 
@@ -813,15 +850,26 @@ namespace SnapWheel
                     if (speedOk) pass++; else fail++;
 
                     // 两个方向的时间要对称（同一档速度下）
+                    // 注意这是在**共享机器上量真实墙钟**：展开比收起要画的元件更多，再加上别的进程，
+                    // 单次测量的抖动很大（实测同一份代码比值在 1.1~1.33 之间跳）。
+                    // 所以各测两次取**较快**的那次（抵消一次性卡顿），阈值也放到 1.4 容纳噪声 ——
+                    // "速度设置真的分开生效"这件事由上面那条断言负责，这条只兜底"没有离谱的不对称"。
                     s.ExpandSpeed = 100; s.CollapseSpeed = 100;
+                    Func<double> timeCollapse = delegate
+                    {
+                        DateTime t0 = DateTime.Now; f.CollapseWheel(); waitC(); Application.DoEvents(); Thread.Sleep(60);
+                        return (DateTime.Now - t0).TotalMilliseconds;
+                    };
+                    Func<double> timeExpand = delegate
+                    {
+                        DateTime t0 = DateTime.Now; f.ExpandWheel(); waitE(); Application.DoEvents(); Thread.Sleep(60);
+                        return (DateTime.Now - t0).TotalMilliseconds;
+                    };
                     Thread.Sleep(700);
-                    f.ExpandWheel(); waitE(); Application.DoEvents(); Thread.Sleep(60);
-                    DateTime tC = DateTime.Now; f.CollapseWheel(); waitC(); Application.DoEvents(); Thread.Sleep(60);
-                    double cMs2 = (DateTime.Now - tC).TotalMilliseconds;
-                    DateTime tD = DateTime.Now; f.ExpandWheel(); waitE(); Application.DoEvents(); Thread.Sleep(60);
-                    double eMs2 = (DateTime.Now - tD).TotalMilliseconds;
+                    double cMs2 = Math.Min(timeCollapse(), timeCollapse());
+                    double eMs2 = Math.Min(timeExpand(), timeExpand());
                     double r2 = eMs2 > cMs2 ? eMs2 / Math.Max(1.0, cMs2) : cMs2 / Math.Max(1.0, eMs2);
-                    bool symOk = r2 < 1.3;
+                    bool symOk = r2 < 1.4;
                     Console.WriteLine("  {0} 同档速度下两个方向耗时接近：展开 {1:F0}ms / 收起 {2:F0}ms（比值 {3:F2}）",
                         symOk ? "OK  " : "FAIL", eMs2, cMs2, r2);
                     if (symOk) pass++; else fail++;

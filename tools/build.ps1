@@ -151,6 +151,12 @@ if ($Test) {
     Run-Test '绘制/风格/DPI' 'render-smoke.cs'          'SnapWheel.RenderSmoke' $null
     Run-Test '绘制（无万能键）' 'render-smoke.cs'        'SnapWheel.RenderSmoke' 'NO_KEY'
     Run-Test '行为/持久化'    'behavior-test.cs'         'SnapWheel.BehaviorTest' $null
+
+    # 「代码被注释吞掉」检查 —— 编译器和测试都看不见这类事故，但真出过：
+    # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tools\check-swallowed.ps1')
+    if ($LASTEXITCODE -ne 0) { Bad "有代码被注释吞掉（见上，这类问题测试抓不到）" }
+
     Write-Host "  （拖放测试会模拟鼠标真的拖拽，需要时手动跑：见 README）" -ForegroundColor DarkGray
 }
 
