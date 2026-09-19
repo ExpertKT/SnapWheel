@@ -100,14 +100,14 @@ MIT — see [LICENSE](LICENSE).
 
 **SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
 
-绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个约 200KB 的 exe，Windows 10 / 11 双击就跑。
+绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个 346 KB 的 exe，Windows 10 / 11 双击就跑。
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![version](https://img.shields.io/badge/version-v0.9.5-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
-![size](https://img.shields.io/badge/exe-343%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-346%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
@@ -127,7 +127,7 @@ MIT — see [LICENSE](LICENSE).
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 343 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 346 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
 
 ## 这次更新（v0.9.5）
 
@@ -578,6 +578,9 @@ CHANGELOG.md           完整更新日志（含两条产品线说明）
 | 体积 | 单个 exe，无安装、无第三方依赖；设置与日志在 `%APPDATA%\SnapWheel` |
 
 ## 开发
+
+> **发版约定见 [`docs/RELEASE.md`](docs/RELEASE.md)** —— Release 标题格式、说明结构、
+> 以及"哪些数字由构建自动同步、哪些必须手改"。那份文档是因为**标题和体积都漂过**才写的。
 
 平时用 `tools\build.ps1 -Test` 就够了；下面是单独跑某一套：
 

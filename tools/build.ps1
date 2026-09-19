@@ -167,6 +167,12 @@ if ($Test) {
 if ($Package) {
     Info ""
     Info "打包："
+
+    # 先把 README 里"从构建结果推出来的数字"同步成实测值（版本徽章 / 体积徽章 / 正文体积）。
+    # 以前靠人手改，已经漂过一次（徽章 343 而实际 346），仓库简介里更夸张（还写着 274）。
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tools\sync-readme-facts.ps1') `
+        -Exe (Join-Path $out 'SnapWheel.exe') -Version $vFull
+
     $note = Join-Path $root 'dist\使用说明.txt'
     foreach ($pair in @(@{n='SnapWheel'; v=$vFull; t='完整版'; tag='full'}, @{n='SnapWheel-nokey'; v=$vNoKey; t='无万能键版'; tag='nokey'})) {
         $stage = Join-Path $out ("_stage_" + $pair.n)
