@@ -4,15 +4,19 @@ HOW THIS WORKS  (read this -- it is the entire point of the exercise)
 
     You must PREDICT before you RUN.  Not "think about it" -- WRITE IT DOWN.
 
-    Step 1.  Create  stage1-predictions.md  in this folder.  For all 5
-             questions, write the exact output you expect, plus one sentence
-             saying WHY you expect it.
-    Step 2.  Run:   py stage1-predict.py 1
+    Step 1.  Open  stage1-predictions.md  (a plain text file, already
+             created for you) and fill in, for THE QUESTION YOU WANT TO RUN:
+                 - the exact output you expect
+                 - one sentence saying WHY you expect it
+    Step 2.  Run:   python stage1-predict.py 1
              ...and see what actually happens.
-    Step 3.  Write down every place you were wrong, and WHY you were wrong.
+    Step 3.  Go back to stage1-predictions.md and write the "difference"
+             part: where you were wrong, and why.
 
-    This program REFUSES to run until stage1-predictions.md exists and has
-    some substance in it.  That gate is deliberate.
+    One question at a time is the intended rhythm.  This program REFUSES to
+    run question N until question N has your own writing in it.  That gate
+    is deliberate.  Lines starting with ">" are the template's hints -- they
+    do NOT count as your writing.
 
 WHY THE GATE
     "I would have gotten that right" is a lie your brain tells you AFTER
@@ -24,17 +28,21 @@ WHY THE GATE
     don't rely on "remembering the rule" -- make the STRUCTURE enforce it.
 
 USAGE
-    py stage1-predict.py          -> list the questions
-    py stage1-predict.py 1        -> run question 1
-    py stage1-predict.py 5        -> run question 5
+    python stage1-predict.py          -> list the questions
+    python stage1-predict.py 1        -> run question 1
+    python stage1-predict.py 5        -> run question 5
 """
 
+import re
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PREDICTIONS = HERE / "stage1-predictions.md"
-MIN_CHARS = 400
+
+# how many characters of YOUR OWN writing each question needs.
+# low enough not to be annoying, high enough that a lazy "???" will not pass.
+MIN_PER_QUESTION = 60
 
 
 # --------------------------------------------------------------------------
@@ -120,49 +128,104 @@ QUESTIONS = {
 # --------------------------------------------------------------------------
 # The gate
 # --------------------------------------------------------------------------
+#
+# NOTE ON ENCODING  (case #8 from the case library, live)
+#     This script prints NOTHING but ASCII to the console. On purpose.
+#     This machine's console codepage is 936 (GBK), so Python encodes its
+#     output as GBK; a terminal that expects UTF-8 then shows "???".
+#     Console encoding is environment-dependent and is NOT what you are
+#     here to learn -- so we sidestep it entirely.
+#     The .md file itself is read/written as UTF-8, explicitly, always.
 
-def predictions_are_ready() -> bool:
+def own_words() -> tuple[dict[str, int], str]:
+    """Count the user's OWN writing per question.
+
+    Lines starting with '>' are the template's hint lines, so they are ignored.
+
+    Returns (per_question_counts, error_kind)
+    where error_kind is "" / "missing" / "not-utf8".
+    """
+    per_question: dict[str, int] = {}
+
     if not PREDICTIONS.exists():
-        return False
+        return per_question, "missing"
+
     try:
         text = PREDICTIONS.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    return len(text.strip()) >= MIN_CHARS
+    except UnicodeDecodeError:
+        return per_question, "not-utf8"
+    except OSError:
+        return per_question, "missing"
+
+    # split on headings like "## 第 3 题"
+    parts = re.split(r"(?m)^\s*##\s*第\s*([1-9])\s*题", text)
+    for i in range(1, len(parts), 2):
+        num = parts[i]
+        body = parts[i + 1] if i + 1 < len(parts) else ""
+        mine = [
+            line for line in body.splitlines()
+            if line.strip() and not line.lstrip().startswith(">")
+        ]
+        per_question[num] = len("\n".join(mine).strip())
+
+    return per_question, ""
 
 
-def explain_the_gate() -> None:
-    print("STOP. No predictions file yet.")
+def explain_the_gate(per_question: dict[str, int], asked: str, error_kind: str) -> None:
+    print("STOP. Question %s is not predicted yet." % asked)
     print()
-    print(f"  expected: {PREDICTIONS}")
-    print(f"  required: at least {MIN_CHARS} characters of your own predictions")
+    print(f"  file: {PREDICTIONS}")
     print()
-    print("Write, for EACH of the 5 questions:")
-    print("    - the exact output you expect")
-    print("    - one sentence explaining why")
+
+    if error_kind == "not-utf8":
+        print("I could not read that file as UTF-8.")
+        print()
+        print("That almost always means your editor saved it as ANSI / GBK.")
+        print("Re-save it as UTF-8 (in Notepad: File > Save As > Encoding: UTF-8)")
+        print("and run this again.")
+        print()
+        print("(This is case #8 from the case library: file encoding is a real")
+        print(" engineering detail, and it bites everybody at least once.)")
+        return
+
+    if error_kind == "missing":
+        print("That file does not exist. Create it, then run this again.")
+        return
+
+    print("  question   you wrote   needed")
+    for num in QUESTIONS:
+        have = per_question.get(num, 0)
+        mark = "ok" if have >= MIN_PER_QUESTION else "--"
+        print(f"   {mark}   Q{num}    {have:>6} chars   {MIN_PER_QUESTION}")
     print()
-    print("Then run this again. Do not peek first -- peeking destroys")
-    print("the only useful part of this exercise.")
+    print("You can run any question that says 'ok'. Right now that is:")
+    ready = [n for n in QUESTIONS if per_question.get(n, 0) >= MIN_PER_QUESTION]
+    print("   " + (", ".join("Q" + n for n in ready) if ready else "(none yet)"))
     print()
-    print("Questions, in case you want to read them without running them:")
-    for key, (desc, _) in QUESTIONS.items():
-        print(f"  {key}. {desc}")
+    print(f"To run Q{asked}, open that file in any editor (Notepad is fine) and,")
+    print(f"under Q{asked}'s '>' hint lines, write your predicted output and why.")
+    print("Then run this again.")
+    print()
+    print("Do not peek first: peeking destroys the only useful part of this exercise.")
 
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2 or argv[1] not in QUESTIONS:
-        print("usage: py stage1-predict.py <1-5>")
+        print("usage: python stage1-predict.py <1-5>")
         print()
         for key, (desc, _) in QUESTIONS.items():
             print(f"  {key}. {desc}")
         return 0
 
-    if not predictions_are_ready():
-        explain_the_gate()
+    asked = argv[1]
+    per_question, error_kind = own_words()
+
+    if error_kind or per_question.get(asked, 0) < MIN_PER_QUESTION:
+        explain_the_gate(per_question, asked, error_kind)
         return 1
 
-    desc, fn = QUESTIONS[argv[1]]
-    print(f"--- question {argv[1]}: {desc} ---")
+    desc, fn = QUESTIONS[asked]
+    print(f"--- question {asked}: {desc} ---")
     print()
     fn()
     return 0

@@ -52,8 +52,11 @@ namespace SnapWheel
 
             // ---------- ① 引导窗口：内容不能压住底部按钮 ----------
             ProbeGuide("引导 · 设置里调出（完整）", new GuideForm());
-            ProbeGuide("引导 · 首次安装（只 3 条）", new GuideForm(true));
-            ProbeGuide("引导 · 升级弹出（完整）", new GuideForm(false));
+            ProbeGuide("引导 · 首次安装（只 3 条）", new GuideForm(true, AppInfo.Version));
+            ProbeGuide("引导 · 升级弹出（完整）", new GuideForm(false, AppInfo.Version));
+
+            // ---------- ①b 【新】标记必须跟着「上次看过的版本」走 ----------
+            ProbeNewTags();
 
             // ---------- ② 截图浮层：比例胶囊不能压住工具条 ----------
             ProbeOverlay();
@@ -61,6 +64,61 @@ namespace SnapWheel
             Console.WriteLine();
             Console.WriteLine(string.Format("结果：通过 {0}，失败 {1}", pass, fail));
             Environment.ExitCode = fail == 0 ? 0 : 1;
+        }
+
+        // ---------- 【新】标记：只有"比用户上次看过的那版更新"的说明才该标 ----------
+        //
+        // 为什么要专门测它：原来的实现是一个**写死的布尔量**贴在 7 条说明上，
+        // 于是每次升级那 7 条都重新标一遍【新】—— 升到 0.9.4 还在说「传递模式」是新的（那是 0.9.0 的东西）。
+        // **标错的【新】比不标更糟**：用户会以为功能刚加，然后去找一个早就存在的东西。
+        // 这类"输出看着正常、语义全错"的问题，正是要有断言钉住的那种。
+        static int CountNew(GuideForm gf)
+        {
+            int n = 0;
+            try
+            {
+                gf.CreateControl();
+                IntPtr h = gf.Handle;      // 强制建句柄，触发布局
+                gf.PerformLayout();
+                Walk(gf, delegate(Control c)
+                {
+                    if (c is Label && c.Text != null && c.Text.Contains("【新】")) n++;
+                });
+            }
+            catch { }
+            try { gf.Dispose(); } catch { }
+            return n;
+        }
+
+        static void ProbeNewTags()
+        {
+            try
+            {
+                string v = AppInfo.Version;
+                int atCurrent   = CountNew(new GuideForm(false, v));
+                int fromPrev    = CountNew(new GuideForm(false, "0.9.4"));
+                int fromOld     = CountNew(new GuideForm(false, "0.8.0"));
+                int fromNothing = CountNew(new GuideForm(false, ""));
+                int firstEver   = CountNew(new GuideForm(true, v));
+
+                Console.WriteLine("   （【新】条数）看过的版本 = 当前(" + v + ") → " + atCurrent
+                                + " ｜ 0.9.4 → " + fromPrev
+                                + " ｜ 0.8.0 → " + fromOld
+                                + " ｜ 空 → " + fromNothing);
+
+                Check("引导 · 看过当前版本 → 一条【新】都不标", atCurrent == 0, "实际 " + atCurrent);
+                Check("引导 · 从 0.9.4 升上来 → 只标 0.9.5 那一条", fromPrev == 1, "实际 " + fromPrev);
+                Check("引导 · 从 0.8.0 升上来 → 0.8.1 / 0.9.0 / 0.9.5 共三条", fromOld == 3, "实际 " + fromOld);
+                Check("引导 · 版本越老【新】越多（单调不减）",
+                      atCurrent <= fromPrev && fromPrev <= fromOld && fromOld <= fromNothing,
+                      atCurrent + " / " + fromPrev + " / " + fromOld + " / " + fromNothing);
+                Check("引导 · 全新安装一条【新】都不标（对新人每条都是新的，标满等于没标）",
+                      firstEver == 0, "实际 " + firstEver);
+            }
+            catch (Exception ex)
+            {
+                Check("引导 · 【新】标记探测", false, "异常：" + ex.Message);
+            }
         }
 
         static void ProbeGuide(string name, GuideForm gf)

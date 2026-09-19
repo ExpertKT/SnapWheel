@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.4-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.5-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-343%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -128,6 +128,18 @@ MIT — see [LICENSE](LICENSE).
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 343 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+
+## 这次更新（v0.9.5）
+
+**把"引导性质的东西"整个盘了一遍**，并补上一条很多人会撞上、但完全猜不到原因的困惑。
+
+| 做的事 | 说明 |
+|---|---|
+| **【新】标记改成按版本算** | 以前是一个**写死的布尔量**贴在 7 条说明上，于是**每次升级那 7 条都重新标一遍【新】** —— 升到 0.9.4 还在说「传递模式」是新的（那是 0.9.0 的东西）。**标错的【新】比不标更糟**：你会以为功能刚加，然后去找一个早就存在的东西。现在每条说明都记着自己是哪个版本加的，只有**比你看过的那版更新**的才标【新】；全新安装一条都不标（对第一次来的人每条都是新的，标满等于没标） |
+| **新增说明：截图里少了某个窗口？** | 微信在截图里"消失"不是 bug —— 是微信自己给 Windows 设了「别拍我」。引导里补了这条，含 30 秒自助验证法（见下面「常见问题」） |
+| **新增说明：删掉 / 撤回 / 退出** | 右键删除、托盘撤销上一次删除、关闭键长按 0.65 秒退出 —— 这三件事之前引导里**一个字都没提**，而删除还是**单击右键即生效**的 |
+| **版本比较只留一份** | 更新检查要「远端比本地新吗」，引导要「这条说明比你看过的那版新吗」—— 现在统一到 `AppInfo.IsNewer`，两处不可能再各说各话 |
+| **新增 `tests/affinity-probe.cs`** | 一条命令列出所有"反截屏"的窗口。这件事从此**可复现**，不用信我一面之词 |
 
 ## 这次更新（v0.9.4）
 
@@ -459,6 +471,24 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 2. 确认**不是用「以管理员身份运行」**启动的 —— Windows 会拦掉管理员进程与资源管理器之间的拖拽。
    以管理员启动时，**你一旦拖不动，它会当场弹一个说明框**告诉你原因，并给你一键「以普通权限重启」；托盘右键也有「管理员模式说明…」
 
+**截图里少了一个窗口？（最典型的就是微信）**
+
+截图浮层上，那个窗口的位置**直接显示成它背后的桌面** —— 看起来像"微信突然消失了"。
+**这不是 SnapWheel 的问题，也不是任何截图工具的问题。**
+
+原因：微信给 Windows 设了「**把我排除在截屏之外**」（`SetWindowDisplayAffinity` + `WDA_EXCLUDEFROMCAPTURE`）。
+这是 **Windows 10 2004 起的系统级机制**，它的效果不是"拍成黑块"，而是**让抓屏透过去、看到窗口后面的东西**。
+所以任何用同一种方式抓屏的软件都一样拍不到它 —— 换工具没有用。
+
+**30 秒自己验一遍**：按 `Win+Shift+S`（Windows 自带的截图）框住微信 —— **同样不在里面**，
+那就说明是微信在反截屏，跟用哪个工具无关。
+
+顺手一提：**SnapWheel 自己也给轮盘设了同一个标志**（`60-WheelForm.cs`），
+否则轮盘会拍进你截的每一张图里。同一个机制，两边各用一次。
+
+> 这不是推测，是量出来的：`tests/affinity-probe.cs` 会列出所有"把自己排除在截屏之外"的顶层窗口，
+> 微信主窗口读出来是 `0x11`。跑法见「开发」一节。
+
 **取字（OCR）认不准？**
 1. 选「字」工具后**拖一个尽量贴合文字的框** —— 框越小、越只圈文字，越准
 2. 尽量避开图标、边框、图标文字混排的区域
@@ -571,6 +601,12 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 # 看截图浮层的工具条摆哪（输出到 %TEMP%\snapwheel-shot，红线标出工具条位置）
 & $csc /nologo /target:exe /main:SnapWheel.ToolbarShot /out:$env:TEMP\tbshot.exe src\*.cs tests\toolbar-shot.cs ; & $env:TEMP\tbshot.exe
+
+# 界面布局探针（子控件两两求交，专测"两个控件重叠"；含引导窗口【新】标记的断言）
+& $csc /nologo /target:exe /main:SnapWheel.UiProbe /out:$env:TEMP\uiprobe.exe src\*.cs tests\ui-probe.cs ; & $env:TEMP\uiprobe.exe
+
+# 谁在"反截屏"（列出所有把自己排除在截屏之外的窗口；微信消失就是它）
+& $csc /nologo /target:exe /out:$env:TEMP\aff.exe tests\affinity-probe.cs ; & $env:TEMP\aff.exe
 ```
 
 ## 版本历史

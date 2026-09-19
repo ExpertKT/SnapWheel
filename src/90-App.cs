@@ -161,6 +161,12 @@ namespace SnapWheel
             bool newVersion = (_settings.GuideSeenVersion != AppInfo.Version);
             if (firstEver || newVersion)
             {
+                // 必须在改写配置**之前**把它读出来：下面马上就要把 GuideSeenVersion 刷成当前版本，
+                // 之后再读只会读到新值，于是"哪些是这次新加的"就永远算不出来（引导会一条【新】都不标）。
+                //
+                // 全新安装时传当前版本当"看过的版本"：对第一次来的人，**每一条都是新的**，
+                // 标满【新】等于没标，反而把"这次更新了什么"这个信息的价值毁掉。
+                string prevVer = firstEver ? AppInfo.Version : _settings.GuideSeenVersion;
                 _settings.IntroSeen = true;
                 _settings.GuideSeenVersion = AppInfo.Version;
                 _settings.Save();
@@ -169,7 +175,7 @@ namespace SnapWheel
                 g.Tick += new EventHandler(delegate(object o, EventArgs e2)
                 {
                     g.Stop(); g.Dispose();
-                    try { GuideForm gf = new GuideForm(firstEver); gf.ShowDialog(); } catch { }
+                    try { GuideForm gf = new GuideForm(firstEver, prevVer); gf.ShowDialog(); } catch { }
                 });
                 g.Start();
             }
@@ -868,7 +874,7 @@ namespace SnapWheel
     static class Program
     {
         [STAThread]
-        static void Main(string[] args)
+        static void Main(string[] args) 
         {
             // 更新器模式：由「下载更新」启动的第二个自己。等主进程退出后覆盖文件、再把人重新拉起来。
             // 走这条路就完全不碰界面和轮盘，做完就退出。

@@ -41,30 +41,12 @@ namespace SnapWheel
         }
 
         // ---------- 比较版本号 ----------
-        // 只比较数字部分，容忍 "v" 前缀和 "-beta" 之类的后缀
+        // 只比较数字部分，容忍 "v" 前缀和 "-beta" 之类的后缀。
+        // 实现搬到了 AppInfo —— 引导窗口也要用同一套判断（「这条说明比你看过的那版新吗」），
+        // 两处各写一份迟早会不一致。这里保留一个转发：调用点写法不变，逻辑永远只有一份。
         public static bool IsNewer(string remote, string local)
         {
-            int[] a = ParseVer(remote), b = ParseVer(local);
-            for (int i = 0; i < 3; i++)
-            {
-                if (a[i] != b[i]) return a[i] > b[i];
-            }
-            return false;
-        }
-
-        static int[] ParseVer(string s)
-        {
-            int[] r = new int[3];
-            if (string.IsNullOrEmpty(s)) return r;
-            s = s.TrimStart('v', 'V');
-            string[] parts = s.Split('.', '-', '+');
-            for (int i = 0; i < 3 && i < parts.Length; i++)
-            {
-                int v = 0;
-                int.TryParse(parts[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out v);
-                r[i] = v;
-            }
-            return r;
+            return AppInfo.IsNewer(remote, local);
         }
 
         // ---------- 检查 ----------

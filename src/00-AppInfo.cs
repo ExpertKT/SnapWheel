@@ -17,12 +17,45 @@ namespace SnapWheel
 #if NO_KEY
         public const string Version = "0.2.22";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）★ 0.2 线最终版
 #else
-        public const string Version = "0.9.4";   // 完整版：修「自动更新永远不会生效」（更新器入口被注释吞掉）+ 测试不再看运气
+        public const string Version = "0.9.5";   // 完整版：引导整理（【新】标记按版本算）+ 微信反截屏说明
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
         public const string CnName = "快照轮环";        // 正式中文名（0.4.7 起）
         public const string Repo = "ExpertKT/SnapWheel";  // 自动更新检查用
+
+        // ---------- 版本比较（全项目唯一一份）----------
+        // 为什么必须只有一份：两处都要它 ——
+        //   ① 更新检查：「远端这个版本比本地新吗」；
+        //   ② 引导窗口：「这条说明的加入版本，比用户上次看过的那版新吗」—— 新的才标【新】。
+        // 两处各写一份迟早会不一致（这正是反例 #1「度量与绘制同源」的同一个形状）。
+        // 所以放在最底层的 AppInfo 里，Update 也回头来调这里。
+        public static int[] ParseVer(string s)
+        {
+            int[] r = new int[3];
+            if (string.IsNullOrEmpty(s)) return r;
+            s = s.TrimStart('v', 'V');
+            string[] parts = s.Split('.', '-', '+');
+            for (int i = 0; i < 3 && i < parts.Length; i++)
+            {
+                int v = 0;
+                int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
+                             System.Globalization.CultureInfo.InvariantCulture, out v);
+                r[i] = v;
+            }
+            return r;
+        }
+
+        /// <summary>a 是不是比 b 新（"0.9.4" 比 "0.9.3" 新 → true）。</summary>
+        public static bool IsNewer(string a, string b)
+        {
+            int[] x = ParseVer(a), y = ParseVer(b);
+            for (int i = 0; i < 3; i++)
+            {
+                if (x[i] != y[i]) return x[i] > y[i];
+            }
+            return false;
+        }
     }
 
     static class Elev
