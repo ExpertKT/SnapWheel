@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.5-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.6-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-346%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -128,6 +128,19 @@ MIT — see [LICENSE](LICENSE).
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 346 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+
+## 这次更新（v0.9.6）
+
+**修掉「大图第一次长按放大掉帧」**，以及把三处「文档在说谎」的地方改掉。
+
+| 做的事 | 说明 |
+|---|---|
+| **大图放大掉帧（issue #2）** | 放大动画的每一帧都在**从 2560×1440 的原图重做一次高质量缩放**。原因是两条救急措施都挂在「目标是否超过原图」这个条件上，而大图放大到 346px **并没有超过原图宽** —— 条件不成立。修法不是放开条件（那会拿"不卡"换"更糊"），而是动画头几帧**先做一张最终倍率的中转图**，后面的帧从它往下缩。**实测 94.5ms/帧 → 3.7ms/帧，25 倍** |
+| **ROADMAP 里两句不实的话** | 写着「Esc 飞回动画还没做」（其实 v0.9.3 就做了）、「自动更新 ✅ 已实测可用」（其实 v0.9.4 之前一直是坏的） |
+| **一个"从来不测东西"的检查** | `ui-probe` 里「胶囊 vs 工具条」那一项，每次都打印"跳过重叠检查"却算作通过 —— 因为调 `PlaceChips` 时工具条还没布局。现在先跑一遍工具条布局再比，**而且空矩形判失败** |
+
+> **名字在、实际不测的检查，比没有检查更危险**：它会让人以为这里已经有人看着了。
+> 这跟"自动更新"、"【新】标记"是同一个形状 —— 输出看着正常，语义全错。
 
 ## 这次更新（v0.9.5）
 

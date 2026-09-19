@@ -69,7 +69,12 @@ namespace SnapWheel
             }
         }
 
-        Bitmap ScaledThumb(StoreItem it, int w, int h)
+        // animating：这张卡片当前的缩放**不是静止值**（放大预览 / 悬停 / 删除 / 拖动 / 收起动画中）。
+        // 为什么要传这个：下面两处"救急"逻辑原来都挂在「目标尺寸是否超过原图」上，
+        // 而那个条件**漏掉了最常见的一种情况** —— 大图放大后仍然小于原图宽
+        // （2560x1440 的图放大到 346x194 并没有超过原图）。于是对最容易卡的大图，
+        // 两条救急全部不生效。见下面中转图那段。
+        Bitmap ScaledThumb(StoreItem it, int w, int h, bool animating)
         {
             // w/h 是逻辑尺寸；实际按物理像素生成，缩放到高 DPI 屏上才不会发虚。
             // 注意：尺寸**不能量化**。量化会让"1:1 贴图"变成重采样贴图，实测反而更慢
@@ -78,11 +83,11 @@ namespace SnapWheel
             int dh = Math.Max(1, (int)Math.Round(h * UiK));
             Dictionary<long, Bitmap> d;
             if (!_thumbCache.TryGetValue(it, out d)) { d = new Dictionary<long, Bitmap>(); _thumbCache[it] = d; }
-            // 放大预览（尺寸超过原图）时把尺寸量化到 8px 一档：动画里每帧尺寸都在变，
-            // 不量化的话缓存很快撑满被清空、又回到每帧从原图做高质量双三次 —— 又慢又抖
-            // （用户反馈：大图的放大动画缓慢且有抖动）。缩略图阶段必须保持精确尺寸，
-            // 因为 1:1 贴图靠它，所以只在放大时才量化。
-            if (dw > it.Image.Width || dh > it.Image.Height)
+            // 尺寸量化只在**尺寸正在动**的时候做：
+            //   · 静止时（animating=false）必须保持精确尺寸 —— 1:1 贴图靠它，量化会把它变成重采样；
+            //   · 动画中每帧尺寸都不同，不量化就帧帧未命中、缓存很快被撑满清空，
+            //     又退回到每帧从原图做高质量双三次（用户反馈：大图的放大动画缓慢且有抖动）。
+            if (animating || dw > it.Image.Width || dh > it.Image.Height)
             {
                 dw = Math.Max(1, (dw + 7) / 8 * 8);
                 dh = Math.Max(1, (dh + 7) / 8 * 8);
@@ -136,6 +141,44 @@ namespace SnapWheel
                     if (a3 > bigA) { bigA = a3; src = kv.Value; }
                 }
             }
+            // 上面那条「退而用缓存里最大的那张」为什么救不了大图：
+            // 它只在**目标比原图还大**时才生效，而 2560x1440 的图放大到 346x194 并没有超过原图宽。
+            // 而且就算强行用它（拿 144x81 的小缩略图放大 2.4 倍），画质会明显发虚 ——
+            // 那是拿"不卡"换"更糊"，不划算。
+            //
+            // 所以这里补的是那一段真正缺的东西：**动画的头几帧，先从原图做一张"最终倍率"的中转图**
+            // （稳定 key，整段动画只生成一次），后面的帧全部从它往下缩 —— 又快又清楚。
+            // 大图上"第一次长按放大掉帧"就是这么来的：首次没有大尺寸缓存，于是每一帧
+            // 都从几千像素的原图重做一次高质量双三次。
+            if (animating && src == it.Image)
+            {
+                SizeF bs = CardSize(it);
+                int mw = (int)Math.Round(bs.Width * PeekScale * UiK);
+                int mh = (int)Math.Round(bs.Height * PeekScale * UiK);
+                if (mw < dw) mw = dw;
+                if (mh < dh) mh = dh;
+                mw = Math.Max(8, (mw + 7) / 8 * 8);
+                mh = Math.Max(8, (mh + 7) / 8 * 8);
+                long mkey = ((long)mw << 20) | (uint)mh;
+                Bitmap mid;
+                if (d.TryGetValue(mkey, out mid))
+                {
+                    if (mid.Width >= dw && mid.Height >= dh) src = mid;
+                }
+                else
+                {
+                    mid = new Bitmap(mw, mh, PixelFormat.Format32bppPArgb);
+                    using (Graphics gm = Graphics.FromImage(mid))
+                    {
+                        gm.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        gm.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                        gm.DrawImage(it.Image, new Rectangle(0, 0, mw, mh));
+                    }
+                    d[mkey] = mid;
+                    src = mid;
+                }
+            }
+
             b = new Bitmap(dw, dh, PixelFormat.Format32bppPArgb);
             using (Perf.Section("2c9-缩略图生成"))
             using (Graphics gg = Graphics.FromImage(b))

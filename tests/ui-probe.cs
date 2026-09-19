@@ -193,6 +193,14 @@ namespace SnapWheel
                     fC.SetValue(ov, new PointF(800, 620));
                     if (fOpen != null) fOpen.SetValue(ov, true);
 
+                    // 先让工具条走一遍它自己的布局。
+                    // **这一步原来漏了** —— 于是 _toolRect 一直是 Rectangle.Empty，
+                    // 下面每次都打印"跳过重叠检查"，却把它算作通过。
+                    // 名字在、实际不测的检查，比没有检查更危险：它会让人以为这里已经有人看着了。
+                    MethodInfo mt = ov.GetType().GetMethod("PlaceToolbar", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (mt == null) { Check("浮层 · 找得到 PlaceToolbar", false, "没有这个方法"); return; }
+                    mt.Invoke(ov, null);
+
                     MethodInfo mc = ov.GetType().GetMethod("PlaceChips", BindingFlags.NonPublic | BindingFlags.Instance);
                     if (mc != null) mc.Invoke(ov, null);
 
@@ -204,12 +212,14 @@ namespace SnapWheel
                     Rectangle tool = (Rectangle)fTool.GetValue(ov);
 
                     Console.WriteLine("   （浮层）胶囊=" + chip + "  工具条=" + tool);
-                    if (tool.Width <= 0 || chip.Width <= 0)
-                    {
-                        Console.WriteLine("   （工具条或胶囊本次没有布局，跳过重叠检查）");
-                        pass++;
-                    }
-                    else
+
+                    // 两个矩形都必须是"真的布局过"的。
+                    // 空矩形不是"本次不适用"，而是**这个检查根本没在测东西** —— 判失败，不算通过。
+                    bool laidOut = tool.Width > 0 && tool.Height > 0 && chip.Width > 0 && chip.Height > 0;
+                    Check("浮层 · 工具条与胶囊都真的布局了（否则下面那条是空检查）",
+                          laidOut, "工具条=" + tool + "  胶囊=" + chip);
+
+                    if (laidOut)
                     {
                         Check("浮层 · 比例胶囊展开后不压住工具条",
                               !chip.IntersectsWith(tool),

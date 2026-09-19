@@ -132,6 +132,10 @@ namespace SnapWheel
                     if (_store.Items[i] == _deletingItem) { sc *= Math.Max(0f, 1f - _deleteProg); ia = (int)(ia * (1f - _deleteProg)); }
                     if (isEnl) sc *= 1f;                              // peek is a separate overlay
                     SizeF baseSz = CardSize(_store.Items[i]);
+                    // 这张卡片现在是不是"尺寸正在动"（放大预览 / 悬停 / 删除 / 拖动 / 收起）。
+                    // 静止时（sc==1）走精确尺寸 + 1:1 贴图那条快路；动画中才用 ScaledThumb 里
+                    // 那套"量化 + 先做中转图"的救急措施。见 61a 里 ScaledThumb 的说明。
+                    bool animating = Math.Abs(sc - 1f) > 0.005f;
                     int iw = Math.Max(4, (int)Math.Round(baseSz.Width * sc));
                     int ih = Math.Max(4, (int)Math.Round(baseSz.Height * sc));
                     if (iw < 4 || ih < 4) continue;
@@ -214,14 +218,14 @@ namespace SnapWheel
                                 SizeF isz = FitInside(_store.Items[i].Image.Size, iw - 10, ih - 10);
                                 int tw = Math.Max(3, (int)Math.Round(isz.Width));
                                 int th = (int)Math.Round(isz.Height); if (th < 3) th = 3;
-                                Bitmap thb = ScaledThumb(_store.Items[i], tw, th);
+                                Bitmap thb = ScaledThumb(_store.Items[i], tw, th, animating);
                                 RectangleF fr = new RectangleF(
                                     (float)Math.Round(pc.X - tw / 2f), (float)Math.Round(pc.Y - th / 2f), tw, th);
                                 DrawWithAlpha(g, thb, fr, ia);
                             }
                             else
                             {
-                                Bitmap th = ScaledThumb(_store.Items[i], iw, ih);
+                                Bitmap th = ScaledThumb(_store.Items[i], iw, ih, animating);
                                 DrawWithAlpha(g, th, ir, ia);
                             }
                             g.ResetClip();
