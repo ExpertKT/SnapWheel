@@ -43,6 +43,10 @@ namespace SnapWheel
         };
 
         readonly List<Shape> _shapes = new List<Shape>();
+        // 重做栈：撤销时把弹出的图元放这儿，重做时再拿回来。
+        // 规则和所有编辑器一样：**一旦提交了新图元，重做栈就清空** ——
+        // 否则"撤销 → 画新的 → 重做"会把一条早就作废的旧线重新贴回来。
+        readonly List<Shape> _redo = new List<Shape>();
         Shape _drawing = null;               // 正在拖的那一个（松手才进 _shapes）
         Shape _sel = null;                   // 当前选中的图元（可拖动/改字号/删除）
         Shape _dragShape = null;             // 正在拖动的图元
@@ -62,10 +66,11 @@ namespace SnapWheel
         const int IdxSizeDown = IdxBg + 1;
         const int IdxSizeUp = IdxBg + 2;
         const int IdxUndo = IdxBg + 3;
-        const int IdxLong = IdxBg + 4;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
-        const int IdxSave = IdxBg + 5;     // 0.7.0：另存为（把当前框选含标注存到指定位置）
-        const int IdxEmoji = IdxBg + 6;    // 0.7.0：贴 emoji（弹面板选一个，插入后可拖可缩放）
-        const int BtnCount = IdxBg + 7;
+        const int IdxRedo = IdxBg + 4;     // 0.9.10：重做（撤销的反向，只有撤销一直很别扭）
+        const int IdxLong = IdxBg + 5;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
+        const int IdxSave = IdxBg + 6;     // 0.7.0：另存为（把当前框选含标注存到指定位置）
+        const int IdxEmoji = IdxBg + 7;    // 0.7.0：贴 emoji（弹面板选一个，插入后可拖可缩放）
+        const int BtnCount = IdxBg + 8;
 
 
 
@@ -193,7 +198,7 @@ namespace SnapWheel
                 s.Size = Math.Max(24f, _textSize * 1.4f);
                 s.A = new PointF(_hasSel ? _c.X : _vs.Width / 2f, _hasSel ? _c.Y : _vs.Height / 2f);
                 s.B = s.A;
-                _shapes.Add(s);
+                Commit(s);
                 _sel = s;
                 _tool = AnnotKind.Select;
                 Invalidate();
@@ -284,6 +289,7 @@ namespace SnapWheel
 
                     else if (i == IdxSave) { SaveAs(); Invalidate(); return true; }
                     else if (i == IdxEmoji) { PickEmoji(); Invalidate(); return true; }
+                    else if (i == IdxRedo) Redo();
                     else Undo();
                     Invalidate();
                     return true;
@@ -388,7 +394,7 @@ namespace SnapWheel
             }
             RectangleF r = RectOf(s.A, s.B);
             bool ok = (s.Kind == AnnotKind.Arrow) || (r.Width >= 4 && r.Height >= 4);
-            if (ok) { _shapes.Add(s); _annotHint = false; }
+            if (ok) { Commit(s); _annotHint = false; }
             Invalidate();
             return true;
         }
@@ -407,7 +413,11 @@ namespace SnapWheel
             if (_textBox != null) return false;        // 正在打字：键都归输入框
 
             bool ctrl = (e.Modifiers & Keys.Control) == Keys.Control;
-            if (ctrl && e.KeyCode == Keys.Z) { Undo(); return true; }
+            bool shift = (e.Modifiers & Keys.Shift) == Keys.Shift;
+            // 撤销 / 重做：Ctrl+Z 与 Ctrl+Y 是 Windows 上的通用约定，
+            // Ctrl+Shift+Z 是另一派约定（Mac / 很多编辑器），两个都收，不让用户去猜。
+            if (ctrl && e.KeyCode == Keys.Z) { if (shift) Redo(); else Undo(); return true; }
+            if (ctrl && e.KeyCode == Keys.Y) { Redo(); return true; }
             if (ctrl) return false;
 
             switch (e.KeyCode)
@@ -548,9 +558,39 @@ namespace SnapWheel
             if (_shapes.Count == 0) return;
             Shape last = _shapes[_shapes.Count - 1];
             _shapes.RemoveAt(_shapes.Count - 1);
-            if (last.Cache != null) { try { last.Cache.Dispose(); } catch { } }
             if (_sel == last) _sel = null;
+            // 注意：**不要**在这里 Dispose(last.Cache)。
+            // 马赛克的 Cache 是那张算好的马赛克位图，重做时要原样拿回来；
+            // 撤了就释放的话，重做出来的马赛克会是一片空白。
+            _redo.Add(last);
             Invalidate();
+        }
+
+        void Redo()
+        {
+            if (_redo.Count == 0) return;
+            Shape s = _redo[_redo.Count - 1];
+            _redo.RemoveAt(_redo.Count - 1);
+            _shapes.Add(s);
+            _sel = s;
+            Invalidate();
+        }
+
+        // 提交一个新图元：重做链到此为止（见 _redo 的说明）
+        void Commit(Shape s)
+        {
+            _shapes.Add(s);
+            ClearRedo();
+        }
+
+        void ClearRedo()
+        {
+            for (int i = 0; i < _redo.Count; i++)
+            {
+                Shape s = _redo[i];
+                if (s.Cache != null) { try { s.Cache.Dispose(); } catch { } }
+            }
+            _redo.Clear();
         }
 
         // ---------- 文字工具 ----------
@@ -595,7 +635,7 @@ namespace SnapWheel
                 s.Text = txt;
                 s.Color = _annotColor;
                 s.Size = _textSize;
-                _shapes.Add(s);
+                Commit(s);
                 _sel = s;                       // 画完就选中：可以直接拖 / 滚轮改大小
                 _annotHint = false;
             }

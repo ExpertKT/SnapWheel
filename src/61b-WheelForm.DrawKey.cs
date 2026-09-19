@@ -146,6 +146,7 @@ namespace SnapWheel
         {
             if (vis <= 0.004f) return;
             RectangleF r = outMode ? NubOutRect() : NubInRect();
+            Diag(outMode ? "把手（展开/收起）" : "把手（另一个）", r);
             bool hov = vis > 0.98f && (outMode ? _nubOutHover : _nubInHover);
             float k = vis > 0.98f ? _nubHov : 0f;
             Color acc = _accentCur;

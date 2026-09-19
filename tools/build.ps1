@@ -140,7 +140,15 @@ if ($Test) {
         $a += (Join-Path $root "tests\$file")
         & $csc @a 2>&1 | Where-Object { $_ -match ': error' } | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
         if (-not (Test-Path $exe)) { Bad "$name 编译失败"; return }
+        # 临时把 ErrorActionPreference 降回 Continue 再跑测试。
+        # 为什么：脚本开头是 Stop，而 PowerShell 会把**子进程往 stderr 写任何东西**当成终止错误 ——
+        # 于是测试只要吐一行 stderr（哪怕不是失败），整个构建就当场中断，后面几套测试全不跑。
+        # 这已经发生过两次，而且每次都是在"看着全绿"的时候突然断掉，最难判断。
+        # 测试的输出本来就该被**捕获下来判定**（$o 里的 2>&1 已经收了），不该让运行本身挂掉。
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
         $o = & $exe 2>&1
+        $ErrorActionPreference = $prevEap
         $last = ($o | Where-Object { $_ -match '通过|ALL PASS|FAILURES' } | Select-Object -Last 1)
         $failed = ($o | Where-Object { $_ -match 'FAIL' }).Count
         if ($failed -eq 0) { Ok ("{0,-22} {1}" -f $name, $last) }
@@ -173,6 +181,13 @@ if ($Test) {
     # （实测旧写法 vis=0.98 时墨量为 0、到 1.00 一下跳到 192421）。
     # 顺带钉住"提示淡入淡出期间控件层不许用缓存"，否则这一过程会被烤死在层位图里。
     Run-Test '把手提示淡入'    'hint-fade-test.cs'        'SnapWheel.HintFadeTest' $null
+    # 标注的撤销 / 重做（含"撤销后提交新图元要清空重做栈"、"撤销时不能释放马赛克缓存"两条边界）
+    Run-Test '标注撤销/重做'   'redo-test.cs'             'SnapWheel.RedoTest' $null
+    # 诊断模式：关着时零开销、开着时确实收集到元素、诊断图和普通图不一样
+    Run-Test '诊断模式'       'diag-shot.cs'             'SnapWheel.DiagShot' $null
+    # 满环（50 张）的绘制开销。门槛 12ms 是实测 ~3ms 的 4 倍 ——
+    # 绝对毫秒会抖，但这个余量既不会被噪声碰响，真退化了又一定抓得住。
+    Run-Test '满环性能'       'full-wheel-perf.cs'       'SnapWheel.FullWheelPerf' $null
 
     # 「代码被注释吞掉」检查 —— 编译器和测试都看不见这类事故，但真出过：
     # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。

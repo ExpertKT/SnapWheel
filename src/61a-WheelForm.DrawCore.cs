@@ -206,7 +206,8 @@ namespace SnapWheel
             return new RectangleF(x - CardPad, y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
         }
 
-        void Render()
+        // public：托盘的「诊断模式」开关要立刻重画一帧，否则要等下一次动画 tick 才看到效果
+        public void Render()
         {
             if (!IsHandleCreated || !Visible) return;
             RenderCountForTest++;               // 测试用（省电验收要数「到底画了几帧」）

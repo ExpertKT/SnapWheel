@@ -22,6 +22,7 @@ namespace SnapWheel
             // 按下反馈：缩小一点 + 描边更亮，让"按下去"看得见
             PointF c = Center();
             Rectangle cbr = Shrink(CloseButtonRect(), _closeDown);
+            Diag("关闭键（短按收起 / 长按 0.65s 退出）", cbr);
             DrawBtnGlow(g, cbr, _closeGlow);
             Color acc = _accentCur;
             float pb0 = IntroP(0.30f), pb1 = IntroP(0.40f), pb2 = IntroP(0.50f);
@@ -75,6 +76,7 @@ namespace SnapWheel
                 System.Drawing.Drawing2D.Matrix m1 = g.Transform;
                 g.TranslateTransform(sh1.X, sh1.Y);
                 Rectangle gbr = Shrink(GearButtonRect(), _gearDown);
+            Diag("设置键", gbr);
             DrawBtnGlow(g, gbr, _gearGlow);
                 using (GraphicsPath gbp2 = new GraphicsPath()) { gbp2.AddEllipse(gbr); BackdropClip(g, gbp2, ab1); gbp2.Dispose(); }
                 Gfx.NeuCircle(g, gbr, Gfx.A(GlassBase(), GlassA((int)((_gearHover ? UiFeel.SurfaceHover : (_gearDown > 0.5f ? UiFeel.SurfacePress : UiFeel.SurfaceIdle)) * ab1 / 255f))),
@@ -99,6 +101,7 @@ namespace SnapWheel
             // 万能键（弧线内侧中点的摇杆式大圆盘）
             // NO_KEY 变体里 KeyRect() 是空的，这里必须直接跳过，否则会拿 0 尺寸去建画刷
             Rectangle kr = KeyRect();
+            if (kr.Width > 8 && kr.Height > 8) Diag("万能键（圆盘）", kr);
             float kcx = kr.X + kr.Width / 2f, kcy = kr.Y + kr.Height / 2f;
             float krr = kr.Width / 2f;
             float pk = IntroP(0.16f);
@@ -172,6 +175,7 @@ namespace SnapWheel
                     float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
                     float wx = kcx - pw2 / 2f;
                     float wy = kr.Y + kr.Height + 4f;
+                    Diag("名字药丸（当前轮盘名）", new RectangleF(wx, wy, pw2, ph2));
                     RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
                     _namePillRect = pill2;                       // 记下来给命中测试用（点它能改名）
                     using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
@@ -239,6 +243,7 @@ namespace SnapWheel
                 }
             }
             Rectangle sbr = Shrink(ShootButtonRect(), _shootDown);
+            Diag("截图键", sbr);
             DrawBtnGlow(g, sbr, _shootGlow);
             if (pb2 > 0.01f)
             {
@@ -359,6 +364,7 @@ namespace SnapWheel
                     using (GraphicsPath pg = ArcUi.Capsule(cc2, sx3, sy3, r3, h3, mid3 - half3, mid3 + half3))
                     {
                         RectangleF bnd3 = pg.GetBounds();
+                        Diag("计数胶囊「几 / 几」", bnd3);
                         BackdropClip(g, pg, ac2);
                         Gfx.GlassPanel(g, pg, bnd3, Gfx.A(GlassBase(), GlassA((int)(176 * ac2 / 255f))),
                             (int)((StyleNeu() ? 38 : 16) * ac2 / 255f), (int)((StyleNeu() ? 32 : 0) * ac2 / 255f), !StyleFlatOnly());

@@ -53,6 +53,11 @@ namespace SnapWheel
         public int AccentIndex = -1;          // -1=跟随每个 Wheel 自己的颜色；0..7=全局统一主题色
         public bool ShowNameLabel = true;     // 显示 Wheel 名称药丸
         public bool ShowCountLabel = true;    // 显示图片计数药丸
+        // 诊断模式：轮盘上每个元素都画出自己的名字和边框。
+        // 为什么需要它：用户报"某个地方很生硬"时，我这边只有文字描述，
+        // 而界面上有十几个长得差不多的元素（三个圆按钮、名字药丸、计数胶囊、提示条、两个把手…）。
+        // 打开它、截一张图发过来，"你指的是哪个"就不用再猜 —— 这个项目为此连着来回过三次。
+        public bool DiagMode = false;
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
         public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
@@ -148,6 +153,7 @@ namespace SnapWheel
                         else if (k == "AccentIndex") { int n; if (int.TryParse(v, out n) && n >= -1 && n <= 7) s.AccentIndex = n; }
                         else if (k == "ShowNameLabel") s.ShowNameLabel = (v == "1");
                         else if (k == "ShowCountLabel") s.ShowCountLabel = (v == "1");
+            else if (k == "DiagMode") s.DiagMode = (v == "1");
                         else if (k == "UiScale") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 250) s.UiScale = n; }
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
@@ -291,6 +297,7 @@ namespace SnapWheel
                 lines.Add("AccentIndex=" + AccentIndex);
                 lines.Add("ShowNameLabel=" + (ShowNameLabel ? "1" : "0"));
                 lines.Add("ShowCountLabel=" + (ShowCountLabel ? "1" : "0"));
+            lines.Add("DiagMode=" + (DiagMode ? "1" : "0"));
                 lines.Add("UiScale=" + UiScale);
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));

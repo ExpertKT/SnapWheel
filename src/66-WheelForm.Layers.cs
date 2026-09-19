@@ -40,6 +40,10 @@ namespace SnapWheel
         bool LayerAllowed(int which)
         {
             if (_store == null || _settings == null) return false;
+            // 诊断模式一律不用缓存：元素的"名字 + 矩形"是它们画自己的时候记下来的，
+            // 贴缓存就等于那一层根本没画，于是那层里的元素在诊断图上会整个消失 ——
+            // 而诊断图恰恰是要拿来看"有哪些元素"的。
+            if (_settings.DiagMode) return false;
             if (_show < 0.999f || _intro || _collapsing || _showAnimating) return false;
             if (_deletingItem != null || _dragOutItem != null || _dropActive) return false;
             if (_switchFlash > 0.01f) return false;

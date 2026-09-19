@@ -179,7 +179,7 @@ namespace SnapWheel
             y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
 
             AddTip(mL, ref y, "0.1.0", Lang.T("第 1 步：截一张", "Step 1: capture"), Lang.T("按 ", "Press ") + Settings.Load().Hotkey + Lang.T(" 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。", " drag to select; corners resize, the dial rotates, double-click / Enter confirms."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
+            AddTip(mL, ref y, "0.1.0", Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销、Ctrl+Y 重做。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo and Ctrl+Y to redo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
             AddTip(mL, ref y, "0.1.0", Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
             AddTip(mL, ref y, "0.9.0", Lang.T("不用鼠标也能把图送出去：传递模式", "Send an image without the mouse: carry mode"),
                 Lang.T("先滚轮选好要发的那张，按 ", "Pick the image with the wheel first, then press ")

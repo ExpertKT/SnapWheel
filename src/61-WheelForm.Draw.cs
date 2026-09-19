@@ -75,6 +75,7 @@ namespace SnapWheel
         {
             int a = (int)(255 * Math.Max(0f, Math.Min(1f, _show)));
             if (a <= 1) return;
+            DiagClear();     // 诊断模式：这一帧的元素清单从空开始
             // 统一缩放：后面所有绘制都按逻辑坐标来，字体/图标/间距自动跟着 DPI 走
             if (Math.Abs(UiK - 1f) > 0.001f) g.ScaleTransform(UiK, UiK);
             PointF c = Center();
@@ -111,6 +112,7 @@ namespace SnapWheel
                     string hint = Lang.T("截图后会出现在这里", "No screenshots yet");
                     SizeF hs = g.MeasureString(hint, f0);
                     PointF hp = HintPos(hs);
+                    Diag("空态提示「截图后会出现在这里」", new RectangleF(hp.X, hp.Y, hs.Width, hs.Height));
                     g.DrawString(hint, f0, b0, hp.X, hp.Y);
                 }
             }
@@ -149,6 +151,7 @@ namespace SnapWheel
                     if (iw < 4 || ih < 4) continue;
                     RectangleF ir = new RectangleF((float)Math.Round(pc.X - iw / 2f), (float)Math.Round(pc.Y - ih / 2f), iw, ih);
                     RectangleF rr2 = new RectangleF(ir.X - CardPad, ir.Y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
+                    Diag("缩略图 #" + i + (isEnl ? "（长按放大中）" : ""), rr2);
                     float rad = CardRadOf(rr2);
                     float shOff = (float)Math.Round(Math.Max(2f, rr2.Height * 0.04f));
                     // 贴片缓存只在"卡片尺寸不动"时用：尺寸每帧都在变的话（放大预览 / 删除 / 拖动 / 收起动画），
@@ -276,6 +279,7 @@ namespace SnapWheel
                 StoreLayer(1, g, a, false);
             }
             DrawCountPill(g, a);       // 跟滚动位置绑定的那一个，不进缓存层
+            DrawDiag(g);               // 诊断模式的元素名（没有开就什么都不画）
         }
 
 
@@ -299,6 +303,7 @@ namespace SnapWheel
                 float w = sz.Width + 34f, h = sz.Height + 16f;
                 SizeF ls2 = LogicalSize();
                 float x = 26f + (1f - t) * 14f, y = ls2.Height - h - 26f;
+                Diag("提示条（Toast）", new RectangleF(x, y, w, h));
                 using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
                 {
                     BackdropClip(g, pp, ta);
@@ -324,6 +329,7 @@ namespace SnapWheel
             float sweepP = IntroP(0f);
             float sweep = 90f * (0.02f + 0.98f * Gfx.EaseInOut(sweepP));
             float ringA = (int)(a * Math.Min(1f, 0.35f + 0.65f * sweepP));
+            Diag("环（四分之一圆环）", new RectangleF(c.X - rr, c.Y - rr, rr * 2f, rr * 2f));
             using (GraphicsPath gp = new GraphicsPath())
             {
                 gp.AddArc(c.X - rr, c.Y - rr, rr * 2f, rr * 2f, st, sweep);

@@ -311,6 +311,35 @@ namespace SnapWheel
                             g.DrawString(Lang.T("字", "Aa"), f, b, new RectangleF(r.X, r.Y, r.Width, r.Height), sf);
                         }
                         break;
+                    case IdxRedo:   // 重做：撤销那个图形的**左右镜像**
+                        // 镜像怎么算的（别每次重推一遍）：
+                        //   关于竖直轴镜像 = 角度 θ → 180° - θ，而镜像会把走向翻过来。
+                        //   撤销那段是从 205° 顺时针扫 260°（走到 465°=105°），
+                        //   镜像后覆盖 [75°, 335°]，所以这里从 75° 顺时针扫 260°；
+                        //   箭头落在镜像后的起点 335° 上，尖端朝**右**。
+                        {
+                            Color rc = _redo.Count > 0 ? ic : Color.FromArgb((int)(110 * a / 255f), 255, 255, 255);
+                            float cx = d2.Left + d2.Width / 2f, cy = d2.Top + d2.Height / 2f;
+                            float rr = 8f * _k;
+                            using (Pen p = new Pen(rc, 1.8f * _k))
+                            {
+                                p.StartCap = LineCap.Round;
+                                p.EndCap = LineCap.Round;
+                                g.DrawArc(p, cx - rr, cy - rr, rr * 2f, rr * 2f, 75f, 260f);
+                            }
+                            using (SolidBrush b = new SolidBrush(rc))
+                            {
+                                double A0 = 335.0 * Math.PI / 180.0;
+                                float ax = cx + rr * (float)Math.Cos(A0);
+                                float ay = cy + rr * (float)Math.Sin(A0);
+                                float ah = 3.4f * _k;
+                                g.FillPolygon(b, new PointF[] {
+                                    new PointF(ax + ah, ay),
+                                    new PointF(ax - ah * 0.5f, ay - ah * 0.85f),
+                                    new PointF(ax - ah * 0.5f, ay + ah * 0.85f) });
+                            }
+                        }
+                        break;
                     default:     // 撤销：手绘「开口圆环 + 向左箭头」
                         // 为什么不再用字符（走过两轮弯路，都在这里记清楚）：
                         //   · ↶ (U+21B6)：弧线天生只占半格、字号偏小，看着就是"异常"；

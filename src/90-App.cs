@@ -79,6 +79,18 @@ namespace SnapWheel
             menu.Items.Add(Lang.T("撤销上一次删除", "Undo last delete"), null, new EventHandler(OnUndoDelete));
             menu.Items.Add(Lang.T("管理 Wheel…", "Manage wheels…"), null, new EventHandler(OnWheels));
             menu.Items.Add(Lang.T("反馈 / 报告问题…", "Feedback / report a problem…"), null, new EventHandler(OnFeedback));
+            // 诊断模式：轮盘上每个元素都标出名字。用户报"某个地方不对"时，截一张图就够了，
+            // 不用再描述"那个小字"、"那个圆点" —— 这个项目为此来回过三次。
+            ToolStripMenuItem diagItem = new ToolStripMenuItem(Lang.T("诊断模式（显示元素名）", "Diagnostics (name every element)"));
+            diagItem.CheckOnClick = true;
+            diagItem.Checked = _settings.DiagMode;
+            diagItem.Click += new EventHandler(delegate(object o, EventArgs e)
+            {
+                _settings.DiagMode = diagItem.Checked;
+                _settings.Save();
+                try { _wheel.Render(); } catch { }
+            });
+            menu.Items.Add(diagItem);
             menu.Items.Add(Lang.T("设置…", "Settings…"), null, new EventHandler(OnSettings));
             _carryItem = new ToolStripMenuItem(Lang.T("传递模式（键盘搬图）", "Carry mode (keyboard)"));
             _carryItem.Click += new EventHandler(delegate(object o, EventArgs e2)
