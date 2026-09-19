@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.6-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.7-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-346%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -128,6 +128,23 @@ MIT — see [LICENSE](LICENSE).
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 346 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+
+## 这次更新（v0.9.7）
+
+**空态提示「截图后会出现在这里」和计数胶囊之间的切换，改成了交叉淡入。**
+
+原来两边都是 `Items.Count == 0` 的**硬开关** —— 第一张截图进来那一刻，提示瞬间消失、
+胶囊瞬间出现，中间什么都没有。
+
+这两个东西**永远不会同时出现**（是交替的），所以各管各的透明度是不可能真的"交叉"的。
+合成**一个**参数同时驱动两边：一个淡出的同时另一个淡入。实测两个方向各约 **300 ms**。
+
+顺带修掉一个会露馅的细节：没图时胶囊仍然直接不画，否则淡出的那几帧会显示「1 / 0」。
+
+> 新增的回归测试里有一条值得记：本来写的是"采到至少 N 帧中间值"，
+> 但**同一份代码跑三次采到的是 4 / 0 / 3 帧** —— 那又是"看运气"。
+> 改成**时间下界**（≥60ms）：负载只会让它更慢、不会更快，所以下界是安全的；
+> 而动画一旦退化成硬切，耗时会掉到十几毫秒，一定抓得住。
 
 ## 这次更新（v0.9.6）
 

@@ -318,7 +318,15 @@ namespace SnapWheel
         void DrawCountPill(Graphics g, int a)
         {
             Color acc = _accentCur;
-            if (_store.Items.Count == 0 || !_settings.ShowCountLabel) return;
+            if (!_settings.ShowCountLabel) return;
+            // 没图就没有「几 / 几」可显示 —— 别在淡出期间画出「1 / 0」这种数字
+            if (_store.Items.Count == 0) return;
+            // 和空态提示共用 _emptyT 做交叉淡入：有图时它淡入（同一时刻提示正在淡出）。
+            // 原来是 `_store.Items.Count == 0` 直接 return —— 硬切，和提示的消失撞在一起
+            // 就是用户说的"突然消失、突然出现"。
+            float vis = 1f - _emptyT;
+            if (vis <= 0.02f) return;
+            a = (int)(a * vis);
                 // 0.5.3：视口锚点改成"最新那张顶在弧上端"之后，`_offset` 是**弧下端那一格**的下标，
                 // 所以可见区里最靠上（最新）的那张 = _offset + Slots。这么写，默认视口下就是 N/N
                 // （最新那张在最上面），往上滚会依次变小 —— 和以前"跟着滚动位置变"的语义一致。

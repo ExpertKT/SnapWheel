@@ -309,6 +309,22 @@ namespace SnapWheel
             }
             if (_enlarged >= 0 || _peekIndex >= 0) need = true;
 
+            // 空态提示 ↔ 计数胶囊：交叉淡入淡出。
+            // 原来两边都是"count==0 就画 / 否则不画"的硬开关 —— 第一张图进来那一刻，
+            // 提示瞬间消失、胶囊瞬间出现，中间什么都没有（用户反馈："都是突然消失出现"）。
+            // 合成一个参数之后，一个淡出的同时另一个淡入，天然是交叉的。
+            {
+                float etTgt = (_store.Items.Count == 0) ? 1f : 0f;
+                if (!_emptySynced) { _emptyT = etTgt; _emptySynced = true; need = true; }
+                else if (Math.Abs(_emptyT - etTgt) > 0.002f)
+                {
+                    float er = Math.Max(0.05f, Math.Min(0.5f, 0.20f / AnimK()));
+                    _emptyT += (etTgt - _emptyT) * er;
+                    need = true;
+                }
+                else if (_emptyT != etTgt) { _emptyT = etTgt; need = true; }
+            }
+
             // 删除动画：必须独立判断（原来写成 else if，挂在"放大预览"后面 ——
             // 放大预览一开着动画就不推进，于是"有动画但没删掉"）
             if (_deletingItem != null)

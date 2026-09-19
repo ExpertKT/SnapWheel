@@ -95,10 +95,12 @@ namespace SnapWheel
                 StoreLayer(0, g, a, false);
             }
 
-            if (_store.Items.Count == 0)
+            // 空态提示：淡入淡出由 _emptyT 驱动（和计数胶囊共用一个参数，保证交叉）。
+            // 完全淡掉之后就不画了，省一次 MeasureString。
+            if (_emptyT > 0.02f)
             {
                 using (Font f0 = new Font("Microsoft YaHei UI", 10f))
-                using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f), 255, 255, 255)))
+                using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f * _emptyT), 255, 255, 255)))
                 {
                     string hint = Lang.T("截图后会出现在这里", "No screenshots yet");
                     SizeF hs = g.MeasureString(hint, f0);

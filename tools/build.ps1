@@ -143,7 +143,15 @@ if ($Test) {
         $o = & $exe 2>&1
         $last = ($o | Where-Object { $_ -match '通过|ALL PASS|FAILURES' } | Select-Object -Last 1)
         $failed = ($o | Where-Object { $_ -match 'FAIL' }).Count
-        if ($failed -eq 0) { Ok ("{0,-22} {1}" -f $name, $last) } else { Bad ("{0,-22} {1}（有 {2} 处 FAIL）" -f $name, $last, $failed) }
+        if ($failed -eq 0) { Ok ("{0,-22} {1}" -f $name, $last) }
+        else {
+            Bad ("{0,-22} {1}（有 {2} 处 FAIL）" -f $name, $last, $failed)
+            # 把挂掉的那几条**原样打出来**。
+            # 原来只报"有 N 处 FAIL"不说哪条 —— 一旦是偶发（负载下才抖的那种），
+            # 你根本无从下手：重跑一次可能就过了，名字永远看不到。套件必须告诉你"什么挂了"。
+            $o | Where-Object { $_ -match 'FAIL' } | Select-Object -First 8 |
+                ForEach-Object { Write-Host ("      " + $_.Trim()) -ForegroundColor Red }
+        }
         Remove-Item $exe -Force -ErrorAction SilentlyContinue
     }
     Run-Test '缩放几何'      'resize-geometry-test.cs' $null $null
@@ -158,6 +166,9 @@ if ($Test) {
     # 判定用**相对比值**：旧写法 vs 新写法要差 3 倍以上 —— 绝对毫秒在负载下会抖，
     # 这个项目已经在"拿墙钟卡死阈值"上栽过一次了（见 render-smoke 里的耗时对称那条）。
     Run-Test '大图放大性能'    'peek-perf.cs'             'SnapWheel.PeekPerf' $null
+    # 空态提示 ↔ 计数胶囊的交叉淡入。两条断言：把 _emptyT 拨到 1/0.5/0 三张图必须两两不同
+    # （证明是渐变、不是过阈值就切换），以及这段过渡确实花了时间（≥60ms 的下界，负载下安全）。
+    Run-Test '空态交叉淡入'    'empty-fade-test.cs'       'SnapWheel.EmptyFadeTest' $null
 
     # 「代码被注释吞掉」检查 —— 编译器和测试都看不见这类事故，但真出过：
     # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。

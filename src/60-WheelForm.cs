@@ -119,6 +119,12 @@ namespace SnapWheel
         public event EventHandler SettingsRequested;
         Dictionary<int, float> _scales = new Dictionary<int, float>();
         int _peekIndex = -1;           // kept during the fade-out so the peek can animate away
+        // 空态提示「截图后会出现在这里」↔ 计数胶囊「3 / 8」的交叉淡入参数：
+        //   1 = 完全显示空态提示，0 = 完全显示计数胶囊。
+        // 为什么用一个参数管两头：这两个东西**永远不会同时出现**，是交替的。
+        // 各管各的就会两边都突然消失/突然出现（用户反馈的原话），合成一个参数才可能真的"交叉"。
+        float _emptyT = 1f;
+        bool _emptySynced = false;     // 首帧直接对齐，别让程序刚启动就播一次没意义的过渡
         float _dragOutProg = 0f;       // 0..1 pull-out shrink progress
         StoreItem _deletingItem = null;
         int _delIdx = -1;              // 删除发起时被删那张的下标（删除完成后让视口平滑跟进）
