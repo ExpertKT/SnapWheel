@@ -376,6 +376,7 @@ namespace SnapWheel
         /// </summary>
         public static void SimulateDrag(Point from, Point to)
         {
+            Usage.Ev("Carry.Drop", from.X + "," + from.Y + " → " + to.X + "," + to.Y);
             try
             {
                 // 关键的第一步：把轮盘拉到前台。

@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Text;
 using System.Windows.Forms;
 
 namespace SnapWheel
@@ -150,6 +151,7 @@ namespace SnapWheel
         void SaveAs()
         {
             if (!_hasSel || _vs.Width < 4 || _vs.Height < 4) return;
+            Usage.Ev("SaveAs");
             Bitmap bmp = CropSelection(true);      // true = 标注一起合成进去
             if (bmp == null) return;
             try
@@ -514,6 +516,7 @@ namespace SnapWheel
                 string err = null, txt = null;
                 try { txt = Ocr.RecognizePixels(data, w, h, out err); }
                 catch (Exception ex) { err = ex.Message; }
+                Usage.Ev("Ocr", err != null ? ("失败:" + err) : ("认出 " + (txt == null ? 0 : txt.Trim().Length) + " 字"));
                 try
                 {
                     BeginInvoke(new MethodInvoker(delegate()
@@ -564,6 +567,23 @@ namespace SnapWheel
             // 撤了就释放的话，重做出来的马赛克会是一片空白。
             _redo.Add(last);
             Invalidate();
+        }
+
+        // 本地统计用：这次标注用了几个图元、分别是哪些工具。
+        // 记"用了哪些工具"而不只是"用了几个" —— 后者回答不了"该往标注里补什么"。
+        public string ShapeCount()
+        {
+            if (_shapes.Count == 0) return "0";
+            Dictionary<string, int> c = new Dictionary<string, int>();
+            for (int i = 0; i < _shapes.Count; i++)
+            {
+                string k = _shapes[i].Kind.ToString();
+                if (!c.ContainsKey(k)) c[k] = 0;
+                c[k]++;
+            }
+            StringBuilder sb = new StringBuilder(_shapes.Count.ToString());
+            foreach (KeyValuePair<string, int> kv in c) sb.Append(' ').Append(kv.Key).Append('=').Append(kv.Value);
+            return sb.ToString();
         }
 
         void Redo()

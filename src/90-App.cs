@@ -30,6 +30,7 @@ namespace SnapWheel
         public AppCtx()
         {
             _settings = Settings.Load();
+            Usage.On = _settings.UsageLog;      // 本地使用统计（默认关）
             _wheels = new WheelManager(_settings);
             _wheels.LoadImagesFromDisk();
             _store = _wheels.ActiveStore;
@@ -91,6 +92,26 @@ namespace SnapWheel
                 try { _wheel.Render(); } catch { }
             });
             menu.Items.Add(diagItem);
+            // 本地使用统计：默认关。打开后只在本机记"某件事发生了一次"，不记内容、不联网。
+            // 存在的理由：这个项目几个"往哪走"的方向都是靠想定的，然后被真实数据否掉。
+            ToolStripMenuItem usageItem = new ToolStripMenuItem(Lang.T("记录本地使用统计（只在本机）", "Log local usage stats (this machine only)"));
+            usageItem.CheckOnClick = true;
+            usageItem.Checked = _settings.UsageLog;
+            usageItem.Click += new EventHandler(delegate(object o, EventArgs e)
+            {
+                _settings.UsageLog = usageItem.Checked;
+                _settings.Save();
+                Usage.On = usageItem.Checked;
+                if (usageItem.Checked) Usage.Ev("Usage.On", "用户在托盘里打开了统计");
+                try { _wheel.ShowToast(Lang.T("统计已打开：只记「哪件事发生了一次」，不记内容、不联网",
+                                              "Stats on: only *what happened*, never content, never uploaded")); } catch { }
+            });
+            menu.Items.Add(usageItem);
+            menu.Items.Add(Lang.T("打开统计文件…", "Open the stats file…"), null, new EventHandler(delegate(object o, EventArgs e)
+            {
+                try { System.Diagnostics.Process.Start(Usage.Path); }
+                catch { try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + Usage.Path + "\""); } catch { } }
+            }));
             menu.Items.Add(Lang.T("设置…", "Settings…"), null, new EventHandler(OnSettings));
             _carryItem = new ToolStripMenuItem(Lang.T("传递模式（键盘搬图）", "Carry mode (keyboard)"));
             _carryItem.Click += new EventHandler(delegate(object o, EventArgs e2)
@@ -236,6 +257,7 @@ namespace SnapWheel
                     try { _pins.Remove(p); } catch { }
                 });
                 _pins.Add(p);
+                Usage.Ev("Pin", "钉到屏幕上");
                 p.Show();
                 p.BringToFront();
             }
@@ -265,6 +287,7 @@ namespace SnapWheel
                 string desc = Undo.LastDesc;
                 string wheel = "";
                 int n = Undo.UndoLast(_wheels, out wheel);
+                Usage.Ev("UndoDelete", n.ToString());
                 if (n <= 0)
                 {
                     MessageBox.Show(Lang.T("没能放回去（原轮盘可能已经被删掉了）。", "Could not put it back (the original wheel may have been deleted)."), AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -358,6 +381,7 @@ namespace SnapWheel
             // 先记一条"确实被调用了"：用来区分"托盘菜单/热键根本没触发"和"触发了但后面出问题"。
             // （用户反馈"连托盘启动都不行"，但日志里又有放下的记录 —— 必须先分清是哪一种。）
             Err.Log("Carry.Start", new Exception("进入传递模式：被调用"));
+            Usage.Ev("Carry.Start");
             Store st = _wheels.ActiveStore;
             int idx = _wheel.CurrentIndex;
             Err.Log("Carry.Start", new Exception("轮盘项数=" + (st == null ? -1 : st.Items.Count) + " 当前索引=" + idx));
@@ -618,6 +642,7 @@ namespace SnapWheel
                 d.Filter = ImageIO.DialogFilter();
                 d.RestoreDirectory = true;
                 if (d.ShowDialog() != DialogResult.OK) return;
+                Usage.Ev("Import", d.FileNames.Length.ToString());
                 List<string> files = ImageIO.Collect(d.FileNames, 50);
                 _wheel.ShowWheel();
                 _wheel.ImportFiles(files);
@@ -800,6 +825,10 @@ namespace SnapWheel
             {
                 Store st = _wheels.ActiveStore;
                 StoreItem ni = st.Add(ov.Result);
+                // 本地统计：截了多少次、带几个标注、截完环上有几张
+                // （"环上几乎总是一张"这个判断就是靠这批数据，以前只能靠 Frame 日志猜采样）
+                Usage.Ev("Shot", "标注=" + ov.ShapeCount());
+                Usage.Ev("RingItems", st.Items.Count.ToString());
                 // 关键：浮层关掉之后重抓一次背景。
                 // 之前是拿着"截图浮层还在时抓的"背景去显示玻璃，所以截图完轮盘是暗的，
                 // 过一会儿定时刷新才突然变亮 —— 现在这里立刻换新背景（带淡入过渡）。
@@ -815,6 +844,7 @@ namespace SnapWheel
             }
             else if (wasExpanded)
             {
+                Usage.Ev("Shot.Cancel");         // 本地统计：截图被取消（高的话说明这一步有摩擦）
                 _wheel.ExpandWheel(true);        // 取消了截图，也把轮盘拉回来
             }
         }
@@ -827,6 +857,7 @@ namespace SnapWheel
 
         void RunLongShot(Rectangle region, bool wasExpanded)
         {
+            Usage.Ev("LongShot.Start", region.Width + "x" + region.Height);
             // 轮盘在进浮层时已经让开了；这里只负责长图本身
             if (_settings.CollapseMode && _wheel.Visible)
             {

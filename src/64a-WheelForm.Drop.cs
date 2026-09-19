@@ -123,6 +123,7 @@ namespace SnapWheel
             FollowNewest();                       // 视口跟到最新那张（设置里可关）
             _hover = -1; _enlarged = -1;
             ShowToast(Lang.T("已加入 1 张图片", "Added 1 image"));
+            Usage.Ev("DropIn", "拖进来 1 张");
             Render();
         }
 
@@ -173,6 +174,7 @@ namespace SnapWheel
                     _hover = -1; _enlarged = -1;
                     if (_collapsed && _settings.ShowBalloon) Err.Notify(Lang.T("已从剪贴板收进 1 张图", "Collected 1 image from the clipboard"));
                     else ShowToast(Lang.T("已从剪贴板收进 1 张图", "Collected 1 image from the clipboard"));
+                    Usage.Ev("ClipboardIn");
                     if (Visible) Render();
                 }
             }
@@ -196,6 +198,7 @@ namespace SnapWheel
             _hover = -1; _enlarged = -1;
             if (ok > 0) ShowToast(Lang.T("已加入 ", "Added ") + ok + Lang.T(" 张图片", " image(s)") + (bad > 0 ? "（" + bad + Lang.T(" 张读不了）", " unreadable)") : ""));
             else ShowToast(Lang.T("这些文件读不出图片", "None of these files could be read as images"));
+            Usage.Ev("DropIn", "拖进来 " + ok + " 张（读不了 " + bad + "）");
             Render();
         }
 

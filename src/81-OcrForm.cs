@@ -329,6 +329,7 @@ namespace SnapWheel
             if (_busy) return;
             string text = _src.Text;
             if (text.Trim().Length == 0) { _trState.Text = Lang.T("没有要翻译的文字", "Nothing to translate"); return; }
+            Usage.Ev("Translate", "字数=" + text.Trim().Length);
             _busy = true;
             _tr.Enabled = false;
             _trState.Text = Lang.T("翻译中…（用 MyMemory 免费接口，要联网）", "Translating… (free MyMemory endpoint, needs internet)");

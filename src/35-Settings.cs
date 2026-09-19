@@ -58,6 +58,9 @@ namespace SnapWheel
         // 而界面上有十几个长得差不多的元素（三个圆按钮、名字药丸、计数胶囊、提示条、两个把手…）。
         // 打开它、截一张图发过来，"你指的是哪个"就不用再猜 —— 这个项目为此连着来回过三次。
         public bool DiagMode = false;
+        // 本地使用统计：**默认关**。打开后只在本机记"某件事发生了一次"，
+        // 不记内容、不联网。用来回答"我到底在用它做什么" —— 这个问题靠想是想不出来的。
+        public bool UsageLog = false;
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
         public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
@@ -154,6 +157,7 @@ namespace SnapWheel
                         else if (k == "ShowNameLabel") s.ShowNameLabel = (v == "1");
                         else if (k == "ShowCountLabel") s.ShowCountLabel = (v == "1");
             else if (k == "DiagMode") s.DiagMode = (v == "1");
+            else if (k == "UsageLog") s.UsageLog = (v == "1");
                         else if (k == "UiScale") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 250) s.UiScale = n; }
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
@@ -298,6 +302,7 @@ namespace SnapWheel
                 lines.Add("ShowNameLabel=" + (ShowNameLabel ? "1" : "0"));
                 lines.Add("ShowCountLabel=" + (ShowCountLabel ? "1" : "0"));
             lines.Add("DiagMode=" + (DiagMode ? "1" : "0"));
+            lines.Add("UsageLog=" + (UsageLog ? "1" : "0"));
                 lines.Add("UiScale=" + UiScale);
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));

@@ -553,6 +553,7 @@ namespace SnapWheel
             {
                 // 拖出去是 Copy 语义：默认**留一份**在环上（随时能再拖一次，或拖给第二个窗口）。
                 // 想要"拖出去即从环上移走"的话，设置第 1 页那个开关关掉即可。
+                Usage.Ev("DragOut", _settings.KeepAfterDragOut ? "留一份" : "移走");
                 if (_settings.KeepAfterDragOut)
                 {
                     ShowToast(Lang.T("已拖出（环上还留着一份）", "Dragged out (a copy stays in the ring)"));
