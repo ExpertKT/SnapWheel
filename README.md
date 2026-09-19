@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.7-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.8-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-346%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -128,6 +128,24 @@ MIT — see [LICENSE](LICENSE).
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 346 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+
+## 这次更新（v0.9.8）
+
+**把手旁边那句「点我展开 / 点我收起」的提示，从硬切改成了平滑淡入淡出。**
+
+两个缺陷叠在一起：
+
+1. **一行三元表达式造成的硬切** —— 把手本体用 `a * vis * vis` 平滑淡入淡出，旁边那句提示却写的是
+   `vis > 0.98f ? _nubHintT : 0f`。实测旧写法：**vis=0.98 时提示墨量为 0，到 1.00 那一帧跳到 192421**
+   —— 整段淡入过程里提示完全不可见，然后整块跳出来。
+2. **缓存清单漏了一项** —— 提示画在控件层**里面**，而"该禁缓存"的清单里有把手的所有其它动画状态，
+   **唯独没有 `_nubHintT`**，于是提示的淡入淡出被整块烤死在层位图里
+   （首次运行那 14 秒的自动提示正好没悬停、缓存照用 —— 所以「开始」的时候也没过渡）。
+
+修复后实测墨量随可见度平滑变化：`55929 → 95630 → 151912 → 184202 → 188252`，
+而且稳定全亮时照常走缓存，性能不白丢。
+
+> 新增的测试做过**反向验证**：把旧写法临时换回去，确实报 2 处 FAIL。不然又是一条"永远通过的空检查"。
 
 ## 这次更新（v0.9.7）
 

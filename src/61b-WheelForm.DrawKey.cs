@@ -221,7 +221,11 @@ namespace SnapWheel
 
             // ---- 用途提示：首次运行自动亮一次，之后悬停才显示 ----
             // 以前把手只有三个点和一个小三角，新用户根本不知道它是干嘛的。
-            float hintA = vis > 0.98f ? _nubHintT : 0f;
+            //
+            // 这里**乘** vis（和把手本体同一个曲线），不要写成 `vis > 0.98f ? _nubHintT : 0f`：
+            // 那种写法是硬切 —— 把手本身在平滑地淡入淡出，旁边那行提示却在跨过 0.98 的那一帧
+            // 突然出现/突然消失。用户反馈的"展开和收起的时候提示没有过渡"就是它。
+            float hintA = _nubHintT * vis * vis;
             if (hintA > 0.02f)
             {
                 string ht = willExpand ? Lang.T("点我展开", "Click to expand") : Lang.T("点我收起", "Click to collapse");

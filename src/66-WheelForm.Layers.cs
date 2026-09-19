@@ -58,6 +58,10 @@ namespace SnapWheel
             if (_keyDown || _keyHover) return false;
             if (_nameHover) return false;
             if (_nubAppearT < 0.999f || _nubHov > 0.01f || _nubOutHover || _nubInHover) return false;
+            // 把手旁边那句"点我展开/收起"也画在这一层里，所以它正在淡入淡出的时候同样不能用缓存 ——
+            // 漏掉这一条的效果是：提示要么整段冻在层里不动，要么等层签名变化时"啪"地跳出来。
+            // 用户反馈的"开始、展开和收起的时候提示都没有过渡"里，另一半原因就是它。
+            if (_nubHintT > 0.001f && _nubHintT < 0.999f) return false;
             return true;
         }
 
