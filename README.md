@@ -105,7 +105,7 @@ MIT — see [LICENSE](LICENSE).
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![version](https://img.shields.io/badge/version-v0.9.8-blue?style=flat-square)
+![version](https://img.shields.io/badge/version-v0.9.9-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-BETA-orange?style=flat-square)
 ![size](https://img.shields.io/badge/exe-346%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
@@ -128,6 +128,31 @@ MIT — see [LICENSE](LICENSE).
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
 **纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 346 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+
+## 这次更新（v0.9.9）
+
+**「截图后会出现在这里」的字样，现在跟着展开 / 收起一起淡了。**
+
+> 这条连着报了三次，前两版我都没修对：v0.9.7 修的是"空↔非空"的切换，
+> v0.9.8 修的是把手旁边那句提示。**两个都是真问题、也都真修了，但都不是你看到的那个。**
+> 你说的从头到尾是同一句话，而它出问题的三个时机是「开始 / 展开 / 收起」——
+> 这三件事跟"空不空"无关，跟**展开进度**有关。
+
+**真正的根因**：环和卡片是跟着 `_introT` 缓缓长出来 / 缩回去的 —— 卡片用 `EnterProgress`、
+计数胶囊用 `IntroP(0.72f)`，**而这条提示一个都没乘**，只乘了 `_show`。
+可 `StartIntro()` 里 `_show = 1f` 是**立刻赋值**的。于是展开时整块场景在缓缓成形、
+中间这行字**第一帧就满血出现**；收起时它整段不动，等收起完成那一刻消失。
+
+**实测**（提示自己的墨量 vs 展开进度）：
+
+| `_introT` | 0.00 | 0.25 | 0.50 | 0.75 | 1.00 |
+|---|---|---|---|---|---|
+| 旧 | **117259** | 117259 | 117259 | 117259 | 117259 |
+| 新 | **0** | 0 | 102023 | 117137 | 117259 |
+
+五个值一模一样 —— 提示从头到尾钉在满血。修法是让它和卡片、胶囊用**同一套进度**。
+
+> 新增断言做过**反向验证**：把旧写法换回去，确实报 2 处 FAIL。
 
 ## 这次更新（v0.9.8）
 

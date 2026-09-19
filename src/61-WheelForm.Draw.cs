@@ -95,12 +95,18 @@ namespace SnapWheel
                 StoreLayer(0, g, a, false);
             }
 
-            // 空态提示：淡入淡出由 _emptyT 驱动（和计数胶囊共用一个参数，保证交叉）。
-            // 完全淡掉之后就不画了，省一次 MeasureString。
-            if (_emptyT > 0.02f)
+            // 空态提示的可见度 = 空态参数 × **展开进度** × **收起进度**。
+            //
+            // 后面两个因子是这次补上的：环和卡片都是跟着 _introT 缓缓长出来 / 缩回去的
+            // （卡片用 EnterProgress，计数胶囊用 IntroP(0.72f)），而这条提示当初**两个都没乘**，
+            // 只乘了 _show —— 可 StartIntro() 里 `_show = 1f` 是**立刻赋值**的，
+            // 于是展开时整块场景在缓缓成形、中间这行字第一帧就满血出现；收起时它又整段不动、
+            // 等 _collapsed 置位那一刻消失。用户反馈"很生硬"就是它。
+            float hintVis = _emptyT * IntroP(0.55f) * CollapseCardP();
+            if (hintVis > 0.02f)
             {
                 using (Font f0 = new Font("Microsoft YaHei UI", 10f))
-                using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f * _emptyT), 255, 255, 255)))
+                using (SolidBrush b0 = new SolidBrush(Color.FromArgb((int)(200 * a / 255f * hintVis), 255, 255, 255)))
                 {
                     string hint = Lang.T("截图后会出现在这里", "No screenshots yet");
                     SizeF hs = g.MeasureString(hint, f0);

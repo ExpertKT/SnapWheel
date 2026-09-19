@@ -322,9 +322,9 @@ namespace SnapWheel
             // 没图就没有「几 / 几」可显示 —— 别在淡出期间画出「1 / 0」这种数字
             if (_store.Items.Count == 0) return;
             // 和空态提示共用 _emptyT 做交叉淡入：有图时它淡入（同一时刻提示正在淡出）。
-            // 原来是 `_store.Items.Count == 0` 直接 return —— 硬切，和提示的消失撞在一起
-            // 就是用户说的"突然消失、突然出现"。
-            float vis = 1f - _emptyT;
+            // 再乘收起进度 —— 环和卡片缩回去的时候，胶囊也得跟着退，不能等 _collapsed 置位那一刻跳掉。
+            // （展开那一路本来就有 IntroP，见下面的 pc2。）
+            float vis = (1f - _emptyT) * CollapseCardP();
             if (vis <= 0.02f) return;
             a = (int)(a * vis);
                 // 0.5.3：视口锚点改成"最新那张顶在弧上端"之后，`_offset` 是**弧下端那一格**的下标，

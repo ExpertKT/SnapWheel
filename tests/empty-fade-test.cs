@@ -44,6 +44,26 @@ namespace SnapWheel
 
         static float EmptyT(WheelForm f) { return (float)Field("_emptyT").GetValue(f); }
         static void SetEmptyT(WheelForm f, float v) { Field("_emptyT").SetValue(f, v); }
+        static void SetField(WheelForm f, string n, object v) { Field(n).SetValue(f, v); }
+
+        // 空态提示自己的墨量 = 把 _emptyT 拨到 1 和 0 各渲染一张，取差的绝对值和。
+        // 用差分是为了把环 / 卡片 / 把手这些**不随 _emptyT 变**的东西消掉 ——
+        // 而店里没图时，只有提示看 _emptyT（没图时计数胶囊本来就不画），差出来的就是提示。
+        static int EmptyHintInk(WheelForm f)
+        {
+            SetEmptyT(f, 1f); Bitmap a = Render(f);
+            SetEmptyT(f, 0f); Bitmap b = Render(f);
+            int d = 0;
+            for (int y = 0; y < a.Height; y += 2)
+                for (int x = 0; x < a.Width; x += 2)
+                {
+                    Color ca = a.GetPixel(x, y), cb = b.GetPixel(x, y);
+                    d += Math.Abs(ca.A - cb.A) + Math.Abs(ca.R - cb.R)
+                       + Math.Abs(ca.G - cb.G) + Math.Abs(ca.B - cb.B);
+                }
+            a.Dispose(); b.Dispose();
+            return d;
+        }
 
         // 把轮盘渲染一张出来（不泵消息，免得动画循环把 _emptyT 覆盖掉）
         static Bitmap Render(WheelForm f)
@@ -177,6 +197,60 @@ namespace SnapWheel
                 Check("删光之后 _emptyT 回到 1（提示彻底淡回来）", last >= 0.95f, "末值是 " + last.ToString("F2"));
                 Check("反向过渡也**确实花了时间**（≥60ms）", ms >= 60.0,
                       string.Format("只用了 {0:F0} ms", ms));
+            }
+
+            // ---------- ④ 提示的可见度必须跟着「展开 / 收起进度」走 ----------
+            //
+            // 这一条是后补的：用户说"很生硬"，而③里那套空↔非空的交叉淡入**根本管不到**展开和收起 ——
+            // 环和卡片是跟着 _introT 缓缓长出来 / 缩回去的（卡片 EnterProgress、胶囊 IntroP），
+            // 而这条提示当初**两个进度因子一个都没乘**，只乘了 _show；
+            // 可 StartIntro() 里 `_show = 1f` 是**立刻赋值**的 ——
+            // 于是展开时整块场景在缓缓成形、中间这行字第一帧就满血出现。
+            {
+                Application.DoEvents();
+                st.Items.Clear();
+                SetEmptyT(f, 1f);
+                SetField(f, "_collapsed", false);
+                SetField(f, "_show", 1f);
+                SetField(f, "_collapsing", false);
+                SetField(f, "_intro", true);
+
+                // 展开：_introT 从 0 长到 1
+                float[] ts = { 0f, 0.25f, 0.5f, 0.75f, 1f };
+                int[] ink = new int[ts.Length];
+                for (int i = 0; i < ts.Length; i++)
+                {
+                    SetField(f, "_introT", ts[i]);
+                    ink[i] = EmptyHintInk(f);
+                }
+                Console.WriteLine("   （提示墨量 vs 展开进度）");
+                for (int i = 0; i < ts.Length; i++)
+                    Console.WriteLine("      _introT={0:F2} → {1}", ts[i], ink[i]);
+
+                int full = ink[ts.Length - 1];
+                Check("展开到满时提示是画出来的（否则下面几条没意义）", full > 0, "墨量 0");
+                Check("展开**刚开始**时提示几乎不可见（不能第一帧就满血）",
+                      ink[0] <= Math.Max(2, full / 5),
+                      string.Format("_introT=0 时墨量 {0}，满值 {1}", ink[0], full));
+                Check("提示墨量随展开进度单调不减",
+                      ink[0] <= ink[1] && ink[1] <= ink[2] && ink[2] <= ink[3] && ink[3] <= ink[4],
+                      string.Join(",", Array.ConvertAll(ink, delegate(int v) { return v.ToString(); })));
+
+                // 收起：_collapsing = true，_introT 从 1 掉到 0
+                SetField(f, "_collapsing", true);
+                int[] ci = new int[ts.Length];
+                for (int i = 0; i < ts.Length; i++)
+                {
+                    SetField(f, "_introT", 1f - ts[i]);      // 1 → 0
+                    ci[i] = EmptyHintInk(f);
+                }
+                Console.WriteLine("   （提示墨量 vs 收起进度）{0} → {1}",
+                    ci[0], ci[ci.Length - 1]);
+
+                Check("收起过程中提示跟着一起退（不是整段不动、最后一下消失）",
+                      ci[0] > 0 && ci[0] >= ci[1] && ci[1] >= ci[2] && ci[2] >= ci[3] && ci[3] >= ci[ci.Length - 1],
+                      string.Join(",", Array.ConvertAll(ci, delegate(int v) { return v.ToString(); })));
+                Check("收完了提示为 0", ci[ci.Length - 1] == 0, "还剩 " + ci[ci.Length - 1]);
             }
 
             f.Dispose();
