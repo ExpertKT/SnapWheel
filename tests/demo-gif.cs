@@ -167,6 +167,37 @@ namespace SnapWheel
             int wwh = wf.Width, whh = wf.Height;
             const float ws = 0.62f;    // 轮盘贴进画布时的缩放（见 wheel 委托里的说明）
 
+            // 给轮盘的玻璃底喂一张"模拟桌面"的底图。
+            // 不喂会怎样：`_backdropBlur` 是 null，`UseBackdrop()` 直接返回 false ——
+            // 玻璃走兜底的**平涂**，出图就是一块奶白色，盖在模拟桌面上发灰、看着不像玻璃
+            // （真机上是抓真实桌面再模糊，离线渲染里没得抓）。
+            // 做法：把轮盘窗口在画布上占的那块区域从模拟桌面上抠出来，放大回窗口尺寸再模糊，
+            // 于是"玻璃后面透出的是被它盖住的那块桌面"，和真机所见一致。
+            try
+            {
+                using (Bitmap bd = new Bitmap(wwh, whh, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(bd))
+                    {
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        Rectangle src = new Rectangle(0, H - (int)(whh * ws), (int)(wwh * ws), (int)(whh * ws));
+                        g.DrawImage(deskDoc, new Rectangle(0, 0, wwh, whh), src, GraphicsUnit.Pixel);
+                    }
+                    // BlurBitmap 是 **static** 的（Call() 找的是实例方法，所以这里单独反射）
+                    MethodInfo bm = typeof(WheelForm).GetMethod("BlurBitmap",
+                        BindingFlags.NonPublic | BindingFlags.Static);
+                    if (bm == null) throw new Exception("找不到 WheelForm.BlurBitmap");
+                    object blurred = bm.Invoke(null, new object[] { bd, 6 });
+                    F(wf, "_backdropBlur", blurred);
+                    F(wf, "_backdropOld", null);
+                    F(wf, "_backdropFade", 1f);
+                    F(wf, "_backdropOffset", new Point(0, 0));
+                    F(wf, "_backdropValid", true);
+                    Console.WriteLine("玻璃底已喂入（" + wwh + "x" + whh + "，取自模拟桌面）");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("喂玻璃底失败（出图会是平涂）：" + ex.Message); }
+
             List<Bitmap> frames = new List<Bitmap>();
             List<int> delays = new List<int>();
             Action<Bitmap, int> add = delegate(Bitmap b, int ms) { frames.Add(b); delays.Add(ms); };
