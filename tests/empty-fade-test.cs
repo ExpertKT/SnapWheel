@@ -173,7 +173,9 @@ namespace SnapWheel
                 Console.WriteLine("   （有图之后）用时 {0:F0} ms，_emptyT 末值 {1:F2}", ms, last);
 
                 Check("有图之后 _emptyT 落到 0（提示彻底淡出）", last <= 0.05f, "末值是 " + last.ToString("F2"));
-                Check("这段过渡**确实花了时间**（≥60ms，不是一帧跳过去）", ms >= 60.0,
+                // 注意用词：build.ps1 会把带「跳过」的行当成"这条没测"回显出来，
+                // 所以**跳过**两个字只留给真的跳过。这里想说"不是一帧到位"，就别写成"跳过去"。
+                Check("这段过渡**确实花了时间**（≥60ms，不是一帧到位）", ms >= 60.0,
                       string.Format("只用了 {0:F0} ms", ms));
             }
 

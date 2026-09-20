@@ -166,6 +166,16 @@ if ($Test) {
             $o | Where-Object { $_ -match 'FAIL' } | Select-Object -First 8 |
                 ForEach-Object { Write-Host ("      " + $_.Trim()) -ForegroundColor Red }
         }
+        # **跳过的行也要回显**（0.9.10）。测试里有些断言会明确跳过（比如这台机器没有中文
+        # OCR 语言包，"中文小字认得准"这条就没法验）。跳过本身是合理的，但**跳过必须是看得见的**：
+        # 只回显失败行的话，"这条因为环境不满足而跳过"在日志里和"这条通过了"长得一模一样 ——
+        # 于是它就从"没验"悄悄变成了"验过了"。这个项目为这一类的坑付过好几次学费
+        # （ui-probe 那个每次都打印"跳过重叠检查"却算通过的检查）。
+        # 约定：**测试里"跳过"两个字只留给真的跳过** —— 想表达"不是一帧到位"，就别写成"跳过去"
+        # （第一次加这个过滤时就误报了一条：empty-fade-test 原来写的是"不是一帧跳过去"）。
+        # 去重：同一个跳过会在多个参数组合下各打一行（无万能键版一条就打了 8 遍），只留一条。
+        $o | Where-Object { $_ -match '跳过|SKIP' } | Select-Object -Unique | Select-Object -First 8 |
+            ForEach-Object { Write-Host ("      " + $_.Trim()) -ForegroundColor DarkYellow }
         Remove-Item $exe -Force -ErrorAction SilentlyContinue
     }
     Run-Test '缩放几何'      'resize-geometry-test.cs' $null $null
