@@ -105,10 +105,12 @@ if (_keyHov   > 0.01f) need = true;
 - ❌ 不是"构造过程中被重复布局"（加 `SuspendLayout`/`ResumeLayout` 后 264→270ms，**没用，已撤**）
 - ❌ 不是控件建得慢（19 个 Add 只要 10ms）
 - ❌ 不是"量尺寸"本身（已布局的页只要 2~3ms）
+- ⚠️ **`RowPanel.GetPreferredSize` 那个覆写只占 ~26ms**：临时让它直接 `return base.GetPreferredSize()`
+  → 269ms 降到 243ms。**但那个覆写不能删** —— 它当初就是为修"ComboBox 报 23px 实际 27px、
+  行高不够把下拉箭头裁掉"加的，删了那个 bug 会回来。为 26ms 不值得冒这个险，**已撤**。
 - ➡️ 剩下最可疑的：`BuildPage` 里 `_pages[0].ResumeLayout(true)` 那一下触发的**首次自动布局**。
   第 1 页是**两列 AutoSize × 10 行 AutoSize**、每格里套一个 `RowPanel`（FlowLayoutPanel，
-  `WrapContents=false`，且覆写了 `GetPreferredSize` 逐个子控件取 `Bottom`）。
-  TableLayoutPanel 的 AutoSize 本来就慢，这种嵌套在首次布局时要反复迭代。
+  `WrapContents=false`）。TableLayoutPanel 的 AutoSize 本来就慢，这种嵌套在首次布局时要反复迭代。
 
 **打算试的方向**（都要先量、再改）：
 1. 把第 1 页的两列 AutoSize 改成固定百分比 —— 但要先确认布局结果不变（`ui-probe` 有控件重叠检查兜着）
