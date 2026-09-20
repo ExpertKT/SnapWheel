@@ -153,16 +153,53 @@ namespace SnapWheel
             int ww = wf.Width, wh = wf.Height;
             int offX = (W - ww) / 2;
 
+            // ---- 动效的关键坐标，先定下来，裁切区和它们用的是**同一份数** ----
+            // 飞进来的起点原来在 (W/2, WheelTop-40) —— 正好从标题上方穿过，把"拖一下就发出去了"
+            // 那两行字整个盖住。改成从**右侧**飞进来（也更像"从聊天窗口拖过来"）。
+            PointF flyFrom = new PointF(W - 165, 760);
+            float flySw = 300, flySh = 178;
+            PointF dragTo = new PointF(W - 230, WheelTop + 300);
+            float dragSw = 330, dragSh = 196;
+
+            // 裁切区**由实际用到的范围算出来**，不再写死。
+            // 写死的那一版（135,190,810,1080）四周留了一堆空白：轮盘在画面里只占很小一块，
+            // 手机上主次就反了 —— 这正是"看起来不像重点"的常见原因。
+            // ⚠️ 标题和页脚**必须算进来**。第一版我只按"轮盘 + 动效"算裁切区，
+            // 结果把大标题的顶部裁掉了（"截完图"上面被切掉一截）——
+            // 而裁切发生在最后一步，画的时候完全看不出来，只有出图才发现。
+            // 这几个数是 BuildStatic 里写死的文字位置，那边改了就要改这里。
+            const int textTop = 200, textBottom = 1270, textLeft = 56, textRight = W;   // 56 = 左上角那个卖点角标的位置（x=72 再留点余量）
+
+            int cl = Math.Min(Math.Min(offX, textLeft), (int)(flyFrom.X - flySw / 2));
+            int cr = Math.Max(Math.Max(offX + ww, textRight), (int)(dragTo.X + dragSw / 2));
+            int ct = Math.Min(Math.Min(WheelTop, textTop), (int)(flyFrom.Y - flySh / 2));
+            int cb = Math.Max(WheelTop + wh, textBottom);
+            const int pad = 26;
+            cl -= pad; cr += pad; ct -= pad; cb += pad;
+            // 归到 3:4（和其余 5 张同尺寸），不够就往外扩、不裁掉内容
+            int cw2 = cr - cl, ch2 = cb - ct;
+            if (cw2 * 4 < ch2 * 3) { int want = ch2 * 3 / 4; int d = (want - cw2) / 2; cl -= d; cr += want - cw2 - d; }
+            else { int want = cw2 * 4 / 3; int d = (want - ch2) / 2; ct -= d; cb += want - ch2 - d; }
+            // 夹回画布内（往外扩过头就平移回来，不缩）
+            if (cl < 0) { cr -= cl; cl = 0; }
+            if (ct < 0) { cb -= ct; ct = 0; }
+            if (cr > W) { cl -= (cr - W); cr = W; if (cl < 0) cl = 0; }
+            if (cb > H) { ct -= (cb - H); cb = H; if (ct < 0) ct = 0; }
+            Rectangle crop = new Rectangle(cl, ct, cr - cl, cb - ct);
+            Console.WriteLine("裁切区 " + crop + "（轮盘窗口 " + ww + "x" + wh + " 在 x=" + offX + "）");
+            // 自检：裁切区必须**真的包住**标题和页脚，否则文字会被切掉
+            bool textOk = crop.Top <= textTop && crop.Bottom >= textBottom && crop.Left <= textLeft;
+            Console.WriteLine(textOk ? "  裁切自检：标题与页脚都在画面内"
+                                     : "  ★ 裁切自检：文字会被切掉！crop=" + crop);
+
             Bitmap back = BuildStatic();
             Bitmap shot = MakeShot(Color.FromArgb(232, 86, 110));
             List<Bitmap> frames = new List<Bitmap>();
             List<int> delays = new List<int>();
             Action<Bitmap, int> add = delegate(Bitmap b, int ms)
             {
-                // 缩到 720x960 再入帧：1080x1440 x 43 帧要 18MB，微信/小红书发不出去。
+                // 缩到 720x960 再入帧：1080x1440 全尺寸帧数一多就要十几 MB，微信/小红书发不出去。
                 // 手机上看 720 宽足够清晰，体积能压到三分之一。
-                // 裁紧再缩：原来整幅 1080x1440 里轮盘只占 61% 宽，主次反了。
-                Rectangle crop = new Rectangle(135, 190, 810, 1080);   // 轮盘占 81% 宽
                 Bitmap small = new Bitmap(720, 960, PixelFormat.Format32bppPArgb);
                 using (Graphics sg = Graphics.FromImage(small))
                 {
@@ -196,7 +233,9 @@ namespace SnapWheel
             };
 
             // ── 第 1 段：轮盘展开（环从角上扫出来）
-            for (int i = 0; i <= 9; i++)
+            // 从 i=1 开始：i=0 时展开进度是 0，整帧几乎是空的 —— 而平台（小红书/抖音）
+            // 常常拿**首帧当缩略图**，那一眼看起来就是张空卡。
+            for (int i = 1; i <= 9; i++)
             {
                 float t = Ease(i / 9f);
                 Bitmap fr = new Bitmap(back);
@@ -207,7 +246,7 @@ namespace SnapWheel
             StoreItem it = st.Add(shot);
             PointF c1 = (PointF)Call(wf, "ItemCenter", 0);
             c1 = new PointF(c1.X + offX, c1.Y + WheelTop);
-            PointF from = new PointF(W / 2f, WheelTop - 40);
+            PointF from = flyFrom;
             for (int i = 0; i <= 9; i++)
             {
                 float t = Ease(i / 9f);
@@ -216,7 +255,7 @@ namespace SnapWheel
                 {
                     wheel(g, 1f);
                     float cx = Lerp(from.X, c1.X, t), cy = Lerp(from.Y, c1.Y, t);
-                    float sw = Lerp(300, 150, t), sh = Lerp(178, 90, t);   // 原来起始 460，太大抢戏
+                    float sw = Lerp(flySw, 150, t), sh = Lerp(flySh, 90, t);
                     ColorMatrix cm = new ColorMatrix(); cm.Matrix33 = Math.Max(0f, 1f - t * 0.45f);
                     ImageAttributes ia = new ImageAttributes(); ia.SetColorMatrix(cm);
                     Rectangle d = new Rectangle((int)(cx - sw / 2), (int)(cy - sh / 2), (int)sw, (int)sh);
@@ -236,8 +275,8 @@ namespace SnapWheel
                 using (Graphics g = Graphics.FromImage(fr))
                 {
                     wheel(g, 1f);
-                    float cx = Lerp(c1.X, W / 2f + 250, t), cy = Lerp(c1.Y, WheelTop + 300, t);
-                    float sw = Lerp(150, 330, t), sh = Lerp(90, 196, t);
+                    float cx = Lerp(c1.X, dragTo.X, t), cy = Lerp(c1.Y, dragTo.Y, t);
+                    float sw = Lerp(150, dragSw, t), sh = Lerp(90, dragSh, t);
                     Rectangle d = new Rectangle((int)(cx - sw / 2), (int)(cy - sh / 2), (int)sw, (int)sh);
                     using (SolidBrush sb = new SolidBrush(Color.FromArgb((int)(90 * (1 - t * 0.5f)), 0, 0, 0)))
                         g.FillRectangle(sb, d.X + 8, d.Y + 10, d.Width, d.Height);
@@ -255,9 +294,44 @@ namespace SnapWheel
 
             string outp = Path.Combine(Path.GetTempPath(), "snapwheel_vertical");
             Directory.CreateDirectory(outp);
+            // 海报帧：把"结束时的样子"挪到最前面，停 800ms。
+            // 为什么：这段动画的开头是"环从角上慢慢长出来"，**首帧几乎是张空卡** ——
+            // 而小红书/抖音/微信常常直接拿第一帧当封面。封面一眼看不出是什么，后面做得再好也没人点。
+            // 把成片的样子先亮出来，再从头演一遍（循环起来也自然）。
+            frames.Insert(0, new Bitmap(frames[frames.Count - 1]));
+            delays.Insert(0, 800);
+
             string gif = Path.Combine(outp, "图1.gif");
             WriteGif(gif, frames, delays);
             Console.WriteLine("写出 " + gif + "  " + frames.Count + " 帧  " + (new FileInfo(gif).Length / 1024) + " KB");
+
+            // 分镜图：把几个关键时刻拼成一张 PNG。
+            // 为什么要有它：GIF 是动的，**看第一帧什么也看不出来**（开头那一帧轮盘还没扫出来），
+            // 要"看完整个动效"只能真去播一遍 —— 那是人最贵的时间。
+            // 有了分镜，一眼就能确认"飞进去的是不是后面拖出去的那一张""有没有太快"。
+            try
+            {
+                int[] pick = { 0, 6, 12, 17, 22, 27, 30 };
+                int cw = 360, ch = 480, cols = 4;
+                int rows = (pick.Length + cols - 1) / cols;
+                using (Bitmap sb = new Bitmap(cols * cw, rows * ch, PixelFormat.Format32bppPArgb))
+                using (Graphics sg = Graphics.FromImage(sb))
+                {
+                    sg.Clear(Color.FromArgb(12, 14, 18));
+                    for (int i = 0; i < pick.Length; i++)
+                    {
+                        int fi = pick[i]; if (fi >= frames.Count) continue;
+                        int cx = (i % cols) * cw, cy = (i / cols) * ch;
+                        sg.DrawImage(frames[fi], new Rectangle(cx + 4, cy + 4, cw - 8, ch - 8));
+                        using (Font f2 = new Font("Microsoft YaHei UI", 16, FontStyle.Bold))
+                            sg.DrawString("#" + fi + "  " + delays[fi] + "ms", f2, Brushes.White, cx + 10, cy + 6);
+                    }
+                    string sbp = Path.Combine(outp, "图1-分镜.png");
+                    sb.Save(sbp, System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine("写出 " + sbp + "（不用播 GIF 也能看出动效对不对）");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("分镜图失败：" + ex.Message); }
         }
 
         // 写循环 GIF（GDI+ 自己不带 NETSCAPE2.0 循环块，所以要手工补：见 docs 里 demo.gif 的同类处理）
