@@ -277,55 +277,12 @@ namespace SnapWheel
             // 计数胶囊「3 / 8」跟滚动位置有关，单独draw（见 DrawCountPill）：
             // 留在这一层里的话，滚动时签名每帧都变，整层缓存就废了。
 
-            // 外部文件拖到轮盘上方：提示松手加入
-            if (_dropActive && _dropExternal && a > 90)
-            {
-                string tip = Lang.T("松手把 ", "Release to add ") + _dropCount + Lang.T(" 张图片加入「", " item(s) to \"") + FitName(_mgr.ActiveWheel.Name, 12) + "」";
-                using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
-                {
-                    SizeF sz = g.MeasureString(tip, f);
-                    float px = c.X + Sx() * (EffR() * 0.78f) - sz.Width / 2f;
-                    float py = c.Y + Sy() * (EffR() * 0.78f) - sz.Height / 2f;
-                    RectangleF pill = new RectangleF(px - 14, py - 7, sz.Width + 28, sz.Height + 14);
-                    using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
-                    {
-                        using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 34, 120, 86)))
-                            g.FillPath(pb, pg);
-                        using (Pen pp2 = new Pen(Color.FromArgb((int)(220 * a / 255f), 150, 245, 190), 1.6f))
-                            g.DrawPath(pp2, pg);
-                    }
-                    using (SolidBrush tb = new SolidBrush(Color.FromArgb((int)(250 * a / 255f), 255, 255, 255)))
-                        g.DrawString(tip, f, tb, pill.X + 14, pill.Y + 6);
-                }
-            }
-
-            // 长按关闭键的提示条：位置放在关闭键正上方（避开万能键），并且最后画，不会被盖住
-            if (_closeHoldP > 0.10f)
-            {
-                Rectangle cbr8 = Shrink(CloseButtonRect(), _closeDown);
-                int ab8 = (int)(a * IntroP(0.30f));
-                if (ab8 < 8) ab8 = 8;
-                int ta = (int)(Math.Min(1f, (_closeHoldP - 0.10f) / 0.25f) * 240 * ab8 / 255f);
-                string tip2 = _closeLong ? Lang.T("松手退出 · 移开取消", "Release to exit · move away to cancel") : Lang.T("按住不放 · 移开可取消", "Hold · move away to cancel");
-                using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
-                using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
-                {
-                    SizeF ts2 = g.MeasureString(tip2, ft2);
-                    // 放在轮盘左下角那条提示带（和 toast 同一位置）：
-                    // 按钮上方被万能键占着、旁边被缩略图占着，只有这里是干净的
-                    SizeF ls3 = LogicalSize();
-                    float px2 = 26f;
-                    float py2 = ls3.Height - ts2.Height - 26f;   // 再往下让开计数胶囊
-                    RectangleF pr2 = new RectangleF(px2 - 8f, py2 - 4f, ts2.Width + 16f, ts2.Height + 8f);
-                    using (GraphicsPath clPath = Gfx.Round(pr2, pr2.Height / 2f))
-                    {
-                        BackdropClip(g, clPath, ta);
-                        using (SolidBrush clBg = new SolidBrush(Color.FromArgb((int)(ta * 0.62f), 22, 24, 30))) g.FillPath(clBg, clPath);
-                        using (Pen clPen = new Pen(Color.FromArgb((int)(ta * 0.55f), 236, 74, 62), 1.4f)) g.DrawPath(clPen, clPath);
-                    }
-                    g.DrawString(tip2, ft2, tb2, px2, py2);
-                }
-            }
+            // ⚠️ 「拖放提示」和「长按关闭键提示」原来画在这里（DrawControls 中间）——
+            // 已挪到 DrawWheel 最上面那一组，见那边的图层说明。
+            // 挪走的直接原因：拖放提示就画在这两行下面一点，而**计数胶囊画在整层之后**，
+            // 于是「松手把 3 张图加入「项目1」」被「几 / 几」盖住了字（用户实机复现）。
+            // 顺带补上了 Diag 登记 —— 它以前**连名字都没有**，任何几何检查都看不见它，
+            // 这是我第一轮改错地方（去改提示条）却毫无察觉的原因。
 
             // ⚠️ 提示条**不在这里画**（v1.0 挪走）。它是"回应你刚做的一个动作"的瞬时反馈，
             // 必须压在所有**常驻**元素之上 —— 而这一层里的按钮/药丸/把手都是常驻的。
@@ -405,6 +362,77 @@ namespace SnapWheel
                     }
                 g.TranslateTransform(-sc2.X, -sc2.Y);
                 }
+        }
+
+        // ============================ 状态区（瞬时消息都放这儿）============================
+        //
+        // 位置：**轮盘靠着的那只角的对角**。轮盘只吃一只角，对角那一大片永远是空的；
+        // 而轮盘自己那只角同时挤着万能键、名字药丸、三个圆按钮和最下面那张卡片 ——
+        // 实测在那儿「往上让」只是撞到别的东西（试了三个方向），根本没空位。
+        //
+        // 谁用这块地方：操作回执（Toast）、拖放提示、长按关闭键提示。
+        // **同一时刻只显示最紧急的一条**（见 DrawWheel 里的 statusTaken）——
+        // 三条不同时出现是这里的前提，所以它们可以共用一格而不会互相压住。
+        internal RectangleF StatusArea(SizeF textSz, float padX, float padY)
+        {
+            SizeF ls = LogicalSize();
+            float w = textSz.Width + padX * 2f, h = textSz.Height + padY * 2f;
+            float x = Sx() > 0 ? (ls.Width - w - 26f) : 26f;
+            float y = Sy() > 0 ? (ls.Height - h - 26f) : 26f;
+            return new RectangleF(x, y, w, h);
+        }
+
+        // 外部文件拖到轮盘上方：提示"松手加入"。
+        // ⚠️ 这个元素以前**连 Diag 名字都没有** —— 于是任何几何检查都看不见它，
+        // 我第一轮改错地方（去改提示条）却毫无察觉。加元素必须登记，这是硬规矩。
+        void DrawDropHint(Graphics g, int a)
+        {
+            if (!(_dropActive && _dropExternal) || a <= 90) return;
+            string tip = Lang.T("松手把 ", "Release to add ") + _dropCount + Lang.T(" 张图片加入「", " item(s) to \"") + FitName(_mgr.ActiveWheel.Name, 12) + "」";
+            using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
+            {
+                SizeF sz = g.MeasureString(tip, f);
+                RectangleF pill = StatusArea(sz, 14f, 7f);
+                Diag("拖放提示（松手加入）", pill);
+                using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
+                {
+                    using (SolidBrush pb = new SolidBrush(Color.FromArgb((int)(235 * a / 255f), 34, 120, 86)))
+                        g.FillPath(pb, pg);
+                    using (Pen pp2 = new Pen(Color.FromArgb((int)(220 * a / 255f), 150, 245, 190), 1.6f))
+                        g.DrawPath(pp2, pg);
+                }
+                using (SolidBrush tb = new SolidBrush(Color.FromArgb((int)(250 * a / 255f), 255, 255, 255)))
+                    g.DrawString(tip, f, tb, pill.X + 14, pill.Y + 6);
+            }
+        }
+
+        // 长按关闭键的提示（"按住不放 · 移开可取消"）。
+        // 原来贴在关闭键上方 —— 那里和名字药丸叠着，只是"画得晚所以盖住了"而已，
+        // 属于"顺序凑合"，不是"位置合适"。现在统一进状态区。
+        // 关闭键本身已经有一圈红色进度环，"按住了"这件事在按钮上看得见，文字不必贴着它。
+        void DrawCloseHoldHint(Graphics g, int a)
+        {
+            if (_closeHoldP <= 0.10f) return;
+            int ab8 = (int)(a * IntroP(0.30f));
+            if (ab8 < 8) ab8 = 8;
+            int ta = (int)(Math.Min(1f, (_closeHoldP - 0.10f) / 0.25f) * 240 * ab8 / 255f);
+            if (ta <= 2) return;
+            string tip2 = _closeLong ? Lang.T("松手退出 · 移开取消", "Release to exit · move away to cancel")
+                                     : Lang.T("按住不放 · 移开可取消", "Hold · move away to cancel");
+            using (Font ft2 = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold))
+            using (SolidBrush tb2 = new SolidBrush(Color.FromArgb(ta, 255, 255, 255)))
+            {
+                SizeF ts2 = g.MeasureString(tip2, ft2);
+                RectangleF pr2 = StatusArea(ts2, 8f, 4f);
+                Diag("长按关闭键提示", pr2);
+                using (GraphicsPath clPath = Gfx.Round(pr2, pr2.Height / 2f))
+                {
+                    BackdropClip(g, clPath, ta);
+                    using (SolidBrush clBg = new SolidBrush(Color.FromArgb((int)(ta * 0.62f), 22, 24, 30))) g.FillPath(clBg, clPath);
+                    using (Pen clPen = new Pen(Color.FromArgb((int)(ta * 0.55f), 236, 74, 62), 1.4f)) g.DrawPath(clPen, clPath);
+                }
+                g.DrawString(tip2, ft2, tb2, pr2.X + 8f, pr2.Y + 4f);
+            }
         }
 
     }

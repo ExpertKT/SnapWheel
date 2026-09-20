@@ -207,120 +207,101 @@ namespace SnapWheel
             Check("命中区：四种角落 × 三档缩放下，五个可点控件都互不重叠、中心命中自己、且在窗口内",
                   allOk && anyMeasured, allOk ? "一个都没量到" : "见上面的红字");
 
-            // ---------- ①b 瞬时反馈（提示条）不能被常驻元素压住 ----------
+            // ---------- ①b 瞬时反馈不能被常驻元素压住、也不该互相压住 ----------
             //
             // 起因：用户实机复现 —— 「松手把 3 张图加入「项目1」」这条提示被**计数胶囊**盖住了字。
-            // 根因不是巧合，是**绘制顺序写死了**：计数胶囊画在提示条之后，于是它永远在上面。
-            // 这条检查就是盯着"画出来的先后"和"该有的先后"是不是一回事。
+            //
+            // ⚠️ 这个检查第一版只盯着「提示条（Toast）」，而用户看到的那条**根本不是 toast** ——
+            // 是"拖放提示"，另一个元素，而且它**连 Diag 名字都没有**。
+            // 于是检查全绿、用户那边照旧。教训：**没有名字的元素，任何几何检查都拦不住**。
+            // 现在三条瞬时消息（回执 / 拖放提示 / 长按提示）一起查，而且必须**都登记**。
             {
                 s.DiagMode = true;
                 string[] corners2 = { "BL", "BR", "TL", "TR" };
-                bool toastOk = true, measured = false;
-                for (int ci = 0; ci < corners2.Length; ci++)
+                string[] names = { "提示条", "拖放提示", "长按关闭键提示" };
+                bool allOk2 = true, measured = false;
+
+                for (int k = 0; k < names.Length; k++)
                 {
-                    for (int ui = 0; ui < 2; ui++)
+                    for (int ci = 0; ci < corners2.Length; ci++)
                     {
-                        s.Corner = corners2[ci];
-                        s.UiScale = (ui == 0) ? 0 : 150;
-                        f.ApplyLayout();
-                        Application.DoEvents();
-                        S(f, "_show", 1f); S(f, "_intro", false); S(f, "_collapsing", false);
-                        S(f, "_collapsed", false); S(f, "_showAnimating", false);
-                        // 摆一条最长的那种提示（太长会被 12 字截断，这条正好贴着上限）
-                        S(f, "_toast", "松手把 3 张图加入「项目1」");
-                        S(f, "_toastAt", DateTime.Now.AddSeconds(-0.35));   // 淡入已完成、还没开始淡出
-                        using (Bitmap bmp = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height)))
-                        using (Graphics g = Graphics.FromImage(bmp))
-                            dw.Invoke(f, new object[] { g, f.Width, f.Height });
+                        for (int ui = 0; ui < 2; ui++)
+                        {
+                            s.Corner = corners2[ci];
+                            s.UiScale = (ui == 0) ? 0 : 150;
+                            f.ApplyLayout();
+                            Application.DoEvents();
+                            S(f, "_show", 1f); S(f, "_intro", false); S(f, "_collapsing", false);
+                            S(f, "_collapsed", false); S(f, "_showAnimating", false);
+                            // 只摆当前这一条，另外两条必须**不出现**（它们共用状态区那一格）
+                            S(f, "_toast", k == 0 ? "松手把 3 张图加入「项目1」" : "");
+                            S(f, "_toastAt", DateTime.Now.AddSeconds(-0.35));
+                            S(f, "_dropActive", k == 1); S(f, "_dropExternal", k == 1);
+                            S(f, "_dropCount", 3);
+                            S(f, "_closeHoldP", k == 2 ? 0.60f : 0f);
 
-                        IList list = (IList)G(f, "_diag");
-                        RectangleF toast = RectangleF.Empty; bool hasToast = false;
-                        List<string> blockers = new List<string>();
-                        for (int i = 0; i < list.Count; i++)
-                        {
-                            object kv = list[i];
-                            string k = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
-                            object v = kv.GetType().GetProperty("Value").GetValue(kv, null);
-                            if (k.StartsWith("提示条")) { toast = (RectangleF)v; hasToast = true; break; }
-                        }
-                        if (!hasToast) { toastOk = false; Check("提示条 · 画出来了", false, "注册表里没有提示条"); continue; }
-                        measured = true;
+                            // 完全展开 + 展开动画中途各查一遍
+                            // （用户那次就发生在动画里：计数胶囊还在往自己位置滑，最多被挪 110px）
+                            float[] phases = { 1f, 0.30f, 0.55f, 0.80f };
+                            for (int ph = 0; ph < phases.Length; ph++)
+                            {
+                                bool mid = phases[ph] < 0.999f;
+                                S(f, "_intro", mid); S(f, "_introT", phases[ph]);
+                                using (Bitmap bmp2 = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height)))
+                                using (Graphics g2 = Graphics.FromImage(bmp2))
+                                    dw.Invoke(f, new object[] { g2, f.Width, f.Height });
 
-                        string tag2 = corners2[ci] + "/" + (s.UiScale == 0 ? "自动" : s.UiScale + "%");
-                        for (int i = 0; i < list.Count; i++)
-                        {
-                            object kv = list[i];
-                            string k = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
-                            object v = kv.GetType().GetProperty("Value").GetValue(kv, null);
-                            if (k.StartsWith("提示条")) continue;
-                            // 「环」注册的是那条**四分之一圆弧的包围盒**（一个覆盖全窗口的大方块），
-                            // 不是它真正画到的像素 —— 拿它比会把一切都判成"压住"。
-                            // 同理由见上面 Interactive 里对「计数胶囊」的说明。
-                            if (k.StartsWith("环")) continue;
-                            RectangleF other = (RectangleF)v;
-                            RectangleF ix = RectangleF.Intersect(toast, other);
-                            // 角上蹭几像素不算（和上面同一把尺子）
-                            if (ix.Width > OverlapSlack && ix.Height > OverlapSlack)
-                                blockers.Add(k + " " + ix);
-                        }
-                        if (blockers.Count > 0)
-                        {
-                            Check("提示条 · " + tag2 + " 不被别的元素压住", false,
-                                  "被压住：" + string.Join("；", blockers.ToArray()));
-                            toastOk = false;
-                        }
-                        // 提示条本身也不能跑出窗口
-                        SizeF ls2 = (SizeF)typeof(WheelForm).GetMethod("LogicalSize", BindingFlags.NonPublic | BindingFlags.Instance)
-                                                              .Invoke(f, null);
-                        if (toast.X < -6f || toast.Y < -6f || toast.Right > ls2.Width + 6f || toast.Bottom > ls2.Height + 6f)
-                        {
-                            Check("提示条 · " + tag2 + " 在窗口内", false, toast + " 超出 " + ls2);
-                            toastOk = false;
-                        }
-
-                        // **开启动画进行中也要查**：用户实机看到的那次重叠就发生在展开动画里 ——
-                        // 那时计数胶囊还在往自己位置上滑（IntroShift 最多把它挪 110px 到角落里），
-                        // 正好路过提示条。只查"完全展开之后"是查不到这个 bug 的。
-                        float[] midIntro = { 0.30f, 0.55f, 0.80f };
-                        for (int m = 0; m < midIntro.Length; m++)
-                        {
-                            S(f, "_intro", true); S(f, "_introT", midIntro[m]);
-                            S(f, "_collapsing", false); S(f, "_collapsed", false);
-                            using (Bitmap bmp2 = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height)))
-                            using (Graphics g2 = Graphics.FromImage(bmp2))
-                                dw.Invoke(f, new object[] { g2, f.Width, f.Height });
-                            IList l2 = (IList)G(f, "_diag");
-                            RectangleF t2 = RectangleF.Empty; bool has2 = false;
-                            for (int i = 0; i < l2.Count; i++)
-                            {
-                                object kv = l2[i];
-                                string k = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
-                                if (!k.StartsWith("提示条")) continue;
-                                t2 = (RectangleF)kv.GetType().GetProperty("Value").GetValue(kv, null); has2 = true; break;
-                            }
-                            if (!has2) continue;
-                            List<string> bl2 = new List<string>();
-                            for (int i = 0; i < l2.Count; i++)
-                            {
-                                object kv = l2[i];
-                                string k = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
-                                if (k.StartsWith("提示条") || k.StartsWith("环")) continue;
-                                RectangleF ix2 = RectangleF.Intersect(t2, (RectangleF)kv.GetType().GetProperty("Value").GetValue(kv, null));
-                                if (ix2.Width > OverlapSlack && ix2.Height > OverlapSlack) bl2.Add(k + " " + ix2);
-                            }
-                            if (bl2.Count > 0)
-                            {
-                                Check("提示条 · " + tag2 + " 展开进度 " + midIntro[m].ToString("0.00") + " 时也不被压住", false,
-                                      "被压住：" + string.Join("；", bl2.ToArray()));
-                                toastOk = false;
+                                IList l2 = (IList)G(f, "_diag");
+                                RectangleF mine = RectangleF.Empty; bool has2 = false;
+                                List<string> others = new List<string>();
+                                for (int i = 0; i < l2.Count; i++)
+                                {
+                                    object kv = l2[i];
+                                    string kk = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
+                                    RectangleF vv = (RectangleF)kv.GetType().GetProperty("Value").GetValue(kv, null);
+                                    if (kk.StartsWith(names[k])) { mine = vv; has2 = true; continue; }
+                                    if (kk.StartsWith("环")) continue;   // 弧的包围盒，不是真实像素
+                                    others.Add(kk + "|" + vv.X + "," + vv.Y + "," + vv.Width + "," + vv.Height);
+                                }
+                                string tag2 = names[k] + " · " + corners2[ci] + "/" +
+                                              (s.UiScale == 0 ? "自动" : s.UiScale + "%") +
+                                              (mid ? " · 展开进度 " + phases[ph].ToString("0.00") : "");
+                                if (!has2)
+                                {
+                                    Check(tag2 + " 画出来了（且登记了名字）", false, "注册表里找不到它 —— 没有名字就等于没有检查");
+                                    allOk2 = false; continue;
+                                }
+                                measured = true;
+                                List<string> blockers = new List<string>();
+                                for (int i = 0; i < others.Count; i++)
+                                {
+                                    string[] p = others[i].Split('|');
+                                    string[] q = p[1].Split(',');
+                                    RectangleF ix = RectangleF.Intersect(mine,
+                                        new RectangleF(float.Parse(q[0]), float.Parse(q[1]), float.Parse(q[2]), float.Parse(q[3])));
+                                    if (ix.Width > OverlapSlack && ix.Height > OverlapSlack) blockers.Add(p[0] + " " + ix);
+                                }
+                                if (blockers.Count > 0)
+                                {
+                                    Check(tag2 + " 不被别的元素压住", false, "被压住：" + string.Join("；", blockers.ToArray()));
+                                    allOk2 = false;
+                                }
+                                SizeF ls2 = (SizeF)typeof(WheelForm).GetMethod("LogicalSize", BindingFlags.NonPublic | BindingFlags.Instance)
+                                                                      .Invoke(f, null);
+                                if (mine.X < -6f || mine.Y < -6f || mine.Right > ls2.Width + 6f || mine.Bottom > ls2.Height + 6f)
+                                {
+                                    Check(tag2 + " 在窗口内", false, mine + " 超出 " + ls2);
+                                    allOk2 = false;
+                                }
                             }
                         }
-                        S(f, "_intro", false); S(f, "_introT", 1f);
                     }
                 }
-                Check("提示条：四种角落 × 两档缩放下，都不被任何元素压住、且都在窗口内",
-                      toastOk && measured, toastOk ? "一次都没量到" : "见上面的红字");
-                S(f, "_toast", "");
+                Check("瞬时反馈（回执 / 拖放提示 / 长按提示）：四种角落 × 两档缩放 × 展开动画中途，" +
+                      "都登记了名字、不被压住、都在窗口内",
+                      allOk2 && measured, allOk2 ? "一次都没量到" : "见上面的红字");
+                S(f, "_toast", ""); S(f, "_dropActive", false); S(f, "_dropExternal", false); S(f, "_closeHoldP", 0f);
+                S(f, "_intro", false); S(f, "_introT", 1f);
                 s.DiagMode = false;
             }
 

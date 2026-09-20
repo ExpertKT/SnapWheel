@@ -350,9 +350,20 @@ namespace SnapWheel
             //   ⑦ 诊断           元素名 + 边框              —— 诊断模式是给人查问题用的，压在所有东西上面
             //
             //  规矩：**加新元素时先问它属于哪一类**，按类插进这条链，别再按"顺手写在哪"排。
+            //
+            //  ⚠️ 还有一条同样重要的：**新元素必须 Diag 登记**。
+            //  「拖放提示」原来连名字都没有，于是任何几何检查都看不见它 ——
+            //  我第一轮去改"提示条"（同类的另一个元素）却毫无察觉，就是栽在这上面。
+            //  没有名字的元素 = 没有任何检查能拦住它。
             DrawCountPill(g, a);       // ④
             DrawRipple(g, a);          // ⑤
-            DrawToast(g, a);           // ⑥ —— 挪到这里就是为了不再被 ④ 压住
+            // ⑥ 瞬时反馈：三条共用状态区那一格，**同一时刻只显示最紧急的一条**。
+            //    优先级：拖放提示（正卡着用户一个动作）> 长按提示 > 操作回执。
+            //    这样它们既不会互相压住，也不用各自找位置（各自找位置就是之前那些重叠的来源）。
+            bool statusTaken = false;
+            if (_dropActive && _dropExternal && a > 90) { DrawDropHint(g, a); statusTaken = true; }
+            if (!statusTaken && _closeHoldP > 0.10f) { DrawCloseHoldHint(g, a); statusTaken = true; }
+            if (!statusTaken) { DrawToast(g, a); statusTaken = true; }
             DrawDiag(g);               // ⑦ （没有开诊断就什么都不画）
         }
 
@@ -411,22 +422,13 @@ namespace SnapWheel
             using (Font f = new Font("Microsoft YaHei UI", 10f))
             {
                 SizeF sz = g.MeasureString(_toast, f);
-                float w = sz.Width + 34f, h = sz.Height + 16f;
-                SizeF ls2 = LogicalSize();
-                // ⚠️ 提示条放在**轮盘靠着的那只角的对角** —— 那一侧永远是空的。
-                //
-                // 试过两版都不行，记在这里免得有人再走一遍：
-                //   · 原来固定在左下角：贴边左下时，左下角同时挤着万能键、名字药丸、三个圆按钮
-                //     和最下面那张卡片，实测被计数胶囊盖住、被名字药丸压住。
-                //   · 改成"被压住就往上让"：只是撞到别的东西（关闭键 / 万能键 / 缩略图卡），
-                //     三个方向都撞了一遍。
-                // 结论：**这不是"挪几像素"的问题，是这块地方根本没空位**。
-                // 轮盘只吃一只角，对角那种一大片空白才该放状态提示 —— 这也符合一般习惯。
-                float x = Sx() > 0 ? (ls2.Width - w - 26f) : 26f;
-                float y = Sy() > 0 ? (ls2.Height - h - 26f) : 26f;
+                // 位置统一走状态区（轮盘那只角的**对角**）。原来固定左下角，
+                // 那儿同时挤着万能键、名字药丸、三个圆按钮和最下面那张卡 —— 被压住过两次。
+                RectangleF slot = StatusArea(sz, 17f, 8f);
+                float w = slot.Width, h = slot.Height;
                 float k2 = (1f - t) * 14f;                 // 从画面外往里滑进来
-                x += Sx() > 0 ? k2 : -k2;
-                y += Sy() > 0 ? k2 : -k2;
+                float x = slot.X + (Sx() > 0 ? k2 : -k2);
+                float y = slot.Y + (Sy() > 0 ? k2 : -k2);
                 Diag("提示条（Toast）", new RectangleF(x, y, w, h));
                 using (GraphicsPath pp = Gfx.Round(new RectangleF(x, y, w, h), h / 2f))
                 {

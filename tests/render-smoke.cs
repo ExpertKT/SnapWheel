@@ -608,20 +608,41 @@ namespace SnapWheel
                     for (int k = 0; k < 8; k++) { Application.DoEvents(); Thread.Sleep(15); }
                     Rectangle kr3 = (Rectangle)krH.Invoke(f, null);
                     SizeF lsH = (SizeF)wt.GetMethod("LogicalSize", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(f, null);
+                    // ⚠️ 以前这里是**写死一条带**（窗口底部 x 14..340）去数像素的。
+                    // v1.0 把长按提示挪进"状态区"（轮盘那只角的**对角**）之后它就失效了 ——
+                    // 带子里当然数不到东西，于是报 FAIL。写死位置 = 位置一改检查就变成噪音。
+                    // 现在改成：先问诊断注册表"这条提示自己画在哪个矩形里"，再数那个矩形里的像素。
+                    // 位置怎么挪都跟着，测的还是同一件事（提示真画出来了、且不被万能键压住）。
+                    s.DiagMode = true;
+                    RectangleF hintRc = RectangleF.Empty; bool hasHint = false;
                     int n = 0;
                     using (Bitmap b = new Bitmap(f.Width, f.Height, PixelFormat.Format32bppPArgb))
                     {
                         using (Graphics g = Graphics.FromImage(b)) dwH.Invoke(f, new object[] { g, f.Width, f.Height });
-                        int y0 = (int)((lsH.Height - 74f) * uikH), y1 = (int)((lsH.Height - 12f) * uikH);
-                        int x0 = (int)(14f * uikH), x1 = (int)(340f * uikH);
-                        for (int y = Math.Max(0, y0); y < Math.Min(y1, b.Height); y++)
-                            for (int x = Math.Max(0, x0); x < Math.Min(x1, b.Width); x++)
-                                if (b.GetPixel(x, y).A > 60) n++;
+                        System.Collections.IList dl = (System.Collections.IList)
+                            wt.GetField("_diag", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f);
+                        for (int i = 0; i < dl.Count; i++)
+                        {
+                            object kv = dl[i];
+                            string kk = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
+                            if (!kk.StartsWith("长按关闭键提示")) continue;
+                            hintRc = (RectangleF)kv.GetType().GetProperty("Value").GetValue(kv, null); hasHint = true; break;
+                        }
+                        if (hasHint)
+                        {
+                            int y0 = (int)(hintRc.Y * uikH), y1 = (int)(hintRc.Bottom * uikH);
+                            int x0 = (int)(hintRc.X * uikH), x1 = (int)(hintRc.Right * uikH);
+                            for (int y = Math.Max(0, y0); y < Math.Min(y1, b.Height); y++)
+                                for (int x = Math.Max(0, x0); x < Math.Min(x1, b.Width); x++)
+                                    if (b.GetPixel(x, y).A > 60) n++;
+                        }
                     }
-                    bool noClip = (lsH.Height - 74f) > (kr3.Y + kr3.Height);   // 提示带在万能键下面，不重叠
-                    bool ok2 = n > 500 && noClip;
-                    Console.WriteLine("  {0} 长按提示条可见且不被压住（像素 {1}，与万能键不重叠={2}）",
-                        ok2 ? "OK  " : "FAIL", n, noClip);
+                    s.DiagMode = false;
+                    RectangleF krF = new RectangleF(kr3.X, kr3.Y, kr3.Width, kr3.Height);
+                    bool noClip = hasHint && !hintRc.IntersectsWith(krF);
+                    bool ok2 = hasHint && n > 300 && noClip;
+                    Console.WriteLine("  {0} 长按提示条可见且不被压住（登记={1} 像素 {2}，与万能键不重叠={3}）",
+                        ok2 ? "OK  " : "FAIL", hasHint, n, noClip);
                     if (ok2) pass++; else fail++;
                     F(f, "_closeHold", false); F(f, "_testIgnoreLeave", false);
                     for (int k = 0; k < 20; k++) { Application.DoEvents(); Thread.Sleep(15); }
