@@ -165,6 +165,7 @@ namespace SnapWheel
 
             WheelForm wf = new WheelForm(mgr, s);
             int wwh = wf.Width, whh = wf.Height;
+            const float ws = 0.62f;    // 轮盘贴进画布时的缩放（见 wheel 委托里的说明）
 
             List<Bitmap> frames = new List<Bitmap>();
             List<int> delays = new List<int>();
@@ -186,13 +187,17 @@ namespace SnapWheel
                         gg.InterpolationMode = InterpolationMode.HighQualityBicubic;
                         Call(wf, "DrawWheel", gg, wwh, whh);
                     }
-                    g.DrawImage(b, 0, H - whh);
+                    // ⚠️ 轮盘窗口是**真实尺寸**（本机 658x658），而这张画布只有 720x430 ——
+                    // 1:1 贴上去，比画布还高，糊住了整个左半屏（"轮盘和桌面主次反了"）。
+                    // 缩到 0.62 之后，轮盘的可见那一瓣落在左下角、大小和真机观感接近。
+                    // 绕"窗口左下角"缩（轮盘圆心就在那个角上），所以圆心仍然钉在 (0, H)。
+                    g.DrawImage(b, 0f, H - whh * ws, wwh * ws, whh * ws);
                 }
             };
             Func<int, PointF> cardCenter = delegate(int i)
             {
                 PointF p = (PointF)Call(wf, "ItemCenter", i);
-                return new PointF(p.X, p.Y + (H - whh));
+                return new PointF(p.X * ws, p.Y * ws + (H - whh * ws));   // 和上面同一套缩放
             };
 
             Rectangle sel = SelRect();
@@ -330,6 +335,34 @@ namespace SnapWheel
             double sec = 0; for (int i = 0; i < delays.Count; i++) sec += delays[i] / 1000.0;
             Console.WriteLine("写出 {0}：{1} 帧，{2}x{3}，总时长 {4:0.0} 秒，{5} KB",
                 path, frames.Count, W, H, sec, Math.Round(new FileInfo(path).Length / 1024.0, 1));
+
+            // 分镜图：GIF 是动的，**看第一帧什么也判断不了** —— 要确认"太快没有""飞进去的和
+            // 拖出去的是不是同一张""有没有那种此地无银的自我说明"，只能真去播一遍。
+            // 那是人最贵的时间。拼一张分镜，扫一眼就能看出来。
+            try
+            {
+                int[] pick = { 0, 2, 5, 9, 13, 17, 21, 25, 28 };
+                int cols = 3, cw = W, ch = H + 26;
+                int rows = (pick.Length + cols - 1) / cols;
+                using (Bitmap sb = new Bitmap(cols * cw, rows * ch, PixelFormat.Format32bppPArgb))
+                using (Graphics sg = Graphics.FromImage(sb))
+                {
+                    sg.Clear(Color.FromArgb(18, 20, 24));
+                    for (int i = 0; i < pick.Length; i++)
+                    {
+                        int fi = pick[i]; if (fi >= frames.Count) continue;
+                        int cx = (i % cols) * cw, cy = (i / cols) * ch;
+                        using (Font f2 = new Font("Segoe UI", 11, FontStyle.Bold))
+                            sg.DrawString("#" + fi + "  " + delays[fi] + "ms", f2, Brushes.White, cx + 8, cy + 4);
+                        sg.DrawImage(frames[fi], cx, cy + 24);
+                    }
+                    string sbp = Path.Combine("docs", "_raw", "demo-storyboard.png");   // _raw 是 gitignore 的：这是审阅用的中间产物，不进仓库
+                    sb.Save(sbp, ImageFormat.Png);
+                    Console.WriteLine("写出 " + sbp + "（不用播 GIF 也能看出动效对不对）");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("分镜图失败：" + ex.Message); }
+
             for (int i = 0; i < frames.Count; i++) frames[i].Dispose();
             wf.Dispose();
         }
