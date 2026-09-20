@@ -1083,6 +1083,16 @@ namespace SnapWheel
             Run("取字准确率：14px 小字也要认得准（以前只有 25%）", delegate
             {
                 if (!Ocr.Available) { Console.WriteLine("       （没有 OCR 语言包，跳过）"); return null; }
+                // 只装了别的语言包时（CI 的 runner 只有英文），中文小字这一条**在这儿测不了**。
+                // 光看 Ocr.Available 不够：它只回答"有没有 OCR 引擎"，不回答"认不认中文" ——
+                // 于是这条在 CI 上一直失败，而失败信息读起来像"准确率退化"（"只有 20%"），
+                // 其实是环境里压根没有中文包（识别结果是 9E12E18:oo：数字勉强认得、中文全丢）。
+                // 明确跳过并打印原因，这不是"假装测过"—— 这行会出现在日志里。
+                if (!Ocr.Language.StartsWith("zh"))
+                {
+                    Console.WriteLine("       （这台机器只有 " + Ocr.Language + " 的 OCR 语言包，中文小字测不了，跳过）");
+                    return null;
+                }
                 string truth = "本周报告已发出，请查收。交付时间：9月12日18:00。负责同学：小何 13800008821";
                 Bitmap img = new Bitmap(900, 260, PixelFormat.Format32bppPArgb);
                 using (Graphics g = Graphics.FromImage(img))

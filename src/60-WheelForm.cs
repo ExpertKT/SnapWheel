@@ -357,6 +357,23 @@ namespace SnapWheel
         }
 
 
+        // 界面缩放系数的最终裁决（纯计算，离线可测：tests\render-smoke.cs 拿小屏幕直接调它）。
+        //   wanted   = 用户/DPI 想要的系数（自动档是 AutoUiK()，手动档是 UiScale/100）
+        //   baseSpan = 轮盘逻辑尺寸（半径 + 缩略图 + 标签那一整套，见 ApplyLayout）
+        // **手动档也要过这道夹子**：以前只有自动档夹，于是小屏幕上手动设 200%/250% 时
+        // 窗口被屏幕顶住、内容却没缩，环和把手直接跑到窗口外。
+        // 抽出来的理由和 ToolbarRect 一样 —— 这个 bug 只在"屏幕比自己这台小"时才出现，
+        // 本机 1067 高的屏上永远看不到（CI 的 1024×768 上必现）。
+        internal static float ResolveUiK(float wanted, int scrW, int scrH, float baseSpan)
+        {
+            if (baseSpan > 1f)
+            {
+                float fit = Math.Min(scrW, scrH) / baseSpan;
+                if (wanted > fit) wanted = fit;
+            }
+            return Math.Max(0.6f, Math.Min(2.5f, wanted));
+        }
+
         public void ApplyLayout()
         {
             Rectangle wa = Screen.PrimaryScreen.WorkingArea;
@@ -364,14 +381,13 @@ namespace SnapWheel
                              Math.Max(40, Math.Min(260, _settings.ThumbSize)) * 1.75f + 190f;
 
             // 自动 = 跟显示器缩放比例走（2K@125% -> 1.25，4K@150% -> 1.5），看起来大小才一致；
-            // 但自动模式不会把轮盘撑得比屏幕还大
+            // 但**不管自动还是手动**，都不会把轮盘撑得比屏幕还大。
             float k = (_settings.UiScale > 0) ? (_settings.UiScale / 100f) : AutoUiK();
-            if (_settings.UiScale <= 0)
-            {
-                float fit = Math.Min(wa.Width, wa.Height) / baseSpan;
-                if (k > fit) k = fit;
-            }
-            UiK = Math.Max(0.6f, Math.Min(2.5f, k));
+            // 这一夹以前只在"自动"档生效（0.9.10 修）。后果：小屏幕 + 手动设了 200%/250% 时，
+            // 窗口被下面的 cap 顶回屏幕尺寸，**内容却没跟着缩** —— 环和把手直接跑到窗口外面去。
+            // 本机 1067 高的屏怎么试都碰不到；CI 的 1024×768 上必现（把手跑到窗口外）。
+            // 用户选了"装不下就自动缩到装得下"：宁可轮盘小一点，也不要被裁掉。
+            UiK = ResolveUiK(k, wa.Width, wa.Height, baseSpan);
 
             _thumb = Math.Max(40, Math.Min(260, _settings.ThumbSize));     // 逻辑值
             _R = Math.Max(120, Math.Min(700, _settings.Radius));           // 逻辑值

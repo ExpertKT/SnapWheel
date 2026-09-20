@@ -60,6 +60,8 @@ namespace SnapWheel
 
             // ---------- ② 截图浮层：比例胶囊不能压住工具条 ----------
             ProbeOverlay();
+            // ---------- ②b 同上，但**用一块指定大小的屏幕算**（本机屏幕大，小屏那种撞法看不到）----------
+            ProbeOverlayOnScreen();
 
             Console.WriteLine();
             Console.WriteLine(string.Format("结果：通过 {0}，失败 {1}", pass, fail));
@@ -234,6 +236,47 @@ namespace SnapWheel
             finally
             {
                 try { if (ov != null) ov.Dispose(); } catch { }
+            }
+        }
+
+        // ---------- ②b 比例胶囊 vs 工具条：**离线**用指定大小的屏幕算一遍 ----------
+        //
+        // 为什么要离线：上面那条走的是真实屏幕（ScreenFor → Screen.FromPoint），
+        // 而"胶囊和工具条都只能摆在选区上方、于是叠在一起"这种事**只有屏幕矮的时候才发生**。
+        // 本机 1067 高，上下都塞得下，所以本机永远是绿的 —— CI 的 runner 是 1024×768，必现。
+        //
+        // 一条只在别人机器上失败的检查，等于把"没测过"伪装成"测过了"。这里把屏幕尺寸变成参数，
+        // 于是**本机就能跑出 CI 的结果**。用的是 ToolbarRect / ChipRowY 这两个纯静态函数，
+        // 和正式绘制走的是同一份代码（不是另写一套几何去推算）。
+        static void ProbeOverlayOnScreen()
+        {
+            // 和 CI runner 同尺寸，外加两台常见的小屏笔记本
+            Rectangle[] screens = {
+                new Rectangle(0, 0, 1024, 768),
+                new Rectangle(0, 0, 1366, 768),
+                new Rectangle(0, 0, 1920, 1080),
+            };
+            RectangleF sel = new RectangleF(450, 410, 700, 420);   // 和上面的浮层探针同一块选区
+            const int bw = 34, bh = 30, gp = 6, outer = 6, n = 18; // OverlayForm 里的常量（96 DPI 下不缩放）
+            const int chipH = 32, chipW = 495;
+
+            for (int i = 0; i < screens.Length; i++)
+            {
+                Rectangle scr = screens[i];
+                bool vertical, overlap;
+                Rectangle tool = OverlayForm.ToolbarRect(scr, sel, n, bw, bh, gp, outer,
+                                                         Rectangle.Empty, out vertical, out overlap);
+                int rowY = OverlayForm.ChipRowY(sel, chipH, tool, scr.Top, scr.Bottom, 1f);
+                Rectangle chip = new Rectangle((int)sel.Left, rowY, chipW, chipH);
+
+                string what = scr.Width + "x" + scr.Height;
+                Check("浮层 · " + what + " 上比例胶囊也不压住工具条",
+                      !chip.IntersectsWith(tool),
+                      "胶囊 " + chip + " 与工具条 " + tool + " 相交");
+                // 顺带守住"两个矩形都真的算过"：空矩形不是"本次不适用"，而是这条检查没在测东西
+                Check("浮层 · " + what + " 上工具条与胶囊都真的算出来了",
+                      tool.Width > 0 && tool.Height > 0 && chip.Width > 0 && chip.Height > 0,
+                      "工具条=" + tool + "  胶囊=" + chip);
             }
         }
     }

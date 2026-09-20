@@ -17,6 +17,33 @@ namespace SnapWheel
     partial class OverlayForm
     {
         // ---------- 比例胶囊 ----------
+
+        // 胶囊这一行的**纵向落位**（纯计算，离线可测：tests\ui-probe.cs 拿一块假的 1024×768 屏幕直接调它）。
+        // 抽出来的理由和 ToolbarRect 一样：屏幕一大一小结果完全不同，
+        // 本机 1067 高的屏上下都塞得下，小屏那种撞法永远看不到。
+        internal static int ChipRowY(RectangleF sel, int h, Rectangle tool, int ct, int cb, float k)
+        {
+            int rowY = (int)sel.Bottom + (int)(14 * k);
+            // 展开后会变宽、而且和工具栏抢同一条位置（都在选区下方）—— 重叠时往下让开，
+            // 否则一展开就把工具栏盖住（用户反馈"比例的展开会遮挡工具栏"）。
+            // 避开的是**工具栏** tool，不是胶囊自己上一帧的矩形 —— 拿它比较等于没比（用户反馈比例 bug 没修复）。
+            if (HitsToolY(rowY, h, tool, k)) rowY = tool.Bottom + (int)(8 * k);
+            // 下面塞不下 → 挪到选区上方
+            if (rowY + h > cb - 10) rowY = (int)sel.Top - h - (int)(40 * k);
+            // **挪到上面之后必须再查一次**（0.9.10 修）：
+            // 屏幕矮的时候工具栏自己也只能摆在选区上方（它下面同样塞不下），胶囊正好落进它里面。
+            // CI 的 1024×768 上必现 —— 胶囊 338..370 vs 工具条 356..398。
+            // 之前只在"往下让"那条路上查了工具栏，往上挪这条路上没查，于是绕了一圈又撞回去。
+            if (HitsToolY(rowY, h, tool, k)) rowY = tool.Top - h - (int)(8 * k);
+            return rowY;
+        }
+
+        // 这一行会不会撞上工具栏（上下各留 8×k 的缝）
+        static bool HitsToolY(int y, int h, Rectangle tool, float k)
+        {
+            return tool.Width > 0 && y + h > tool.Top && y < tool.Bottom + (int)(8 * k);
+        }
+
         void MeasureChips()
         {
             string[] labels = { Lang.T("自由", "Free"), "1:1", "16:9", "9:16", "4:3", "3:4", "21:9" };
@@ -48,14 +75,7 @@ namespace SnapWheel
             {
                 RectangleF bb = SelBounds();
                 rowX = (int)bb.Left;
-                rowY = (int)bb.Bottom + (int)(14 * _k);
-                // 展开后会变宽、而且和工具栏抢同一条位置（都在选区下方）—— 重叠时往下让开，
-                // 否则一展开就把工具栏盖住（用户反馈"比例的展开会遮挡工具栏"）。
-                    // 避开的是**工具栏** _toolRect，不是 _panelBounds —— 后者是比例胶囊自己上一帧的矩形，
-                    // 拿它比较等于没比（用户反馈比例 bug 没修复）。
-                    if (_toolRect.Width > 0 && rowY + h > _toolRect.Top && rowY < _toolRect.Bottom + (int)(8 * _k))
-                        rowY = _toolRect.Bottom + (int)(8 * _k);
-                if (rowY + h > cb - 10) rowY = (int)bb.Top - h - (int)(40 * _k);
+                rowY = ChipRowY(bb, h, _toolRect, ct, cb, _k);
             }
             else
             {

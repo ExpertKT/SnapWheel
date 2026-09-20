@@ -920,6 +920,35 @@ namespace SnapWheel
                     Console.WriteLine("  {0} 各种分辨率 / 尺寸缩放下把手位置都合规", allOk ? "OK  " : "FAIL");
                 }
 
+                // ---- 手动缩放档在小屏幕上也必须"装不下就缩" ----
+                //
+                // 上面那一段用的是**本机真实屏幕**，所以"小屏幕上手动设 250% 会把把手挤出窗口"
+                // 在本机（1067 高）永远复现不出来 —— 它只在 CI 的 1024×768 上炸。
+                // 这里直接调纯函数，把屏幕尺寸变成参数：本机就能跑出小屏幕的结果。
+                {
+                    float span = 120f + 40f * 1.75f + 190f;      // 最小档的逻辑尺寸（和 ApplyLayout 同一个式子）
+                    Rectangle[] screens = {
+                        new Rectangle(0, 0, 1024, 720),
+                        new Rectangle(0, 0, 1366, 728),
+                        new Rectangle(0, 0, 1920, 1040),
+                    };
+                    bool allFit = true;
+                    for (int i = 0; i < screens.Length; i++)
+                    {
+                        int m = Math.Min(screens[i].Width, screens[i].Height);
+                        // 用户手动设 250%：结果**必须**能装进这块屏幕
+                        float k = WheelForm.ResolveUiK(2.5f, screens[i].Width, screens[i].Height, span);
+                        bool fits = span * k <= m + 1f;
+                        // 屏幕够大时也不能白缩：该给多少还得给多少
+                        bool keeps = (m >= span * 2.5f) ? (Math.Abs(k - 2.5f) < 0.001f) : true;
+                        bool okOne = fits && keeps;
+                        Console.WriteLine("    {0} 手动 250% 在 {1}x{2} 上 → k={3:F2} 占 {4:F0}px / 可用 {5}px",
+                            okOne ? "OK " : "FAIL", screens[i].Width, screens[i].Height, k, span * k, m);
+                        if (okOne) pass++; else { fail++; allFit = false; }
+                    }
+                    Console.WriteLine("  {0} 手动缩放档装不下时会自动缩小（大屏不缩）", allFit ? "OK  " : "FAIL");
+                }
+
                 RectangleF nr2 = (RectangleF)nubIn.Invoke(f, null);
                 bool inEdge = (nr2.Y + nr2.Height) >= f.Height - 1.5f;     // 贴着屏幕下边
                 Point nc2 = new Point((int)(nr2.X + nr2.Width / 2), (int)(nr2.Y + nr2.Height / 2));
