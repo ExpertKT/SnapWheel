@@ -33,7 +33,13 @@ $out  = Join-Path $root $OutDir
 
 function Info($s) { Write-Host $s -ForegroundColor Cyan }
 function Ok($s)   { Write-Host "  [OK] $s" -ForegroundColor Green }
-function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red }
+# Bad 同时把"这次构建不健康"记下来，脚本最后据此返回非零退出码。
+#
+# 为什么必须这样：原来测试挂了也只打印一行红字，脚本照样 exit 0 ——
+# 于是任何自动化（CI）拿到它**永远是绿的**。**一个不会失败的检查等于没有检查。**
+# 让 Bad 自己记账，所有失败路径就都自动算数了，不用每处记得加一句。
+$script:anyFail = $false
+function Bad($s)  { Write-Host "  [X]  $s" -ForegroundColor Red; $script:anyFail = $true }
 
 if ($sources.Count -eq 0) { Bad "找不到源码: $codeDir"; exit 1 }
 
@@ -260,5 +266,9 @@ if ($Deploy) {
 }
 
 Info ""
+if ($script:anyFail) {
+    Bad "这次构建**不健康**（上面有红字）。返回非零退出码，自动化才能拦住它。"
+    exit 1
+}
 Ok "完成，产物在 $out"
 Info ""

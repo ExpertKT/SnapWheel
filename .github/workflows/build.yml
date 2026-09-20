@@ -1,0 +1,70 @@
+name: build
+
+# 每次推送到 main、以及每个 PR，都跑一遍完整的编译 + 全部测试。
+#
+# 为什么值得做：这个项目已经有 15 套测试了，但它们**只在有人记得手动跑的时候才跑**。
+# 这几次的教训全是"我以为跑过了" ——
+#   · 自动更新的入口被注释吞掉，编译过、0 警告、当时那几套测试全绿；
+#   · 三个测试是抖的，"全绿"这句话当天骗了两次；
+#   · 一条检查名字在、其实每次都在跳过；
+#   · 我自己连着两轮改错了地方，而每次本地都是绿的。
+# 本地绿不等于绿 —— 得让机器在**每次**改动上都说一遍。
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:      # 也能手动点一下跑
+
+jobs:
+  build-and-test:
+    # windows-latest 自带 .NET Framework 4.x（csc.exe 在
+    # C:\Windows\Microsoft.NET\Framework64\v4.0.30319\），和本机构建用的是同一个编译器。
+    # 这个项目零第三方依赖，所以不需要装任何东西。
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境自检
+        shell: pwsh
+        run: |
+          $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (-not (Test-Path $csc)) { throw "找不到 csc.exe：$csc" }
+          & $csc /? | Select-Object -First 1
+          Write-Host "csc = $csc"
+
+      - name: 编译 + 全部测试
+        shell: pwsh
+        run: |
+          .\tools\build.ps1 -Test
+          if ($LASTEXITCODE -ne 0) { throw "构建失败（退出码 $LASTEXITCODE）" }
+
+      - name: 界面探针（单独跑一遍，失败时能看到具体是哪条）
+        shell: pwsh
+        if: always()
+        run: |
+          # build.ps1 里已经跑过一次；这里再单独跑是为了在 CI 日志里留下**完整**输出
+          # （build.ps1 只摘出失败那几行）。
+          $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          $wr  = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll"
+          & $csc /nologo /target:exe /main:SnapWheel.UiProbe /out:$env:TEMP\uiprobe.exe /r:$wr src\*.cs tests\ui-probe.cs
+          & "$env:TEMP\uiprobe.exe" | Tee-Object -FilePath uiprobe.txt
+          Get-Content uiprobe.txt | Select-Object -Last 3
+
+      - name: 打出日志（失败时也留一份）
+        shell: pwsh
+        if: always()
+        run: |
+          if (Test-Path "$env:APPDATA\SnapWheel\error.log") {
+            Get-Content "$env:APPDATA\SnapWheel\error.log" -Tail 60
+          } else { Write-Host "（没有 error.log）" }
+
+      - name: 编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: SnapWheel-exe
+          path: |
+            build/SnapWheel.exe
+            build/SnapWheel-nokey.exe
+          if-no-files-found: error
