@@ -61,7 +61,9 @@ namespace SnapWheel
             if (which == 1 && _backdropOld != null && _backdropFade < 0.999f) return false;
             if (which == 0) return true;
             // 控件层：任何"动着的 / 按下的 / 弹着的"状态都不用缓存
-            if (_toast.Length > 0 || _delConfirm || _menuOpen || _menuT > 0.001f) return false;
+            // （提示条**不在这一层里**了 —— v1.0 起它画在所有常驻元素之上，见 61-WheelForm.Draw.cs
+            //   的图层说明。所以它不再影响这一层能不能用缓存，这里也就不必再为它禁用缓存。）
+            if (_delConfirm || _menuOpen || _menuT > 0.001f) return false;
             if (_closeDown > 0.01f || _closeHover || _closePend || _closeHoldP > 0.001f || _closeLong) return false;
             if (_gearDown > 0.01f || _gearHover || _gearPend) return false;
             if (_shootDown > 0.01f || _shootHover || _shootPend) return false;
