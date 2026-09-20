@@ -238,6 +238,7 @@ namespace SnapWheel
 
         void AnimTickCore()
         {
+            AnimTickCountForTest++;
             bool need = false;
             bool hide = _targetShow < _show;
             if (_showAnimating)

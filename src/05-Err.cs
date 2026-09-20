@@ -174,6 +174,10 @@ namespace SnapWheel
         static long _frames, _slow;
         static double _sum, _max;
         static string _maxState = "";
+        // ⚠️ 只记「最慢帧」的状态会**骗人**：最慢那一帧往往正好是"刚换完底、正在做混合"的那一帧，
+        // 于是状态里永远显示着"交叉淡入没走完"，看着像根因，其实是采样偏差（我就差点据此修错地方）。
+        // 再记一份**最后一帧**的状态，两者差得远就说明"最慢帧"不能代表常态。
+        static string _lastState = "";
         static DateTime _windowStart = DateTime.Now;
         static int _lines;
 
@@ -184,6 +188,7 @@ namespace SnapWheel
                 lock (_lock)
                 {
                     _frames++; _sum += ms;
+                    _lastState = state;
                     if (ms > SlowMs)
                     {
                         _slow++;
@@ -206,11 +211,13 @@ namespace SnapWheel
                     Err.Log("Frame", new Exception(
                         "最近10秒 " + _frames + " 帧，慢帧(>" + (int)SlowMs + "ms) " + _slow +
                         " 帧，平均 " + (_frames > 0 ? (_sum / _frames).ToString("0.0") : "0.0") + "ms，最慢 " +
-                        _max.ToString("0.0") + "ms | 最慢帧状态: " + _maxState));
+                        _max.ToString("0.0") + "ms，tick=" + WheelForm.AnimTickCountForTest +
+                        " | 最慢帧状态: " + _maxState +
+                        " ||| 最后一帧状态: " + _lastState));
                 }
                 catch { }
             }
-            _frames = 0; _slow = 0; _sum = 0; _max = 0; _maxState = ""; _windowStart = DateTime.Now;
+            _frames = 0; _slow = 0; _sum = 0; _max = 0; _maxState = ""; _lastState = ""; _windowStart = DateTime.Now;
         }
     }
 }

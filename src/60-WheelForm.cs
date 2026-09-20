@@ -104,6 +104,9 @@ namespace SnapWheel
         bool _powerSkipped;      // 上一帧是不是被"省电"跳过了（绝不连续跳两帧）
         bool _forceDraw;         // 这一帧必须画（输入导致的：悬停/按下/滚轮）
         public static int RenderCountForTest = 0;   // 测试用：真正画了多少帧
+        // 排查用：动画定时器真的跳了多少次。和渲染帧数放一起看，才能分清"帧率低"到底是
+        // 「定时器没跳」还是「跳了但没有任何东西要求重画」—— 这两种的修法完全相反。
+        public static int AnimTickCountForTest = 0;
         public static int SkipCountForTest = 0;     // 测试用：省电跳过多少帧
         float _show = 0f, _targetShow = 0f;
         DateTime _showT0 = DateTime.Now;
