@@ -394,7 +394,15 @@ namespace SnapWheel
         //   我一度改错地方却毫无察觉。加元素必须登记，这是硬规矩。
         void DrawDropHint(Graphics g, int a)
         {
-            if (!(_dropActive && _dropExternal) || a <= 90) return;
+            // **跟着 _dropVis 淡入淡出**：用户反馈"出现消失没有任何过渡"。
+            // 退出时 _dropActive 已经是 false 了，所以这里不能再按 bool 判 —— 要按进度判，
+            // 否则淡出根本没机会发生（一松手它就没了）。
+            float dv = _dropVis;
+            if (dv <= 0.02f) return;
+            // 只有**外部文件**拖放才有这条提示（我们自己的图拖到环上是蓝色那一档，不显示"加入图片"）
+            if (!_dropExternalShown) return;
+            a = (int)(a * dv);
+            if (a <= 2) return;
             string tip = Lang.T("松手把 ", "Release to add ") + _dropCount + Lang.T(" 张图片加入「", " item(s) to \"") + FitName(_mgr.ActiveWheel.Name, 12) + "」";
             using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
             {
@@ -405,6 +413,8 @@ namespace SnapWheel
                 // 往**远离角落**的那一侧让出去：下贴轮盘就往上，上贴轮盘就往下
                 float y = (Sy() < 0) ? (nub.Y - h - 10f) : (nub.Bottom + 10f);
                 float x = (Sx() > 0) ? 6f : (ls.Width - w - 6f);
+                // 淡入的那一下再往下"浮"上来 12px（和别处一样：位置也参与过渡，不只是透明度）
+                y += (Sy() < 0 ? 1f : -1f) * (1f - dv) * 12f;
                 if (y < 6f) y = 6f;
                 if (y + h > ls.Height - 6f) y = ls.Height - h - 6f;
                 if (x + w > ls.Width - 6f) x = ls.Width - w - 6f;

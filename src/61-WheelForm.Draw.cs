@@ -459,15 +459,23 @@ namespace SnapWheel
             using (GraphicsPath gp = new GraphicsPath())
             {
                 gp.AddArc(c.X - rr, c.Y - rr, rr * 2f, rr * 2f, st, sweep);
-                if (_dropActive)
+                // 拖放反馈：环上那圈光晕 + 亮轨道（外部文件=偏绿，自己的图=偏蓝）。
+                // **乘 _dropVis 淡入淡出** —— 用户反馈"环随之变绿复原没有任何过渡"，
+                // 就是这里原来直接按 bool 画满。它和那条提示共用同一个进度，所以两边一起走。
+                float dv = _dropVis;
+                if (dv > 0.01f)
                 {
-                    // drop-target feedback: blue glow + bright blue track（外部文件=偏绿，自己的图=偏蓝）
                     Color dc = _dropExternal ? Color.FromArgb(86, 214, 138) : Color.FromArgb(96, 170, 255);
                     Color dch = Color.FromArgb(255, Math.Min(255, dc.R + 24), Math.Min(255, dc.G + 24), Math.Min(255, dc.B + 24));
-                    using (Pen dg = new Pen(Color.FromArgb((int)(110 * ringA / 255f), dc.R, dc.G, dc.B), 40f))
-                    { dg.StartCap = LineCap.Round; dg.EndCap = LineCap.Round; g.DrawPath(dg, gp); }
-                    using (Pen dm = new Pen(Color.FromArgb((int)(235 * ringA / 255f), dch.R, dch.G, dch.B), 6f))
-                    { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
+                    int da1 = (int)(110 * dv * ringA / 255f);
+                    int da2 = (int)(235 * dv * ringA / 255f);
+                    float dth = 40f + 10f * (1f - dv);          // 顺手让光晕"涨"进来，不只是变亮
+                    if (da1 > 1)
+                        using (Pen dg = new Pen(Color.FromArgb(da1, dc.R, dc.G, dc.B), dth))
+                        { dg.StartCap = LineCap.Round; dg.EndCap = LineCap.Round; g.DrawPath(dg, gp); }
+                    if (da2 > 1)
+                        using (Pen dm = new Pen(Color.FromArgb(da2, dch.R, dch.G, dch.B), 6f))
+                        { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
                 }
                 // 环的影子：先给轨道垫一层柔和的暗色（光从左上来，影子往右下走），环就"浮"起来了
                 DrawRingShadow(g, gp, rr, ringA);

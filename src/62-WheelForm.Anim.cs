@@ -433,6 +433,24 @@ namespace SnapWheel
                 need = true;
             }
 
+            // 拖放态淡入淡出（用户反馈：绿提示和环变绿都是硬切，一点过渡都没有）。
+            // 一个标量同时驱动**环的光晕**和**那条提示**，两边自然同步。
+            // 有始有终：走到 0 或 1 就吸附，绝不留"永远差一点点"的状态。
+            {
+                float want2 = _dropActive ? 1f : 0f;
+                float cur2 = _dropVis;
+                if (Math.Abs(cur2 - want2) > 0.006f)
+                {
+                    _dropVis = cur2 + (want2 - cur2) * 0.24f;
+                    if (Math.Abs(_dropVis - want2) < 0.006f) _dropVis = want2;
+                    need = true;
+                }
+                else if (cur2 != want2) { _dropVis = want2; need = true; }
+                // "这次是不是外部拖放"要**锁存**到完全淡出为止（见字段说明）
+                if (_dropActive && _dropExternal) _dropExternalShown = true;
+                if (_dropVis <= 0.001f) _dropExternalShown = false;
+            }
+
             // 提示条（"已加入 N 张图片"）淡入淡出
             if (_toast.Length > 0)
             {

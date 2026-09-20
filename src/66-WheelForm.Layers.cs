@@ -46,6 +46,9 @@ namespace SnapWheel
             if (_settings.DiagMode) return false;
             if (_show < 0.999f || _intro || _collapsing || _showAnimating) return false;
             if (_deletingItem != null || _dragOutItem != null || _dropActive) return false;
+            // 拖放态正在淡入淡出时也不能贴缓存 —— 那时 _dropActive 可能已经是 false，
+            // 但环上的光晕还在往回退（用户报的"复原没有过渡"就是它）。
+            if (_dropVis > 0.001f) return false;
             // 拖出去的反馈（v1.0）：那道向外拖痕和"颤一下 + 高亮"都画在卡片层里，
             // 每帧都不一样 —— 不排掉就会冻在缓存位图里，看起来像"闪一下就不动了"。
             if (_dragTrailT < 1f || _dragPulseT < 1f || _dragLift > 0f) return false;
@@ -121,6 +124,7 @@ namespace SnapWheel
                 // v1.0：环的厚度跟着数量走（已经由 Items.Count 覆盖），涟漪和微光各自一份进度
                 h = Mix(h, (double)_rippleT);
                 h = Mix(h, (double)FreshGlowSum());
+                h = Mix(h, (double)_dropVis);      // 环上那圈拖放光晕的淡入淡出
                 return h;
             }
             h = Mix(h, _store.Items.Count);                       // 计数胶囊

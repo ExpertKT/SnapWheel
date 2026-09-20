@@ -918,6 +918,16 @@ namespace SnapWheel
 
         bool _dropActive = false;
 
+        // 拖放态的**过渡进度**（0..1）。`_dropActive` 是个 bool，画的时候直接用它就是硬切 ——
+        // 用户反馈的"绿提示出现消失、还有环随之变绿复原，全都没有过渡"就是这个。
+        // 环上的绿光晕和那条提示都乘它，于是两边**同时**淡入淡出（本来就该是一件事）。
+        float _dropVis = 0f;
+        DateTime _dropVisAt = DateTime.MinValue;
+        // 记住"这次拖放是不是**外部文件**"：淡出期间 `_dropExternal` 可能已经被清掉了，
+        // 不记住的话 —— 要么提示在淡出中途突然消失，要么**自己的图拖到环上时也冒出绿提示**
+        // （`_dropActive` 对我们自己的拖拽同样是真的，只是不该显示那条"加入图片"的提示）。
+        bool _dropExternalShown = false;
+
         bool _returnedToWheel = false;
 
         bool _dropExternal = false;      // 拖进来的是“外面的文件”（不是轮盘自己的图）

@@ -79,6 +79,75 @@ namespace SnapWheel
         // 只有两个方向都压进去超过这个数，才是真的"点这儿会点到别人身上"。
         const float OverlapSlack = 4f;
 
+        // 把 _dropVis 定在指定值渲染一帧，数"拖放提示"自己的矩形里有多少不透明像素。
+        // 直接设值 + 直接渲染（**不泵消息**），所以动画定时器不会把它改掉。
+        static int CountInHint(WheelForm f, MethodInfo dw, float vis)
+        {
+            S(f, "_dropVis", vis);
+            int n = 0;
+            using (Bitmap b = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+            {
+                using (Graphics g = Graphics.FromImage(b)) dw.Invoke(f, new object[] { g, f.Width, f.Height });
+                IList dl = (IList)G(f, "_diag");
+                RectangleF rc = RectangleF.Empty; bool has = false;
+                for (int i = 0; i < dl.Count; i++)
+                {
+                    object kv = dl[i];
+                    string kk = (string)kv.GetType().GetProperty("Key").GetValue(kv, null);
+                    if (!kk.StartsWith("拖放提示")) continue;
+                    rc = (RectangleF)kv.GetType().GetProperty("Value").GetValue(kv, null); has = true; break;
+                }
+                if (!has) return 0;
+                int x0 = Math.Max(0, (int)rc.X), x1 = Math.Min(b.Width, (int)rc.Right);
+                int y0 = Math.Max(0, (int)rc.Y), y1 = Math.Min(b.Height, (int)rc.Bottom);
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0; x < x1; x++)
+                        // 用 **alpha 总和**当可见度，不用"不透明像素个数"：
+                        // 半透明时像素照样"存在"（A=117 一样 > 60），个数根本区分不出来 ——
+                        // 第一版就是这么写的，结果半透明和全显数出来一模一样（8282 == 8282）。
+                        n += b.GetPixel(x, y).A;
+            }
+            return n;
+        }
+
+        // 整窗"绿色像素"数：直接量"环有没有变绿"这件事本身（用户原话就是"环随之变绿复原"）。
+        // 用不透明像素总数区分度太低 —— 光晕本身很淡，数出来只差几百个。
+        static int CountGreen(WheelForm f, MethodInfo dw, float vis)
+        {
+            // **把那条绿提示关掉**再数：不然数到的全是提示自己（它是绿的、又大），
+            // 环那一圈淡光晕的变化会被完全淹没 —— 第一版就是这样，
+            // 负向验证把环改回硬切，检查照样报 OK。
+            S(f, "_dropExternalShown", false);
+            S(f, "_dropVis", vis);
+            int n = 0;
+            using (Bitmap b = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+            {
+                using (Graphics g = Graphics.FromImage(b)) dw.Invoke(f, new object[] { g, f.Width, f.Height });
+                for (int y = 0; y < b.Height; y += 2)
+                    for (int x = 0; x < b.Width; x += 2)
+                    {
+                        Color c = b.GetPixel(x, y);
+                        if (c.A > 60 && c.G > c.R + 25 && c.G > c.B + 25) n++;
+                    }
+            }
+            return n;
+        }
+
+        // 整窗不透明像素数（用来量"环上那圈光晕有没有跟着淡"）
+        static int CountOpaque(WheelForm f, MethodInfo dw, float vis)
+        {
+            S(f, "_dropVis", vis);
+            int n = 0;
+            using (Bitmap b = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+            {
+                using (Graphics g = Graphics.FromImage(b)) dw.Invoke(f, new object[] { g, f.Width, f.Height });
+                for (int y = 0; y < b.Height; y += 2)
+                    for (int x = 0; x < b.Width; x += 2)
+                        if (b.GetPixel(x, y).A > 60) n++;
+            }
+            return n;
+        }
+
         static void Run()
         {
             try { Lang.Init("zh"); } catch { }
@@ -108,6 +177,7 @@ namespace SnapWheel
             Application.DoEvents();
 
             MethodInfo dw = typeof(WheelForm).GetMethod("DrawWheel", BindingFlags.NonPublic | BindingFlags.Instance);
+            MethodInfo tk = typeof(WheelForm).GetMethod("AnimTickCore", BindingFlags.NonPublic | BindingFlags.Instance);
 
             // 几何从 `_diag` 注册表来 —— 而它**只在诊断模式开着时才记**（关着是零开销，这是设计）。
             // 所以这里打开它：测的正是"元素自己报出来的矩形"。
@@ -238,6 +308,8 @@ namespace SnapWheel
                             S(f, "_toastAt", DateTime.Now.AddSeconds(-0.35));
                             S(f, "_dropActive", k == 1); S(f, "_dropExternal", k == 1);
                             S(f, "_dropCount", 3);
+                            S(f, "_dropVis", k == 1 ? 1f : 0f);
+                            tk.Invoke(f, null);   // 让锁存跟着走一步（真实运行时每帧都会 tick）
                             S(f, "_closeHoldP", k == 2 ? 0.60f : 0f);
 
                             // 完全展开 + 展开动画中途各查一遍
@@ -303,6 +375,54 @@ namespace SnapWheel
                 S(f, "_toast", ""); S(f, "_dropActive", false); S(f, "_dropExternal", false); S(f, "_closeHoldP", 0f);
                 S(f, "_intro", false); S(f, "_introT", 1f);
                 s.DiagMode = false;
+            }
+
+            // ---------- ①c 拖放态必须有过渡（不能硬切）----------
+            //
+            // 用户反馈：「现在这个绿提示的出现消失、还有环的随之变绿复原，没有任何过渡」。
+            // 根因就是画的时候直接用了 `_dropActive` 这个 bool。现在两边共用一个 `_dropVis` 进度。
+            // 这里盯两件事：**进度真的会走到端点**（不许永远差一点点），
+            // 以及**画出来的像素确实跟着进度变**（只改状态不落笔是最容易漏的）。
+            {
+                s.Corner = "BL"; s.UiScale = 0; f.ApplyLayout();
+                Application.DoEvents();
+                S(f, "_show", 1f); S(f, "_intro", false); S(f, "_collapsing", false);
+                S(f, "_collapsed", false); S(f, "_showAnimating", false);
+
+                // 1) 淡入能走到 1、淡出能回到 0（靠真实的动画定时器跑，不是手算）
+                S(f, "_dropExternal", true); S(f, "_dropCount", 3);
+                S(f, "_dropActive", true); S(f, "_dropVis", 0f);
+                for (int k = 0; k < 70 && Math.Abs((float)G(f, "_dropVis") - 1f) > 0.001f; k++)
+                { Application.DoEvents(); System.Threading.Thread.Sleep(14); }
+                float up = (float)G(f, "_dropVis");
+                Check("拖放态：淡入能走到 1（不是永远差一点点）", Math.Abs(up - 1f) < 0.001f, "停在 " + up);
+
+                S(f, "_dropActive", false);
+                for (int k = 0; k < 70 && Math.Abs((float)G(f, "_dropVis")) > 0.001f; k++)
+                { Application.DoEvents(); System.Threading.Thread.Sleep(14); }
+                float dn = (float)G(f, "_dropVis");
+                Check("拖放态：淡出能回到 0", Math.Abs(dn) < 0.001f, "停在 " + dn);
+
+                // 2) 半路上的**像素**必须比终点少 —— 那就是"过渡"的样子。
+                //    只查状态不查像素的话，"状态在渐变但画的时候没乘它"照样能过。
+                s.DiagMode = true;
+                S(f, "_dropActive", true); S(f, "_dropExternal", true);
+                tk.Invoke(f, null);           // 先让锁存生效，再逐档量
+                int nHalf = CountInHint(f, dw, 0.5f);
+                int nFull = CountInHint(f, dw, 1.0f);
+                int nNone = CountInHint(f, dw, 0.0f);
+                s.DiagMode = false;
+                Check("拖放态：半透明时的像素明显少于全显（说明 alpha 真的跟着进度走）",
+                      nHalf > 0 && nHalf < nFull * 0.88f, "半=" + nHalf + " 全=" + nFull + "（alpha 总和）");
+                Check("拖放态：进度为 0 时提示不画（不能残留）", nNone == 0, "还有 " + nNone + " 个像素");
+
+                // 3) 环上的绿光晕也得跟着淡 —— 整窗像素数在两端要差出一大截
+                int w0 = CountGreen(f, dw, 0f), w1 = CountGreen(f, dw, 1f);
+                Check("拖放态：环随之变绿、也跟着复原（绿像素 0 时远少于 1 时）", w1 > w0 * 1.5 + 200,
+                      "0 时 " + w0 + " / 1 时 " + w1);
+
+                S(f, "_dropActive", false); S(f, "_dropVis", 0f); S(f, "_dropExternal", false); S(f, "_dropCount", 0);
+                Application.DoEvents();
             }
 
             // ---------- ② 窗口属性（"截图不在最顶层"那类 P0 的判据）----------
