@@ -81,6 +81,43 @@ if (_keyHov   > 0.01f) need = true;
 （`src/10-Native.cs`）。判断本身抽成了纯函数 `Native.AnchorIsScreen(mode, reserved, autohide)` ——
 **真实任务栏状态测不了，但"三档 × 四种环境"这六种组合能全测**，见 `tests/edge-anchor-test.cs`（17 项）。
 
+### 1c. ⚠️ 设置窗口打开要 250ms（**已定位，还没修**）
+
+**现象**（用户报）：点设置按钮后窗口出现较慢，而且期间没有任何东西缓解"加载感"。
+
+**已经量的**（2026-09-20）：
+
+| 环节 | 耗时 |
+|---|---|
+| `new SettingsForm()` 合计 | **250ms**（稳定复现，预热后一样） |
+| 建 root / 标题 / 分页器 / 四页格 / 六个圆按钮 / 页脚 | 全部 **0~10ms** |
+| **`ShowPage(0)`** | **~220ms** |
+| 尾部（挂树 + `SizeToContent`） | ~60ms |
+
+再往里拆 `ShowPage(0)`：**`BuildPage1` 里 19 个 `Controls.Add` 全部只用 10ms**，
+**贵的是建完之后的第一次布局/测量（~200ms）**。
+
+**佐证**：对已经布局好的页面单独量 `GetPreferredSize` 只要 **2~3ms**、`PerformLayout` **3ms**；
+第 2/3/4 页"建 + 排 + 量"全套只要 **8~15ms**。也就是说**只有第 1 页的第一次布局这么贵**。
+
+**下一步怎么查**（已经排除的别再走一遍）：
+- ❌ 不是 JIT（预热过一次，第二轮一样慢）
+- ❌ 不是"构造过程中被重复布局"（加 `SuspendLayout`/`ResumeLayout` 后 264→270ms，**没用，已撤**）
+- ❌ 不是控件建得慢（19 个 Add 只要 10ms）
+- ❌ 不是"量尺寸"本身（已布局的页只要 2~3ms）
+- ➡️ 剩下最可疑的：`BuildPage` 里 `_pages[0].ResumeLayout(true)` 那一下触发的**首次自动布局**。
+  第 1 页是**两列 AutoSize × 10 行 AutoSize**、每格里套一个 `RowPanel`（FlowLayoutPanel，
+  `WrapContents=false`，且覆写了 `GetPreferredSize` 逐个子控件取 `Bottom`）。
+  TableLayoutPanel 的 AutoSize 本来就慢，这种嵌套在首次布局时要反复迭代。
+
+**打算试的方向**（都要先量、再改）：
+1. 把第 1 页的两列 AutoSize 改成固定百分比 —— 但要先确认布局结果不变（`ui-probe` 有控件重叠检查兜着）
+2. 或者让 `RowPanel.GetPreferredSize` 不再逐子控件取 `Bottom`，改用 `DisplayRectangle`
+3. 实在降不下来，就**把窗口先显示出来再建页**（用户看到的等待从 250ms 降到 ~40ms，
+   代价是窗口出现后会自己长一下）
+
+**已经做的缓解**：窗口从 `Opacity=0.34` 渐变到 1（约 90ms），"出现"那一下不再是硬切。
+
 ### 2. 缩略图懒生成 → 滚动时的尖峰（**已量，见 §2b**）
 
 满环 50 张滚动：**未预热 p95 = 24.31ms**，先滚一轮预热后 **9.39ms**。
