@@ -28,28 +28,99 @@ namespace SnapWheel
             outDir = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "snapwheel_vertical");
             Directory.CreateDirectory(outDir);
             shotDir = Path.Combine(Path.GetTempPath(), "snapwheel_ui");
+            ResolveKb(args.Length > 1 ? args[1] : null);
 
             try
             {
                 // 每页：大标题（吸睛）/ 副标题（说清价值）/ 可选角标 / 配图
-                Page(1, "截完图\n拖一下就发出去了", "不用保存、不用切窗口、不用翻文件夹", "效率工具 · 开源", "promo_wheel.png");
+                Page(1, "截完图\n拖一下就发出去了", "不用保存、不用切窗口、不用翻文件夹", "效率工具 · 开源", "wheel_bl.png");
                 Page(2, "屏幕角上\n常驻一个圆环", "截图自动滑进去，要用的时候拖出来", "一眼看懂", "wheel_bl.png");
-                Page(3, "拖进微信 / 文档\n松手即发", "环上还留着一份，随时能再拖一次", "最常用", "promo_drop.png");
-                Page(4, "网页想截全？\n让它自己滚", "滚动长截图：框一块区域，剩下的它自己滚自己拼", "0.6.0 新增", "longdemo");
-                Page(5, "圈住文字\n就能复制", "取字 + 一键翻译，暗色小字也认得准", "0.6.0 强化", "ocr.png");
-                Page(6, "一个 exe\n274 KB 零依赖", "免安装 · 开源 MIT · GitHub 搜 SnapWheel", "下载即用", "settings.png");
+                Page(3, "拖进微信 / 文档\n松手即发", "环上还留着一份，随时能再拖一次", "最常用", "wheel_drop.png");
+                // 角标只留真的"这次新加的"。原来图4/图5 挂着「0.6.0 新增 / 0.6.0 强化」——
+                // 那是好几个版本以前的东西，挂在那儿等于告诉别人"这是新功能"。
+                Page(4, "网页想截全？\n让它自己滚", "滚动长截图：框一块区域，剩下的它自己滚自己拼", "长截图", "longdemo");
+                Page(5, "圈住文字\n就能复制", "取字 + 一键翻译，暗色小字也认得准", "取字 · 翻译", "ocr.png");
+                // 最后一页讲正式版：体积**读构建产物**，不写死（原来写 274 KB，实际早就 365 KB）
+                Page(6, "一个 exe\n" + kbText + " 零依赖", "1.0 正式版 · 免安装 · 开源 MIT · GitHub 搜 SnapWheel", "下载即用", "settings.png");
                 WriteCopy();
                 Console.WriteLine("完成：6 张竖版图文 + 发帖文案 已输出到 " + outDir);
             }
             catch (Exception ex) { Console.WriteLine("失败：" + ex.Message); }
         }
 
+        // 程序体积：从构建产物读出来（见 promo9.cs 里同一段的说明）
+        static string kbText = "— KB";
+        static void ResolveKb(string hint)
+        {
+            try
+            {
+                string p = hint;
+                if (string.IsNullOrEmpty(p) || !File.Exists(p))
+                {
+                    string[] cand = {
+                        Path.Combine(Directory.GetCurrentDirectory(), @"build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\build\SnapWheel.exe"),
+                    };
+                    p = null;
+                    for (int i = 0; i < cand.Length; i++) if (File.Exists(cand[i])) { p = cand[i]; break; }
+                }
+                kbText = (p != null && File.Exists(p)) ? ((int)Math.Round(new FileInfo(p).Length / 1024.0)) + " KB" : "— KB";
+            }
+            catch { kbText = "— KB"; }
+        }
+
         static Bitmap Load(string file)
         {
             if (file == "longdemo") return null;
             string p = Path.Combine(shotDir, file);
-            if (!File.Exists(p)) return null;
-            try { using (Bitmap b = new Bitmap(p)) return new Bitmap(b); } catch { return null; }
+            // 落回仓库 docs\ 下那些进了版本库的正式渲染（ocr.png / annotate.png …）。
+            // 光看 %TEMP% 会踩到一个坑：那里可能躺着**好几天前的旧文件**，
+            // 拿到旧图不报错、看起来一切正常 —— 宣传图上配的就是过期界面。
+            if (!File.Exists(p))
+            {
+                string alt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "docs", file);
+                if (File.Exists(alt)) p = alt;
+                else { alt = Path.Combine(Directory.GetCurrentDirectory(), "docs", file); if (File.Exists(alt)) p = alt; }
+            }
+            if (!File.Exists(p)) { Console.WriteLine("      * missing image " + file); return null; }
+            try { using (Bitmap b = new Bitmap(p)) return Trim(new Bitmap(b)); } catch { return null; }
+        }
+
+        // 裁到"真正有内容"的那一块（同 promo9.cs）。不裁的话：渲染图是定尺寸画布，
+        // 轮盘只占角落，缩到 470 高之后看得见的轮盘只剩一百多像素，手机上完全看不出是什么。
+        static Bitmap Trim(Bitmap b)
+        {
+            int minX = b.Width, minY = b.Height, maxX = -1, maxY = -1;
+            System.Drawing.Imaging.BitmapData d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                int stride = d.Stride, hgt = b.Height, wid = b.Width;
+                byte[] buf = new byte[stride * hgt];
+                System.Runtime.InteropServices.Marshal.Copy(d.Scan0, buf, 0, buf.Length);
+                for (int y = 0; y < hgt; y++)
+                {
+                    int row = y * stride;
+                    for (int x = 0; x < wid; x++)
+                        if (buf[row + x * 4 + 3] > 12)
+                        {
+                            if (x < minX) minX = x; if (x > maxX) maxX = x;
+                            if (y < minY) minY = y; if (y > maxY) maxY = y;
+                        }
+                }
+            }
+            finally { b.UnlockBits(d); }
+            if (maxX < minX || maxY < minY) return b;
+            int pad = 14;
+            minX = Math.Max(0, minX - pad); minY = Math.Max(0, minY - pad);
+            maxX = Math.Min(b.Width - 1, maxX + pad); maxY = Math.Min(b.Height - 1, maxY + pad);
+            Rectangle r = new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            Bitmap o = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (Graphics g = Graphics.FromImage(o))
+                g.DrawImage(b, new Rectangle(0, 0, r.Width, r.Height), r, GraphicsUnit.Pixel);
+            b.Dispose();
+            return o;
         }
 
         static void Page(int no, string title, string sub, string chip, string img)
@@ -207,7 +278,7 @@ namespace SnapWheel
               + "📜 网页想截全？框一块区域，它自己滚自己拼，出一张长图\r\n"
               + "🔍 圈住文字就能复制，还能一键翻译\r\n"
               + "↩️ 删错了能撤回\r\n"
-              + "📦 一个 exe，274 KB，零依赖，免安装，Windows 10/11 双击就跑\r\n"
+              + "📦 一个 exe，" + kbText + "，零依赖，免安装，Windows 10/11 双击就跑\r\n"
               + "🆓 开源 MIT，不要钱、没广告、不联网也能用\r\n\r\n"
               + "GitHub 搜 SnapWheel（作者 ExpertKT），或者评论区问我\r\n\r\n"
               + "## 话题标签\r\n\r\n"

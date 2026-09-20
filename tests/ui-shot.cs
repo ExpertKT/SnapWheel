@@ -128,6 +128,9 @@ namespace SnapWheel
             Application.SetCompatibleTextRenderingDefault(false);
             outDir = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "snapwheel_ui");
             Directory.CreateDirectory(outDir);
+            // 第二个参数可选：语言（zh / en）。做英文宣传物料时必须用 en ——
+            // 否则配图里是**中文界面**，发到 Reddit / Product Hunt 上就是"图文对不上"。
+            if (args.Length > 1 && args[1].Length > 0) { try { Lang.Init(args[1]); } catch { } }
             Console.WriteLine("输出目录: " + outDir);
 
             Settings s = Settings.Load();

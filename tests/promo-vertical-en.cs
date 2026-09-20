@@ -27,26 +27,99 @@ namespace SnapWheel
             outDir = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "snapwheel_vertical_en");
             Directory.CreateDirectory(outDir);
             shotDir = Path.Combine(Path.GetTempPath(), "snapwheel_ui");
+            ResolveKb(args.Length > 1 ? args[1] : null);
             try
             {
-                Page(1, "Screenshot.\nDrag it out. Done.", "No saving, no window switching, no hunting through folders", "Free & open source", "promo_wheel.png");
+                Page(1, "Screenshot.\nDrag it out. Done.", "No saving, no window switching, no hunting through folders", "1.0 · Free & open source", "wheel_bl.png");
                 Page(2, "A ring that\nlives in the corner", "Screenshots slide in. Drag them out whenever you need one.", "What it is", "wheel_bl.png");
-                Page(3, "Drag it into\nany app", "WeChat, Word, Explorer \u2014 release the mouse and it is sent", "Everyday use", "promo_drop.png");
-                Page(4, "Need the\nwhole page?", "Scrolling capture: frame an area, it scrolls and stitches by itself", "New in 0.6.0", "longdemo");
-                Page(5, "Grab text from\nany screenshot", "OCR plus one-click translation, even on dark low-contrast text", "New in 0.6.0", "ocr.png");
-                Page(6, "One exe.\n274 KB. Zero deps.", "Portable \u00b7 MIT licensed \u00b7 github.com/ExpertKT/SnapWheel", "Just download", "settings.png");
+                Page(3, "Drag it into\nany app", "WeChat, Word, Explorer \u2014 release the mouse and it is sent", "Everyday use", "wheel_drop.png");
+                // Chips used to say "New in 0.6.0" on both of these - that is several versions old,
+                // and labelling it "new" is simply wrong. Only what actually shipped this release gets a chip.
+                Page(4, "Need the\nwhole page?", "Scrolling capture: frame an area, it scrolls and stitches by itself", "Long capture", "longdemo");
+                Page(5, "Grab text from\nany screenshot", "OCR plus one-click translation, even on dark low-contrast text", "OCR + translate", "ocr.png");
+                // Size is read from the built exe, never hardcoded (the old text said 274 KB
+                // while the real binary had long since grown to 365 KB).
+                Page(6, "One exe.\n" + kbText + ". Zero deps.", "Version 1.0 \u00b7 Portable \u00b7 MIT licensed \u00b7 github.com/ExpertKT/SnapWheel", "Just download", "settings.png");
                 WriteCopy();
                 Console.WriteLine("done -> " + outDir);
             }
             catch (Exception ex) { Console.WriteLine("failed: " + ex.Message); }
         }
 
+        // Program size, read from the built exe (see promo9.cs for the full rationale).
+        static string kbText = "- KB";
+        static void ResolveKb(string hint)
+        {
+            try
+            {
+                string p = hint;
+                if (string.IsNullOrEmpty(p) || !File.Exists(p))
+                {
+                    string[] cand = {
+                        Path.Combine(Directory.GetCurrentDirectory(), @"build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\build\SnapWheel.exe"),
+                    };
+                    p = null;
+                    for (int i = 0; i < cand.Length; i++) if (File.Exists(cand[i])) { p = cand[i]; break; }
+                }
+                kbText = (p != null && File.Exists(p)) ? ((int)Math.Round(new FileInfo(p).Length / 1024.0)) + " KB" : "- KB";
+            }
+            catch { kbText = "- KB"; }
+        }
+
         static Bitmap Load(string file)
         {
             if (file == "longdemo") return null;
             string p = Path.Combine(shotDir, file);
-            if (!File.Exists(p)) return null;
-            try { using (Bitmap b = new Bitmap(p)) return new Bitmap(b); } catch { return null; }
+            // 落回仓库 docs\ 下那些进了版本库的正式渲染（ocr.png / annotate.png …）。
+            // 光看 %TEMP% 会踩到一个坑：那里可能躺着**好几天前的旧文件**，
+            // 拿到旧图不报错、看起来一切正常 —— 宣传图上配的就是过期界面。
+            if (!File.Exists(p))
+            {
+                string alt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "docs", file);
+                if (File.Exists(alt)) p = alt;
+                else { alt = Path.Combine(Directory.GetCurrentDirectory(), "docs", file); if (File.Exists(alt)) p = alt; }
+            }
+            if (!File.Exists(p)) { Console.WriteLine("      * missing image " + file); return null; }
+            try { using (Bitmap b = new Bitmap(p)) return Trim(new Bitmap(b)); } catch { return null; }
+        }
+
+        // Crop the render down to the part that actually has content (same as promo9.cs).
+        // Without this the wheel occupies a small corner of a fixed-size canvas, so at
+        // 470px tall the wheel itself is only ~150px and is unreadable on a phone.
+        static Bitmap Trim(Bitmap b)
+        {
+            int minX = b.Width, minY = b.Height, maxX = -1, maxY = -1;
+            System.Drawing.Imaging.BitmapData d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                int stride = d.Stride, hgt = b.Height, wid = b.Width;
+                byte[] buf = new byte[stride * hgt];
+                System.Runtime.InteropServices.Marshal.Copy(d.Scan0, buf, 0, buf.Length);
+                for (int y = 0; y < hgt; y++)
+                {
+                    int row = y * stride;
+                    for (int x = 0; x < wid; x++)
+                        if (buf[row + x * 4 + 3] > 12)
+                        {
+                            if (x < minX) minX = x; if (x > maxX) maxX = x;
+                            if (y < minY) minY = y; if (y > maxY) maxY = y;
+                        }
+                }
+            }
+            finally { b.UnlockBits(d); }
+            if (maxX < minX || maxY < minY) return b;
+            int pad = 14;
+            minX = Math.Max(0, minX - pad); minY = Math.Max(0, minY - pad);
+            maxX = Math.Min(b.Width - 1, maxX + pad); maxY = Math.Min(b.Height - 1, maxY + pad);
+            Rectangle r = new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            Bitmap o = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (Graphics g = Graphics.FromImage(o))
+                g.DrawImage(b, new Rectangle(0, 0, r.Width, r.Height), r, GraphicsUnit.Pixel);
+            b.Dispose();
+            return o;
         }
 
         static void Page(int no, string title, string sub, string chip, string img)
@@ -184,20 +257,20 @@ namespace SnapWheel
             string s =
                 "# Social copy (English)\r\n\r\n"
               + "## Reddit / forum title\r\n\r\n"
-              + "I built a screenshot ring for Windows: capture, then just drag the thumbnail into any app (free, MIT, 274 KB)\r\n\r\n"
+              + "I built a screenshot ring for Windows: capture, then just drag the thumbnail into any app (free, MIT, " + kbText + ")\r\n\r\n"
               + "## Reddit / Product Hunt body\r\n\r\n"
               + "Every screenshot workflow seems to be: capture -> save -> switch window -> find the file -> drag it in.\r\n"
               + "SnapWheel removes the middle steps. Press Ctrl+Shift+S, drag a region, and the shot slides into a ring that\n"
               + "sits in the corner of your screen. When you need it, drag the thumbnail straight into WeChat / Word / Explorer.\r\n\r\n"
-              + "- Scrolling capture: frame an area, it scrolls and stitches the long image by itself (new in 0.6.0)\r\n"
-              + "- OCR + one-click translation, works on dark, low-contrast text (new in 0.6.0)\r\n"
+              + "- Scrolling capture: frame an area, it scrolls and stitches the long image by itself \r\n"
+              + "- OCR + one-click translation, works on dark, low-contrast text \r\n"
               + "- Middle-click a thumbnail to pin it on screen; undo delete; annotate with arrows/boxes/mosaic/text\r\n"
-              + "- Single 274 KB exe, zero third-party dependencies, no installer, no ads, no telemetry\r\n\r\n"
+              + "- Single "+ kbText +" exe, zero third-party dependencies, no installer, no ads, no telemetry\r\n\r\n"
               + "Written in C# / WinForms, everything (window, buttons, icons, the frosted glass) is drawn by code -\n"
               + "no UI toolkit, no image assets. Source and a portable exe: github.com/ExpertKT/SnapWheel\r\n\r\n"
               + "Feedback welcome - especially what breaks on your setup.\r\n\r\n"
               + "## Hacker News / short version\r\n\r\n"
-              + "Show HN: SnapWheel - a screenshot ring for Windows, drag thumbnails straight into any app (274 KB, MIT)\r\n";
+              + "Show HN: SnapWheel - a screenshot ring for Windows, drag thumbnails straight into any app ("+ kbText +", MIT)\r\n";
             File.WriteAllText(Path.Combine(outDir, "post-copy-en.md"), s, new System.Text.UTF8Encoding(false));
             Console.WriteLine("  post-copy-en.md");
         }

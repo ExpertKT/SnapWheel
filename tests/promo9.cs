@@ -66,14 +66,14 @@ namespace SnapWheel
 
             try
             {
-                Shot(1, "截图不落文件", "拖一下就发出去，环上还留着一份", "", "promo_wheel.png", true);
-                Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_bl.png", false);
-                Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "promo_drop.png", false);
+                Shot(1, "截图不落文件", "拖一下就发出去，环上还留着一份", "", "wheel_bl.png", true);
+                Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_intro80.png", false);
+                Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "wheel_drop.png", false);
                 Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停", "wheel_empty.png", false);
                 Center5();
                 Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口", "ocr.png", false);
-                Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "promo_menu.png", false);
-                Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "promo_intro.png", false);
+                Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "wheel_menu.png", false);
+                Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "annotate.png", false);
                 Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "完整版 / 无万能键版都在 Releases", "settings.png", false);
                 Merge();
                 Console.WriteLine("完成：9 张图 + 一张九宫格总览已输出到 " + outDir);
@@ -83,8 +83,24 @@ namespace SnapWheel
 
         static Bitmap Load(string file)
         {
+            // ⚠️ 先看清楚"谁真的会产出这张图"。
+            // 原来这里点名的 promo_wheel / promo_drop / promo_menu / promo_intro 四张，
+            // **现在的 ui-shot 根本不生成** —— 它们是 09-14 留下的旧文件，一直躺在 %TEMP% 里，
+            // 于是宣传图上配的是好几天前的界面，而且没有任何东西会报错。
+            // 现在只用两种来源：ui-shot 真的会写的（wheel_*.png / settings.png …），
+            // 以及仓库 docs\ 下那些**进了版本库**的正式渲染（annotate / ocr / menu …）。
             string p = Path.Combine(shotDir, file);
-            if (!File.Exists(p)) return null;
+            if (!File.Exists(p))
+            {
+                string alt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "docs", file);
+                if (File.Exists(alt)) p = alt;
+                else
+                {
+                    alt = Path.Combine(Directory.GetCurrentDirectory(), "docs", file);
+                    if (File.Exists(alt)) p = alt;
+                }
+            }
+            if (!File.Exists(p)) { Console.WriteLine("      ★ 找不到配图 " + file + "（这张会空着）"); return null; }
             try { using (Bitmap b = new Bitmap(p)) return Trim(new Bitmap(b)); } catch { return null; }
         }
 
