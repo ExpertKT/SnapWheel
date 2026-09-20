@@ -383,8 +383,15 @@ namespace SnapWheel
         }
 
         // 外部文件拖到轮盘上方：提示"松手加入"。
+        //
+        // 位置改过两次才对，两次都记下来：
+        //   · 第一版贴在"环的对角线"上 → 撞了计数胶囊 + 两张缩略图（就是用户截图那张）。
+        //   · 第二版甩到"对角的状态区" → 顺序和重叠都对了，但**用户说离轮盘太远、甚至没注意到**。
+        //     反馈的价值在于"贴着你正在操作的东西"，甩到画面另一头等于没有反馈。
+        //   · 现在：回到轮盘身边，钉在**上把手（弧在侧边那一端）的外侧**，并**避开缩略图** ——
+        //     卡片都往内缩了一个安全角 phiMin，把手外侧那块天生是空的。
         // ⚠️ 这个元素以前**连 Diag 名字都没有** —— 于是任何几何检查都看不见它，
-        // 我第一轮改错地方（去改提示条）却毫无察觉。加元素必须登记，这是硬规矩。
+        //   我一度改错地方却毫无察觉。加元素必须登记，这是硬规矩。
         void DrawDropHint(Graphics g, int a)
         {
             if (!(_dropActive && _dropExternal) || a <= 90) return;
@@ -392,7 +399,17 @@ namespace SnapWheel
             using (Font f = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold))
             {
                 SizeF sz = g.MeasureString(tip, f);
-                RectangleF pill = StatusArea(sz, 14f, 7f);
+                float w = sz.Width + 28f, h = sz.Height + 14f;
+                SizeF ls = LogicalSize();
+                RectangleF nub = NubOutRect();          // 弧在侧边那一端的把手 = 用户说的"上把手"
+                // 往**远离角落**的那一侧让出去：下贴轮盘就往上，上贴轮盘就往下
+                float y = (Sy() < 0) ? (nub.Y - h - 10f) : (nub.Bottom + 10f);
+                float x = (Sx() > 0) ? 6f : (ls.Width - w - 6f);
+                if (y < 6f) y = 6f;
+                if (y + h > ls.Height - 6f) y = ls.Height - h - 6f;
+                if (x + w > ls.Width - 6f) x = ls.Width - w - 6f;
+                if (x < 6f) x = 6f;
+                RectangleF pill = new RectangleF(x, y, w, h);
                 Diag("拖放提示（松手加入）", pill);
                 using (GraphicsPath pg = Gfx.Round(pill, pill.Height / 2f))
                 {
