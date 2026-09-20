@@ -484,14 +484,17 @@ namespace SnapWheel
                 float wantH = (wantOut || wantIn) ? 1f : 0f;
                 if (Math.Abs(_nubHov - wantH) > 0.006f) { _nubHov += (wantH - _nubHov) * 0.24f; need = true; }
                 else if (_nubHov != wantH) { _nubHov = wantH; need = true; }
-                if (_nubHov > 0.01f) need = true;
+            // 这里**故意不写** if (x > 0.01f) need = true; 那种「悬停期间保持刷新」。
+            // 上面两行已经把「正在变化」的每一帧都请求了；值一旦到位（else if 里会吸附），
+            // 光晕就不该再要求任何一帧 —— 它是**纯标量**，不跟光标位置走。
+            // 实测：留着那一行，只要它一直亮着就每帧重画（空转 46fps），而画面一个像素都没变。
 
                 // 把手用途提示（"点我展开/收起"）：悬停时亮；首次运行的头 14 秒也自动亮一次
                 bool wantHint = wantOut || wantIn || DateTime.Now < _firstRunHintUntil;
                 float wantHT = wantHint ? 1f : 0f;
                 if (Math.Abs(_nubHintT - wantHT) > 0.006f) { _nubHintT += (wantHT - _nubHintT) * 0.18f; need = true; }
                 else if (_nubHintT != wantHT) { _nubHintT = wantHT; need = true; }
-                if (_nubHintT > 0.01f) need = true;
+
             }
 
             // 后台抓好的玻璃底：在 UI 线程这里换上。
@@ -545,7 +548,7 @@ namespace SnapWheel
                 float curH = _keyHov;
                 if (Math.Abs(curH - kh) > 0.006f) { _keyHov = curH + (kh - curH) * 0.24f; need = true; }
                 else if (curH != kh) { _keyHov = kh; need = true; }
-                if (_keyHov > 0.01f) need = true;         // 悬停时保持刷新，光晕是渐变的
+
             }
 
             // 万能键：长按展开圆盘 / 滑动切换
@@ -569,10 +572,19 @@ namespace SnapWheel
             Color want = AccentColor();
             if (_accentCur.ToArgb() != want.ToArgb())
             {
-                _accentCur = Color.FromArgb(
+                Color next = Color.FromArgb(
                     (int)Math.Round(_accentCur.R + (want.R - _accentCur.R) * 0.22f),
                     (int)Math.Round(_accentCur.G + (want.G - _accentCur.G) * 0.22f),
                     (int)Math.Round(_accentCur.B + (want.B - _accentCur.B) * 0.22f));
+                // ⚠️ 收敛判定，**这一行是必须的**：
+                // 上面是"每帧靠近 22%"，而插值结果又被 Round 成整数 ——
+                // 当某个通道只差 1 时，cur + 0.22 取整回来还是 cur，于是它**永远停在差 1 的地方**，
+                // 于是 `_accentCur != want` 恒成立、`need` 每个 tick 都为真 ——
+                // **空转时也在满帧重画**（实测 45fps，10 秒 450 帧）。
+                // 每通道都只差 1 以内就吸附过去，让它真的能停下来。
+                bool close = Math.Abs(next.R - want.R) <= 1 && Math.Abs(next.G - want.G) <= 1
+                             && Math.Abs(next.B - want.B) <= 1;
+                _accentCur = close ? want : next;
                 need = true;
             }
             if (_switchFlash > 0f) { _switchFlash += (0f - _switchFlash) * 0.16f; if (_switchFlash < 0.01f) _switchFlash = 0f; need = true; }

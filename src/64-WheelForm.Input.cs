@@ -440,14 +440,58 @@ namespace SnapWheel
                 return;
             }
             _gearHold = _shootHold = false;
+            // 左键单击 = 复制到剪贴板。
+            //
+            // ⚠️ 这个行为**以前根本不存在** —— 引导里一直写着"直接点一下缩略图则是把这张图复制到剪贴板"，
+            // 而代码里从头到尾只有"拖出去 / 右键删 / 双击打开"三条路，单击什么都不做。
+            // 又一个"文档在说谎"（和【新】标记、"自动更新 ✅" 同一个形状）。现在把它补上。
+            //
+            // 判定"这是单击"的依据：`_maybeDrag` 还活着。
+            // 一旦移动超过 10px，MouseMove 里就会把它清掉并转成拖出去 —— 所以到这里还在，
+            // 就说明按下去之后没拖动过。`_enlarged >= 0` 则说明是长按放大，也不算单击。
+            if (e.Button == MouseButtons.Left && _maybeDrag && _dragIndex >= 0 && _enlarged < 0)
+            {
+                int ci = _dragIndex;
+                if (ci >= 0 && ci < _store.Items.Count && _store.Items[ci].Image != null) CopyItemAt(ci);
+            }
             _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             if (_enlarged >= 0) { _enlarged = -1; Render(); }
         }
 
 
+        // 复制某一张到剪贴板 —— 带反馈。
+        //
+        // 为什么反馈这么重要：这是"最短路径用法"（不想拖、只想复制的人就走这条），
+        // 而它以前**什么都没说** —— 用户点完不知道成了没有，得去别处粘贴一次才知道。
+        // 按统计口径这类"做完没有任何回应"的动作是最伤手感的（见 docs/DIRECTIONS.md §8）。
+        void CopyItemAt(int i)
+        {
+            try
+            {
+                // 登记一下"这张剪贴板是我们自己写的"，别让剪贴板监听把它当成"用户复制的新图"又收一遍
+                SelfClipboard.Note(_store.Items[i].Image);
+                Clipboard.SetImage(_store.Items[i].Image);
+                SelfClipboard.NoteSequence();
+            }
+            catch { }
+
+            // 反馈一：那一格"弹"一下。
+            // 不去新写一套动画 —— 直接把它的缩放顶起来，已有的缩放动画会自己把它收回去，
+            // 所以这一下是免费的（约 300ms 的弹性回落）。
+            _scales[i] = 1.18f;
+            // 反馈二：一句话说清楚
+            ShowToast(Lang.T("已复制到剪贴板", "Copied to clipboard"));
+            Render();
+        }
+
         protected override void OnMouseDoubleClick(MouseEventArgs e)
         {
             e = LogicalArgs(e);
+            // 双击 = 打开原图，它**不该顺带复制**。
+            // 双击在 Windows 上是两次完整的按下-松开，所以上面那段单击复制会先跑一次；
+            // 这里把拖动状态清掉，让**跟着来的那次 MouseUp** 认不出"单击"，于是不会再复制第二遍。
+            // （不清的话：双击 = 复制两次 + 打开一次 + 两条提示，很闹。）
+            _maybeDrag = false; _dragIndex = -1; _holdIndex = -1;
             int hh = HitTest(e.Location);
             if (hh >= 0 && _store.Items[hh].Image != null)
             {
