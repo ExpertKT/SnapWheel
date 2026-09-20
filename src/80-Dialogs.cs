@@ -244,6 +244,19 @@ namespace SnapWheel
                          "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
                        + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
 
+            AddTip(mL, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
+                Lang.T("这一版没有加新功能，补的全是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
+                       + "（默认是「留一份」，所以格子**不合拢** —— 图并没有走）；**新截的那张**会亮一下再慢慢冷下去，"
+                       + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下。"
+                       + "另外环会**随内容变粗**，早上偏暖、深夜自己暗一点，环下面也多了一层影子。"
+                       + "涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。",
+                         "This release adds no features, only feedback: dragging an image out makes its cell flinch and leaves a short "
+                       + "trail in the drag direction (the default keeps a copy, so the cell does NOT close up - nothing actually left); "
+                       + "a freshly captured image glows then cools, so you can see at a glance which one is new; a ripple spreads out when "
+                       + "an image arrives; switching wheels flips the name pill. The ring also thickens with content, warms up in the "
+                       + "morning, dims at night, and now casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in "
+                       + "Settings > Style."));
+
             int tipW = _contentW - Ui.S(3);
             Label tip = new Label();
             tip.Text = Lang.T("小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。", "Tip: if you cannot drag images in, check whether SnapWheel was started as administrator (Windows blocks cross-privilege dragging).");

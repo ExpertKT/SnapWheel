@@ -593,11 +593,14 @@ namespace SnapWheel
             _returnedToWheel = false;
             _dragOutItem = null;
             _dragOutProg = 0f;
+            _dragLift = 0f;
             if (taken)
             {
                 // 拖出去是 Copy 语义：默认**留一份**在环上（随时能再拖一次，或拖给第二个窗口）。
                 // 想要"拖出去即从环上移走"的话，设置第 1 页那个开关关掉即可。
                 Usage.Ev("DragOut", _settings.KeepAfterDragOut ? "留一份" : "移走");
+                // 先摆反馈（用删除/合拢之前的下标算位置），再决定格子去留
+                BeginDragOutFeedback(index, it);
                 if (_settings.KeepAfterDragOut)
                 {
                     ShowToast(Lang.T("已拖出（环上还留着一份）", "Dragged out (a copy stays in the ring)"));
@@ -608,6 +611,12 @@ namespace SnapWheel
                     _thumbCache.Remove(it);
                     _enterT0.Remove(it);
                     _scales.Clear();
+                    // 空位**慢慢合拢**，不是"啪"地一跳：复用删除那条动画（ItemPhi 会把后面每格往前推 _phiShift）
+                    if (index >= 0)
+                    {
+                        _phiShift = StepRad();
+                        _delShiftFrom = index;
+                    }
                     if (_targetOffset > MaxOffset()) _targetOffset = MaxOffset();
                     if (_targetOffset < MinOffset()) _targetOffset = MinOffset();
                     if (_offset > _targetOffset) _offset = _targetOffset;
@@ -623,6 +632,30 @@ namespace SnapWheel
             }
             _hover = -1;
             Render();
+        }
+
+        // 松手之后那一下反馈：一道**向外**的短促拖痕；留一份模式下那一格还会**颤一下 + 短暂高亮**。
+        //   · 方向是"格子 → 松手那一刻的指针"，所以拖到哪儿痕迹就朝哪儿 —— 一眼看出"送出去了"。
+        //   · 留一份模式下**格子不合拢**（图本来就没走），这就是它和"移走"最要紧的区别。
+        //   · 必须在移除 StoreItem **之前**调用（下标还要用）。
+        void BeginDragOutFeedback(int index, StoreItem it)
+        {
+            try
+            {
+                PointF a = (index >= 0 && index < _store.Items.Count) ? ItemCenter(index) : ItemCenterAtPhi((_phiMin + _phiMax) / 2f);
+                PointF b = ToLogicalPt(PointToClient(Cursor.Position));
+                _dragTrailA = a; _dragTrailB = b;
+                _dragTrailT = 0f; _dragTrailAt = DateTime.Now;
+                if (_settings.KeepAfterDragOut)
+                {
+                    _dragPulseIdx = index; _dragPulseT = 0f; _dragPulseAt = DateTime.Now;
+                }
+                else
+                {
+                    _dragPulseIdx = -1; _dragPulseT = 1f;      // 格子都没了，没什么可颤的
+                }
+            }
+            catch { _dragTrailT = 1f; _dragPulseT = 1f; _dragPulseIdx = -1; }
         }
 
 

@@ -109,8 +109,11 @@ namespace SnapWheel
                                 + " ｜ 空 → " + fromNothing);
 
                 Check("引导 · 看过当前版本 → 一条【新】都不标", atCurrent == 0, "实际 " + atCurrent);
-                Check("引导 · 从 0.9.4 升上来 → 只标 0.9.5 那一条", fromPrev == 1, "实际 " + fromPrev);
-                Check("引导 · 从 0.8.0 升上来 → 0.8.1 / 0.9.0 / 0.9.5 共三条", fromOld == 3, "实际 " + fromOld);
+                // v1.0.0 加了「环现在会『有反应』了」那一条，所以这两条基线跟着 +1。
+                // 这是**故意**写成硬编码的：加了引导条目就必须来改这里 ——
+                // 否则"新功能"会悄悄标错版本（这个坑在 0.9.5 出过，见 docs/RELEASE.md 最后一节）。
+                Check("引导 · 从 0.9.4 升上来 → 标 0.9.5 与 1.0.0 两条", fromPrev == 2, "实际 " + fromPrev);
+                Check("引导 · 从 0.8.0 升上来 → 0.8.1 / 0.9.0 / 0.9.5 / 1.0.0 共四条", fromOld == 4, "实际 " + fromOld);
                 Check("引导 · 版本越老【新】越多（单调不减）",
                       atCurrent <= fromPrev && fromPrev <= fromOld && fromOld <= fromNothing,
                       atCurrent + " / " + fromPrev + " / " + fromOld + " / " + fromNothing);

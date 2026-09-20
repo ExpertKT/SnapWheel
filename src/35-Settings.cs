@@ -69,6 +69,15 @@ namespace SnapWheel
         // 而反过来，任务栏常显时贴屏幕边又会让环压住任务栏一角。
         // 两种都说得通，所以做成可选的，默认自动判断。
         public string EdgeAnchor = "auto";
+        // ---- v1.0「有生命感」的三个开关（都是默认开、都可以关）----
+        // 为什么默认开：它们都不改功能，只改"看起来怎么样"；关掉的入口留着，是因为
+        // 审美这件事没有标准答案 —— 用户不喜欢就该能关上，而不是被迫接受。
+        //   涟漪   ：加进来一张新图时，从那一格扩散开一圈淡淡的光
+        //   环的影子：让环"浮"在桌面上（和缩略图用的同一套柔和阴影）
+        //   时间感 ：早上主题色偏暖、深夜整块自己暗一点
+        public bool Ripple = true;
+        public bool RingShadow = true;
+        public bool DayMood = true;
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
         public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
@@ -167,6 +176,9 @@ namespace SnapWheel
             else if (k == "DiagMode") s.DiagMode = (v == "1");
             else if (k == "UsageLog") s.UsageLog = (v == "1");
             else if (k == "EdgeAnchor" && (v == "auto" || v == "screen" || v == "work")) s.EdgeAnchor = v;
+            else if (k == "Ripple") s.Ripple = (v == "1");
+            else if (k == "RingShadow") s.RingShadow = (v == "1");
+            else if (k == "DayMood") s.DayMood = (v == "1");
                         else if (k == "UiScale") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 250) s.UiScale = n; }
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
@@ -313,6 +325,9 @@ namespace SnapWheel
             lines.Add("DiagMode=" + (DiagMode ? "1" : "0"));
             lines.Add("UsageLog=" + (UsageLog ? "1" : "0"));
             lines.Add("EdgeAnchor=" + EdgeAnchor);
+            lines.Add("Ripple=" + (Ripple ? "1" : "0"));
+            lines.Add("RingShadow=" + (RingShadow ? "1" : "0"));
+            lines.Add("DayMood=" + (DayMood ? "1" : "0"));
                 lines.Add("UiScale=" + UiScale);
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));

@@ -210,6 +210,13 @@ if ($Test) {
     # 空转时的帧率：修之前 45fps（提示/光晕已经**完全显示、一个像素都不再变**了，却还在每帧重画），
     # 修之后 7fps。查法记在测试文件头部 —— 前两次都找错了地方，第三次才知道"往 need 旁边记行号"。
     Run-Test '空转帧率'       'idle-frames.cs'           'SnapWheel.IdleFrames' $null
+    # 交互层（v1.0 补的那块空白）：这个项目**所有 P0 都出在交互层** ——
+    # 窗口层级、拖放失效、"点不动"。以前全靠手测，现在能自动跑的这几条先跑起来。
+    #   hit-test      ：几个可点控件的命中区互不重叠、中心命中自己、且在窗口内
+    #                   + 置顶/不占任务栏/不激活/分层（"截图不在最顶层"那类 P0 的判据）
+    #   dragout-shot  ：拖出去的两套反馈分流对不对、动画会不会停下来
+    Run-Test '交互-命中区'     'hit-test.cs'              'SnapWheel.HitTest' $null
+    Run-Test '交互-拖出反馈'   'dragout-shot.cs'          'SnapWheel.DragOutShot' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null
@@ -218,6 +225,24 @@ if ($Test) {
     # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tools\check-swallowed.ps1')
     if ($LASTEXITCODE -ne 0) { Bad "有代码被注释吞掉（见上，这类问题测试抓不到）" }
+
+    # 「带中文的 .ps1 必须存成带 BOM 的 UTF-8」检查 —— PowerShell 5.1 读没有 BOM 的 .ps1 会按
+    # 系统 ANSI（简中是 GBK）解，中文注释立刻变成乱码，**引号会被吃掉**，脚本报一堆莫名其妙的语法错。
+    # 这一条**这个会话里就发生了 3 次**（每次都是编辑器把 BOM 抹掉），而且报错位置离真正的原因很远。
+    # 与其靠记性，不如让构建自己说。
+    $noBom = @()
+    foreach ($f in (Get-ChildItem (Join-Path $root 'tools') -Filter *.ps1 -File)) {
+        $bb = [System.IO.File]::ReadAllBytes($f.FullName)
+        $hasBom = ($bb.Length -ge 3 -and $bb[0] -eq 0xEF -and $bb[1] -eq 0xBB -and $bb[2] -eq 0xBF)
+        if (-not $hasBom) {
+            $txt = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+            if ($txt -match '[\u4e00-\u9fff]') { $noBom += $f.Name }
+        }
+    }
+    if ($noBom.Count -gt 0) {
+        foreach ($n in $noBom) { Write-Host ("      tools\" + $n + "  有中文但没 BOM") -ForegroundColor Red }
+        Bad "带中文的 .ps1 少了 UTF-8 BOM（PowerShell 5.1 会按 GBK 读，引号会被吃掉）"
+    } else { Ok "脚本编码           带中文的 .ps1 都有 UTF-8 BOM" }
 
     Write-Host "  （拖放测试会模拟鼠标真的拖拽，需要时手动跑：见 README）" -ForegroundColor DarkGray
 }

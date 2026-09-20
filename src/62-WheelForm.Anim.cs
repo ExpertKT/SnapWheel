@@ -355,8 +355,24 @@ namespace SnapWheel
             }
 
             // keep animating while a freshly captured image is still sliding in / a delete is running
+            // v1.0：窗口从 0.5 秒放宽到"微光冷完"那一刻（FreshHoldSec + FreshCoolSec）——
+            // 否则滑入动画走完之后微光就冻住不冷了（它还需要约 4.8 秒）。这是**真的有东西在变**，
+            // 不是空转：跑完就停，和上面那几条纪律一致。
             foreach (KeyValuePair<StoreItem, DateTime> kv in _enterT0)
                 if ((DateTime.Now - kv.Value).TotalSeconds < 0.5) { need = true; break; }
+            // 微光的窗口更长（亮 2.2 秒 + 冷 2.6 秒），单独走一份表 —— 见 _freshT0 的说明
+            foreach (KeyValuePair<StoreItem, DateTime> kv in _freshT0)
+                if ((DateTime.Now - kv.Value).TotalSeconds < FreshHoldSec + FreshCoolSec + 0.05) { need = true; break; }
+            // 切轮盘时名字药丸"翻一下"
+            if (_nameSwapT < 1f)
+            {
+                _nameSwapT += (float)((DateTime.Now - _nameSwapAt).TotalSeconds / 0.55f);
+                if (_nameSwapT >= 1f) _nameSwapT = 1f;
+                _nameSwapAt = DateTime.Now;
+                need = true;
+            }
+            // 涟漪：从新来那一格扩散出去的一圈光
+            if (RippleTick()) need = true;
             // 小按钮的发光淡入淡出（0 或 1 之间平滑走，和别处的趋近写法一致）
             {
                 float g1 = _closeGlow + ((_closeHover ? 1f : 0f) - _closeGlow) * 0.22f;
@@ -389,6 +405,31 @@ namespace SnapWheel
             {
                 _phiShift *= 0.80f;
                 if (Math.Abs(_phiShift) < 0.002f) { _phiShift = 0f; _delShiftFrom = -1; }
+                need = true;
+            }
+
+            // 拖出去的反馈（v1.0）：向外那道拖痕，和那一格"颤一下 + 高亮"。
+            // 两者都是**有始有终**的标量动画，跑完就停在 1，绝不留"永远差一点点"的状态
+            // （空转满帧那两次事故都是这个形状）。
+            if (_dragTrailT < 1f)
+            {
+                _dragTrailT += (float)((DateTime.Now - _dragTrailAt).TotalSeconds / 0.45f);
+                if (_dragTrailT >= 1f) _dragTrailT = 1f;
+                _dragTrailAt = DateTime.Now;
+                need = true;
+            }
+            if (_dragPulseT < 1f)
+            {
+                _dragPulseT += (float)((DateTime.Now - _dragPulseAt).TotalSeconds / 0.55f);
+                if (_dragPulseT >= 1f) { _dragPulseT = 1f; _dragPulseIdx = -1; }
+                _dragPulseAt = DateTime.Now;
+                need = true;
+            }
+            // 拖拽结束后"提起来"要放回去（拖回轮盘、或者拖出去之后）
+            if (_dragLift > 0f && _dragOutItem == null)
+            {
+                _dragLift += (0f - _dragLift) * 0.22f;
+                if (_dragLift < 0.01f) _dragLift = 0f;
                 need = true;
             }
 
@@ -652,6 +693,16 @@ namespace SnapWheel
         {
             if (it == null) return;
             _enterT0[it] = DateTime.Now;
+            _freshT0[it] = DateTime.Now;      // 微光只认这一份（切轮盘的"依次滑入"不算新）
+            // 涟漪从"这一格"扩散出去（见 61d-WheelForm.Atmos.cs）：东西进来了，这件事要有形状。
+            // 位置用"这张图在弧上的格子中心"——它可能刚滑进来还没到位，那就从它该到的位置开始，
+            // 看着才是"从它那儿散开的"。
+            try
+            {
+                int idx = _store.Items.IndexOf(it);
+                if (idx >= 0) StartRipple(ItemCenterAtPhi(ItemPhi(idx)));
+            }
+            catch { }
             // 视口要跟到最新那张 —— 否则"刚截的图"可能落在可见弧之外（收起态下 offset 被归零，
             // 第 7 张的 ItemPhi 已经是 1.747，而可见弧上界 _phiMax+0.5 只有 1.766）：
             // 滑入动画其实在弧外跑，等它擦着边跨进来才"啪"地闪现一下 —— 用户报的

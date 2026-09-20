@@ -46,6 +46,12 @@ namespace SnapWheel
             if (_settings.DiagMode) return false;
             if (_show < 0.999f || _intro || _collapsing || _showAnimating) return false;
             if (_deletingItem != null || _dragOutItem != null || _dropActive) return false;
+            // 拖出去的反馈（v1.0）：那道向外拖痕和"颤一下 + 高亮"都画在卡片层里，
+            // 每帧都不一样 —— 不排掉就会冻在缓存位图里，看起来像"闪一下就不动了"。
+            if (_dragTrailT < 1f || _dragPulseT < 1f || _dragLift > 0f) return false;
+            // v1.0 的气氛层：微光在冷却、涟漪在扩散的时候，两层都不能用缓存
+            // （它们都是"每帧都在变"的东西，冻在缓存位图里看起来就是"闪一下就不动了"）。
+            if (which == 0 && (FreshActive() || _rippleT < 1f)) return false;
             if (_switchFlash > 0.01f) return false;
             // 玻璃底正在交叉淡入（换底后的那 0.38 秒）时，控件层绝不能用缓存：
             // 万能键玻璃盘 / 两个圆按钮 / 名字药丸 / 把手 的模糊底是**烤进这一层位图**里的，
@@ -104,6 +110,15 @@ namespace SnapWheel
             {
                 h = Mix(h, (double)EffR());
                 h = Mix(h, _store.Items.Count);
+                // 拖出去的反馈都画在这一层里：拖痕、那一格的抖动/高亮、以及"提起来"的缩放。
+                // 和上面 _keyHov 那组同理 —— 只进 bool 不进进度值的话，过渡期间会一直贴旧层。
+                h = Mix(h, (double)_dragTrailT); h = Mix(h, (double)_dragPulseT);
+                h = Mix(h, (double)_dragLift); h = Mix(h, _dragPulseIdx);
+                h = Mix(h, (long)Math.Round(_dragTrailA.X)); h = Mix(h, (long)Math.Round(_dragTrailA.Y));
+                h = Mix(h, (long)Math.Round(_dragTrailB.X)); h = Mix(h, (long)Math.Round(_dragTrailB.Y));
+                // v1.0：环的厚度跟着数量走（已经由 Items.Count 覆盖），涟漪和微光各自一份进度
+                h = Mix(h, (double)_rippleT);
+                h = Mix(h, (double)FreshGlowSum());
                 return h;
             }
             h = Mix(h, _store.Items.Count);                       // 计数胶囊

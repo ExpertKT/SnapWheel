@@ -303,7 +303,7 @@ namespace SnapWheel
         void BuildPage3()
         {
             TableLayoutPanel g = _pages[2];
-            SetupRows(g, 4);
+            SetupRows(g, 5);   // v1.0：多了「有生命感」那三个开关
             Settings s = _s;
 
             g.Controls.Add(Section(Lang.T("风格", "Style")), 0, 0);
@@ -361,6 +361,31 @@ namespace SnapWheel
             _chkIntroAnim.Text = Lang.T("启动时播放开启动画", "Play the startup animation");
             _chkIntroAnim.Checked = s.IntroAnim;
             g.Controls.Add(Row(_chkIntroAnim), 1, 3);
+
+            // ---- v1.0「有生命感」的三个开关 ----
+            // 放在这一页（风格）最后一行：它们不影响功能，只影响"看起来怎么样"，
+            // 和上面那一行的"显示名称/计数标签"是同一类东西。
+            _chkRipple = new CheckBox();
+            _chkRipple.AutoSize = true;
+            _chkRipple.Text = Lang.T("涟漪（新图进来时扩散一圈）", "Ripple (a ring spreads out when an image arrives)");
+            _chkRipple.Checked = s.Ripple;
+            _chkRipple.Margin = new Padding(0, 6, 0, 0);
+
+            _chkRingShadow = new CheckBox();
+            _chkRingShadow.AutoSize = true;
+            _chkRingShadow.Text = Lang.T("环有影子", "Shadow under the ring");
+            _chkRingShadow.Checked = s.RingShadow;
+            _chkRingShadow.Margin = new Padding(S(20), 6, 0, 0);
+
+            _chkDayMood = new CheckBox();
+            _chkDayMood.AutoSize = true;
+            _chkDayMood.Text = Lang.T("时间感（早上偏暖、深夜变暗）", "Time of day (warmer in the morning, dimmer at night)");
+            _chkDayMood.Checked = s.DayMood;
+            _chkDayMood.Margin = new Padding(S(20), 6, 0, 0);
+
+            Control moodRow = Row(_chkRipple, _chkRingShadow, _chkDayMood);
+            g.Controls.Add(moodRow, 0, 4);
+            g.SetColumnSpan(moodRow, 2);
         }
 
         // ---- 第 4 页：万能键与高级 ----

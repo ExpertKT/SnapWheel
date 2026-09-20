@@ -104,6 +104,9 @@ namespace SnapWheel
         bool _powerSkipped;      // 上一帧是不是被"省电"跳过了（绝不连续跳两帧）
         bool _forceDraw;         // 这一帧必须画（输入导致的：悬停/按下/滚轮）
         public static int RenderCountForTest = 0;   // 测试用：真正画了多少帧
+        // 测试用：把窗口的扩展样式读出来。分层 / 不激活 / 不占任务栏这几条**就是**"截图不在最顶层"
+        // 那类 P0 的判据，而 CreateParams 是 protected，外面读不到 —— 所以开一个小口子。
+        public int ExStyleForTest { get { return CreateParams.ExStyle; } }
         // 排查用：动画定时器真的跳了多少次。和渲染帧数放一起看，才能分清"帧率低"到底是
         // 「定时器没跳」还是「跳了但没有任何东西要求重画」—— 这两种的修法完全相反。
         public static int AnimTickCountForTest = 0;
@@ -129,6 +132,20 @@ namespace SnapWheel
         float _emptyT = 1f;
         bool _emptySynced = false;     // 首帧直接对齐，别让程序刚启动就播一次没意义的过渡
         float _dragOutProg = 0f;       // 0..1 pull-out shrink progress
+        // ---- 拖出去的反馈（v1.0）----
+        // 为什么要有这套：拖出去的**默认是"留一份"**（KeepAfterDragOut=true，拖拽本身也是 Copy 语义）——
+        // 图**没走**。而原来无论哪种模式，卡片都在拖的过程中一路缩小到看不见，
+        // 画的正是"被抽走"，**在骗人**（用户会以为图没了，其实还在）。
+        // 所以分两套画法（见 64-WheelForm.Input.cs 的 StartDragOut）：
+        //   留一份：拖拽中「提起来」（不缩小）+ 松手后那一格**颤一下**、向外一道短促拖痕、短暂高亮；**格子不合拢**
+        //   移走  ：拖拽中照旧「被抽走」+ 松手后空位**慢慢合拢**（复用删除动画的 _phiShift）
+        float _dragLift = 0f;          // 0..1 拖拽中"提起来"的程度（留一份模式；移走模式一直是 0）
+        float _dragPulseT = 1f;        // 0..1 松手后"颤一下 + 高亮"的进度（1 = 已经结束）
+        int _dragPulseIdx = -1;        // 颤的是哪一格（移走模式没有格子可颤，为 -1）
+        DateTime _dragPulseAt = DateTime.MinValue;
+        float _dragTrailT = 1f;        // 0..1 那道向外拖痕的进度（1 = 已经结束）
+        DateTime _dragTrailAt = DateTime.MinValue;
+        PointF _dragTrailA, _dragTrailB;   // 拖痕的起止（逻辑坐标：格子中心 → 松手那一刻的指针）
         StoreItem _deletingItem = null;
         int _delIdx = -1;              // 删除发起时被删那张的下标（删除完成后让视口平滑跟进）
         float _deleteProg = 0f;
@@ -538,6 +555,15 @@ namespace SnapWheel
 
 
         Dictionary<StoreItem, DateTime> _enterT0 = new Dictionary<StoreItem, DateTime>();
+        // "刚进来的那一格"的微光时刻（v1.0）。**和 _enterT0 必须分开**：
+        // _enterT0 是"滑入动画从什么时候开始"，切轮盘时会把新轮盘的每张图都排一遍（依次滑入），
+        // 拿它当"新图"用的话，**每次切轮盘满环都会一起发亮** —— 微光立刻变得毫无意义。
+        // 只有真的加进来一张（截图 / 导入 / 剪贴板 / 拖进来）才记这一份。
+        Dictionary<StoreItem, DateTime> _freshT0 = new Dictionary<StoreItem, DateTime>();
+        // 切轮盘时名字药丸"翻一下"的进度（1 = 已经结束）。光靠环上一圈闪光太轻，
+        // 而"我现在在哪个轮盘上"是**持续性**信息，值得让名字本身动一下（见 61c 的绘制）。
+        float _nameSwapT = 1f;
+        DateTime _nameSwapAt = DateTime.MinValue;
 
 
         // 只有“真的拉得很长”的图才进特殊方框：宽高比超过 ExtremeRatio:1（或反过来）才算。
@@ -789,8 +815,9 @@ namespace SnapWheel
             // 回到"最新那张顶在弧上端"这个默认视口（0.5.3 起这就是默认位；以前是 0 = 最老那张在下端）
             _offset = _targetOffset = OffsetForNewest();
             _hover = -1; _enlarged = -1; _peekIndex = -1;
-            _scales.Clear(); _enterT0.Clear();
+            _scales.Clear(); _enterT0.Clear(); _freshT0.Clear();
             _switchFlash = 1f;
+            _nameSwapT = 0f; _nameSwapAt = DateTime.Now;      // 名字药丸翻一下
             Render();
         }
 
@@ -799,11 +826,12 @@ namespace SnapWheel
         {
             _offset = _targetOffset = OffsetForNewest();
             _hover = -1; _enlarged = -1; _peekIndex = -1;
-            _scales.Clear(); _enterT0.Clear();
+            _scales.Clear(); _enterT0.Clear(); _freshT0.Clear();
             // 新 wheel 的图依次滑入，形成切换过渡
             for (int i = 0; i < _store.Items.Count; i++)
                 _enterT0[_store.Items[i]] = DateTime.Now.AddSeconds(i * 0.045);
             _switchFlash = 1f;
+            _nameSwapT = 0f; _nameSwapAt = DateTime.Now;      // 名字药丸翻一下（"我在哪个轮盘上"要看得见）
             Render();
         }
 

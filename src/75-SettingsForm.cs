@@ -49,6 +49,8 @@ namespace SnapWheel
         // ---- 第 3 页「风格」 ----
         ComboBox _cmbStyle, _cmbAccent, _cmbAnim;
         CheckBox _chkName, _chkCount, _chkGlassRefresh;
+        // v1.0「有生命感」的三个开关（默认开、可关，见 61d-WheelForm.Atmos.cs）
+        CheckBox _chkRipple, _chkRingShadow, _chkDayMood;
         // ---- 第 4 页「万能键与高级」 ----
         readonly ComboBox[] _keyBox = new ComboBox[4];
         NumericUpDown _numGlass, _numRadius, _numShadow;
@@ -193,7 +195,7 @@ namespace SnapWheel
         public SettingsForm(Settings s)
         {
             _s = s;
-            Text = AppInfo.Name + Lang.T(" 设置  ·  BETA", " Settings  ·  BETA");
+            Text = AppInfo.Name + Lang.T(" 设置", " Settings");
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
@@ -392,7 +394,7 @@ namespace SnapWheel
 
             Label about = new Label();
             about.AutoSize = true;
-            about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author + "   ·   BETA";
+            about.Text = AppInfo.Name + "   v" + AppInfo.Version + "   ·   by " + AppInfo.Author;
             about.ForeColor = Color.FromArgb(150, 150, 160);
             about.Margin = Pad(0, 2, 0, 0);
             root.Controls.Add(about, 0, 4);

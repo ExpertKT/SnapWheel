@@ -173,8 +173,18 @@ namespace SnapWheel
                     SizeF ws = g.MeasureString(wn, fw);
                     float dot = 9f;
                     float pw2 = ws.Width + dot + 30f, ph2 = ws.Height + 8f;
+                    // 切轮盘时"翻一下"（v1.0）：药丸弹一下 + 边框用主题色亮一下。
+                    // 为什么是名字而不是别处：**"我现在在哪个轮盘上"是持续性信息** ——
+                    // 原来只有环上闪一下，太轻，一眨眼就过去了，切完还得再确认一次。
+                    float pop = _nameSwapT < 1f ? (float)Math.Sin(_nameSwapT * Math.PI) : 0f;   // 0→1→0
+                    if (pop > 0.001f)
+                    {
+                        float grow2 = 5f * pop;
+                        pw2 += grow2 * 2f; ph2 += grow2 * 2f;
+                    }
                     float wx = kcx - pw2 / 2f;
                     float wy = kr.Y + kr.Height + 4f;
+                    if (pop > 0.001f) wy -= 2.5f * pop;          // 稍微抬一点，弹跳感更像"翻了一下"
                     Diag("名字药丸（当前轮盘名）", new RectangleF(wx, wy, pw2, ph2));
                     RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
                     _namePillRect = pill2;                       // 记下来给命中测试用（点它能改名）
@@ -183,7 +193,10 @@ namespace SnapWheel
                         BackdropClip(g, pg2, an);
                         Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
                             (int)((StyleNeu() ? 40 : 18) * an / 255f), (int)((StyleNeu() ? 34 : 0) * an / 255f), !StyleFlatOnly());
-                        using (Pen bp2 = new Pen(Gfx.A(Gfx.Shade(acc, 0.15f), (int)((_nameHover ? 235 : 120) * an / 255f)), _nameHover ? 1.6f : 1.1f))
+                        int bpA = (int)((_nameHover ? 235 : 120) * an / 255f);
+                        Color bpC = Gfx.Shade(acc, 0.15f);
+                        if (pop > 0.001f) { bpA = Math.Min(255, bpA + (int)(150 * pop)); bpC = acc; }
+                        using (Pen bp2 = new Pen(Gfx.A(bpC, bpA), (_nameHover ? 1.6f : 1.1f) + 1.4f * pop))
                             g.DrawPath(bp2, pg2);
                     }
                     float dy2 = pill2.Y + ph2 / 2f;

@@ -75,6 +75,10 @@ namespace SnapWheel
         {
             int a = (int)(255 * Math.Max(0f, Math.Min(1f, _show)));
             if (a <= 1) return;
+            // 时间感：深夜整块自己暗下去一点（最多 15%）。放在最前面 —— 它是"这一帧整体多亮"，
+            // 后面所有层的 alpha 都从它出发，不用每处各乘一次。
+            float dayDim = DayDim();
+            if (dayDim > 0.001f) { a = (int)(a * (1f - dayDim)); if (a <= 1) return; }
             DiagClear();     // 诊断模式：这一帧的元素清单从空开始
             // 统一缩放：后面所有绘制都按逻辑坐标来，字体/图标/间距自动跟着 DPI 走
             if (Math.Abs(UiK - 1f) > 0.001f) g.ScaleTransform(UiK, UiK);
@@ -117,6 +121,9 @@ namespace SnapWheel
                 }
             }
 
+            // 拖出去那道"向外"的短促拖痕画在卡片**下面**（先画痕迹、再画卡片，看起来才是从格子里出去的）
+            DrawDragTrail(g, a);
+
             for (int pass = 0; pass < 2; pass++)
             {
                 using (Perf.Section("2c-缩略图"))
@@ -137,19 +144,35 @@ namespace SnapWheel
                     PointF pc = ItemCenterAtPhi(phi);
                     int ia = (int)(a * pr);
 
+                    // 拖出去的两套反馈（见 60-WheelForm.cs 里 _dragLift 的说明）：
+                    //   留一份：拖拽中「提起来」（放大一点点），松手后那一格**颤一下 + 短暂高亮**
+                    //   移走  ：拖拽中一路缩小到看不见（下面那行 _dragOutProg）
+                    // 合起来的意义是——**画出来的和实际发生的必须一致**，不能骗人。
+                    float shake = 0f, pulse = 0f;
+                    if (i == _dragPulseIdx && _dragPulseT < 1f)
+                    {
+                        float t = _dragPulseT;
+                        pulse = 1f - t;                                     // 高亮：从满到无
+                        shake = (float)Math.Sin(t * Math.PI * 5.0) * 3.2f * (1f - t);   // 颤：来回几下就停
+                    }
+
                     float sc; if (!_scales.TryGetValue(i, out sc)) sc = 1f;
-                    if (_store.Items[i] == _dragOutItem) sc *= Math.Max(0f, 1f - _dragOutProg);
+                    if (_store.Items[i] == _dragOutItem)
+                    {
+                        sc *= Math.Max(0f, 1f - _dragOutProg);
+                        sc *= 1f + 0.06f * _dragLift;
+                    }
                     if (_store.Items[i] == _deletingItem) { sc *= Math.Max(0f, 1f - _deleteProg); ia = (int)(ia * (1f - _deleteProg)); }
                     if (isEnl) sc *= 1f;                              // peek is a separate overlay
                     SizeF baseSz = CardSize(_store.Items[i]);
                     // 这张卡片现在是不是"尺寸正在动"（放大预览 / 悬停 / 删除 / 拖动 / 收起）。
                     // 静止时（sc==1）走精确尺寸 + 1:1 贴图那条快路；动画中才用 ScaledThumb 里
                     // 那套"量化 + 先做中转图"的救急措施。见 61a 里 ScaledThumb 的说明。
-                    bool animating = Math.Abs(sc - 1f) > 0.005f;
+                    bool animating = Math.Abs(sc - 1f) > 0.005f || shake != 0f;
                     int iw = Math.Max(4, (int)Math.Round(baseSz.Width * sc));
                     int ih = Math.Max(4, (int)Math.Round(baseSz.Height * sc));
                     if (iw < 4 || ih < 4) continue;
-                    RectangleF ir = new RectangleF((float)Math.Round(pc.X - iw / 2f), (float)Math.Round(pc.Y - ih / 2f), iw, ih);
+                    RectangleF ir = new RectangleF((float)Math.Round(pc.X - iw / 2f) + shake, (float)Math.Round(pc.Y - ih / 2f), iw, ih);
                     RectangleF rr2 = new RectangleF(ir.X - CardPad, ir.Y - CardPad, iw + 2 * CardPad, ih + 2 * CardPad);
                     Diag("缩略图 #" + i + (isEnl ? "（长按放大中）" : ""), rr2);
                     float rad = CardRadOf(rr2);
@@ -266,6 +289,37 @@ namespace SnapWheel
                                 using (Pen bp = new Pen(Color.FromArgb((int)(ba * ia / 255f), bc.R, bc.G, bc.B), bw))
                                     g.DrawPath(bp, card);
                         }
+                        // 拖出去之后那一格"颤一下 + 短暂高亮"里的高亮：
+                        // 一圈往外扩、同时淡掉的主题色边框。抖动在 ir 那边（shake），这里只管亮。
+                        // 画在贴片缓存**外面** —— 它每帧都在变，进缓存等于每帧都在生成新贴片。
+                        if (pulse > 0.01f)
+                        using (Perf.Section("2c5-拖出反馈"))
+                        {
+                            float e = 1f - pulse;                       // 0 -> 1
+                            float grow = 7f * e;
+                            int pa2 = (int)(215 * pulse * ia / 255f);
+                            Color ac2 = AccentColor();
+                            RectangleF pr2 = new RectangleF(rr2.X - grow, rr2.Y - grow, rr2.Width + grow * 2, rr2.Height + grow * 2);
+                            using (GraphicsPath pp = Gfx.Round(pr2, rad + grow * 0.5f))
+                            using (Pen pen = new Pen(Color.FromArgb(pa2, ac2.R, ac2.G, ac2.B), 3.2f * (1f - e * 0.55f)))
+                                g.DrawPath(pen, pp);
+                        }
+                        // 新来的那一格有微光（v1.0）：亮 2.2 秒、再用 2.6 秒冷下去。
+                        // 目的在于"抬眼就知道哪张是刚截的"——不用去数、不用去看计数胶囊。
+                        float fresh = FreshGlow(i);
+                        if (fresh > 0.01f && pulse <= 0.01f)
+                        using (Perf.Section("2c6-新图微光"))
+                        {
+                            Color fac = DayTint(_accentCur);
+                            int fa = (int)(150 * fresh * ia / 255f);
+                            using (GraphicsPath fp2 = Gfx.Round(rr2, rad))
+                            using (Pen pen = new Pen(Color.FromArgb(fa, fac.R, fac.G, fac.B), 2.6f))
+                                g.DrawPath(pen, fp2);
+                            int fb2 = (int)(54 * fresh * ia / 255f);
+                            using (GraphicsPath fp3 = Gfx.Round(new RectangleF(rr2.X - 4f, rr2.Y - 4f, rr2.Width + 8f, rr2.Height + 8f), rad + 4f))
+                            using (Pen pen = new Pen(Color.FromArgb(fb2, fac.R, fac.G, fac.B), 5f))
+                                g.DrawPath(pen, fp3);
+                        }
                     }
                 }
             }
@@ -279,6 +333,8 @@ namespace SnapWheel
                 StoreLayer(1, g, a, false);
             }
             DrawCountPill(g, a);       // 跟滚动位置绑定的那一个，不进缓存层
+            // 涟漪画在最上面：它是"东西进来了"这一下的回应，被卡片盖住就没意义了
+            DrawRipple(g, a);
             DrawDiag(g);               // 诊断模式的元素名（没有开就什么都不画）
         }
 
@@ -287,9 +343,46 @@ namespace SnapWheel
 
 
 
-        void DrawToast(Graphics g, int a)
+        // 拖出去那道"向外"的短促拖痕：从格子出发朝**松手方向**的一小截，越往外越细、越快淡掉。
+        // 刻意不做成一条贯穿两点的直线 —— 那看起来像"连线"，不像"送出去"。
+        // 用户原话是"留下一道短促的拖痕"，重点在**短促**和**向外**。
+        void DrawDragTrail(Graphics g, int a)
         {
-            if (_toast.Length == 0) return;
+            if (_dragTrailT >= 1f) return;
+            float t = _dragTrailT;
+            float dx = _dragTrailB.X - _dragTrailA.X, dy = _dragTrailB.Y - _dragTrailA.Y;
+            float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (dist < 6f) return;
+            dx /= dist; dy /= dist;
+            float len = Math.Min(dist * 0.72f, 210f);
+            if (len < 12f) return;
+            int alpha = (int)(205 * (1f - t) * (1f - t) * a / 255f);
+            if (alpha < 3) return;
+            float w0 = 13f * (1f - t * 0.45f), w1 = 2.2f;
+            float px = -dy, py = dx;
+            PointF A = _dragTrailA;
+            PointF tip = new PointF(A.X + dx * len, A.Y + dy * len);
+            Color ac = AccentColor();
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                p.AddPolygon(new PointF[] {
+                    new PointF(A.X + px * w0, A.Y + py * w0),
+                    new PointF(tip.X + px * w1, tip.Y + py * w1),
+                    new PointF(tip.X - px * w1, tip.Y - py * w1),
+                    new PointF(A.X - px * w0, A.Y - py * w0)
+                });
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(alpha, ac.R, ac.G, ac.B)))
+                    g.FillPath(b, p);
+            }
+            // 末端一个小亮点 = "送出去"的那一下
+            float dotR = 4.6f * (1f - t);
+            if (dotR > 0.6f)
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(Math.Min(255, alpha * 2), ac.R, ac.G, ac.B)))
+                    g.FillEllipse(b, tip.X - dotR, tip.Y - dotR, dotR * 2, dotR * 2);
+        }
+
+        void DrawToast(Graphics g, int a)
+        {            if (_toast.Length == 0) return;
             float age = (float)(DateTime.Now - _toastAt).TotalSeconds;
             if (age > 2.6f) return;
             float t = 1f;
@@ -343,17 +436,22 @@ namespace SnapWheel
                     using (Pen dm = new Pen(Color.FromArgb((int)(235 * ringA / 255f), dch.R, dch.G, dch.B), 6f))
                     { dm.StartCap = LineCap.Round; dm.EndCap = LineCap.Round; g.DrawPath(dm, gp); }
                 }
+                // 环的影子：先给轨道垫一层柔和的暗色（光从左上来，影子往右下走），环就"浮"起来了
+                DrawRingShadow(g, gp, rr, ringA);
                 // 环：扁平化处理 —— 一条细亮线为主，新拟态风格再垫一层柔和的光晕
+                // 厚度跟着内容走（v1.0）：空环最细、堆满最粗，一眼能看出"这里装了多少东西出"
+                float thick = RingThick();
                 if (StyleNeu() && _settings.ShadowPercent > 8)
-                    using (Pen glow = new Pen(Gfx.A(_accentCur, (int)(34 * ringA / 255f)), 22f))
+                    using (Pen glow = new Pen(Gfx.A(DayTint(_accentCur), (int)(34 * ringA / 255f)), 22f * thick))
                     { glow.StartCap = LineCap.Round; glow.EndCap = LineCap.Round; g.DrawPath(glow, gp); }
-                using (Pen mid = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 78 : 92) * ringA / 255f), 255, 255, 255), 2.2f))
+                using (Pen mid = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 78 : 92) * ringA / 255f), 255, 255, 255), 2.2f * thick))
                 { mid.StartCap = LineCap.Round; mid.EndCap = LineCap.Round; g.DrawPath(mid, gp); }
-                using (Pen hair = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 210 : 235) * ringA / 255f), 255, 255, 255), 1.3f))
+                using (Pen hair = new Pen(Color.FromArgb((int)((StyleFlatOnly() ? 210 : 235) * ringA / 255f), 255, 255, 255), 1.3f + 0.5f * (thick - 1f)))
                 { g.DrawPath(hair, gp); }
                 if (_switchFlash > 0.01f)     // 切换 Wheel 时的一圈扩散闪光
                 {
-                    using (Pen fp = new Pen(Color.FromArgb((int)(_switchFlash * 130f), _accentCur.R, _accentCur.G, _accentCur.B), 12f * _switchFlash + 2f))
+                    Color fc = DayTint(_accentCur);
+                    using (Pen fp = new Pen(Color.FromArgb((int)(_switchFlash * 130f), fc.R, fc.G, fc.B), 12f * _switchFlash + 2f))
                     { fp.StartCap = LineCap.Round; fp.EndCap = LineCap.Round; g.DrawPath(fp, gp); }
                 }
             }

@@ -20,10 +20,20 @@ namespace SnapWheel
         {
             e.UseDefaultCursors = false;
             Cursor.Current = Cursors.Arrow;            // keep the normal pointer (no odd drag cursor)
-            if (_dragOutItem != null && _dragOutProg < 1f)
+            if (_dragOutItem != null)
             {
-                _dragOutProg = Math.Min(1f, _dragOutProg + 0.16f);   // pull-out collapse during the drag
-                Render();
+                // 两种模式在拖拽中的画法**必须不同**，否则至少有一种在骗人：
+                //   留一份（默认）：图没走 → 画成"提起来"（放大一点、不缩小）
+                //   移走          ：图会走 → 照旧一路缩小到看不见
+                if (_settings.KeepAfterDragOut)
+                {
+                    if (_dragLift < 1f) { _dragLift = Math.Min(1f, _dragLift + 0.16f); Render(); }
+                }
+                else if (_dragOutProg < 1f)
+                {
+                    _dragOutProg = Math.Min(1f, _dragOutProg + 0.16f);   // pull-out collapse during the drag
+                    Render();
+                }
             }
             if (_proxy.Visible) _proxy.MoveTo(OffsetPt());
         }

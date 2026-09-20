@@ -69,6 +69,10 @@ namespace SnapWheel
                 s.ShowCountLabel = _chkCount.Checked;
                 s.GlassRefresh = _chkGlassRefresh.Checked;
                 s.IntroAnim = _chkIntroAnim.Checked;     // 注意：这个控件在第 3 页（"动画细节"），别放进上一块
+                // v1.0「有生命感」三个开关
+                s.Ripple = _chkRipple.Checked;
+                s.RingShadow = _chkRingShadow.Checked;
+                s.DayMood = _chkDayMood.Checked;
             }
             if (_built[3])
             {

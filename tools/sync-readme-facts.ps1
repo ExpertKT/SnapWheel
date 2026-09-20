@@ -48,6 +48,12 @@ $text = Swap $text 'version-v\d+\.\d+\.\d+-blue' ("version-v" + $Version + "-blu
 $text = Swap $text 'exe-\d+%20KB-lightgrey' ("exe-" + $kb + "%20KB-lightgrey") '体积徽章'
 # ③ 正文里的「一个 NNN KB 的 exe」（容忍中间有没有空格、有没有「约」）
 $text = Swap $text '一个约?\s*\d+\s*KB\s*的\s*exe' ("一个 " + $kb + " KB 的 exe") '正文体积'
+# ④ 状态徽章（v1.0 摘 BETA 时加）：0.x 是 BETA，1.x 起是正式版。
+# 由版本号推出来，不写死 —— 写死的话下一个大版本又会漂（这个文件存在的理由就是防漂）。
+$majorVer = 0
+try { $majorVer = [int]($Version.Split('.')[0]) } catch { $majorVer = 0 }
+$statusWord = if ($majorVer -ge 1) { 'stable-brightgreen' } else { 'BETA-orange' }
+$text = Swap $text 'status-[A-Za-z0-9.]+-(orange|brightgreen|green|yellow|blue)' ("status-" + $statusWord) '状态徽章'
 
 if ($text -eq $orig) {
     Write-Host "  [OK] README 同步    v$Version / $kb KB（本来就是最新的）" -ForegroundColor Green
