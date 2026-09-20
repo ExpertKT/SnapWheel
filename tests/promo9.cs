@@ -14,6 +14,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using System.IO;
 
@@ -29,21 +30,48 @@ namespace SnapWheel
         static readonly Color ChipBg = Color.FromArgb(38, 255, 255, 255);
 
         static string shotDir, outDir;
+        // 程序体积（KB）：**从构建产物读出来**，不写死。
+        // 这个数原来硬编码成 274 KB，而实际早就 365 KB 了 —— 正是 RELEASE.md 开头点名的那个坑。
+        static string kbText = "— KB";
+
+        static void ResolveKb(string hint)
+        {
+            try
+            {
+                string p = hint;
+                if (string.IsNullOrEmpty(p) || !File.Exists(p))
+                {
+                    // 没给就自己找：调用方一般是在仓库根目录跑的
+                    string[] cand = {
+                        Path.Combine(Directory.GetCurrentDirectory(), @"build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\build\SnapWheel.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\build\SnapWheel.exe"),
+                        Path.Combine(Directory.GetCurrentDirectory(), @"..\build\SnapWheel.exe"),
+                    };
+                    p = null;
+                    for (int i = 0; i < cand.Length; i++) if (File.Exists(cand[i])) { p = cand[i]; break; }
+                }
+                if (p == null || !File.Exists(p)) { kbText = "— KB"; return; }
+                kbText = ((int)Math.Round(new FileInfo(p).Length / 1024.0)) + " KB";
+            }
+            catch { kbText = "— KB"; }
+        }
 
         static void Main(string[] args)
         {
             outDir = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "snapwheel_promo9");
             Directory.CreateDirectory(outDir);
             shotDir = Path.Combine(Path.GetTempPath(), "snapwheel_ui");
+            ResolveKb(args.Length > 1 ? args[1] : null);      // 第二个参数可选：直接给 build\SnapWheel.exe 的路径
 
             try
             {
                 Shot(1, "截图不落文件", "拖一下就发出去，环上还留着一份", "", "promo_wheel.png", true);
                 Shot(2, "截完就滑进角落", "不弹保存框 · 不用切窗口 · 不用翻文件夹", "Ctrl+Shift+S 框选，图自己滑进环里", "wheel_bl.png", false);
                 Shot(3, "拖出去 = 发出去", "微信 / QQ / 文档 / 文件夹，松手就到", "环上还留着一份，随时能再拖一次", "promo_drop.png", false);
-                Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停 · 0.6.0 新增", "wheel_empty.png", false);
+                Shot(4, "滚动长截图", "框一块区域，剩下的它自己滚、自己拼", "边滚边无缝拼接 · 到底自动停", "wheel_empty.png", false);
                 Center5();
-                Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口 · 0.6.0 强化", "ocr.png", false);
+                Shot(6, "取字 + 翻译", "圈住文字就认出来，一键翻译成中/英文", "低对比度也能认 · 默认免费接口", "ocr.png", false);
                 Shot(7, "万能键：一个圆盘管所有", "新建 / 切换 / 删除 / 上一个，四个方向四个动作", "长按圆盘拖向对应方向松手即可", "promo_menu.png", false);
                 Shot(8, "标注 · 贴图 · 后悔药", "箭头方框马赛克文字 · 中键钉在屏幕上 · 删错能找回", "四色可选 · Ctrl+Z 撤销 · 最近 8 次都能撤", "promo_intro.png", false);
                 Shot(9, "开源 · MIT", "github.com/ExpertKT/SnapWheel", "完整版 / 无万能键版都在 Releases", "settings.png", false);
@@ -57,7 +85,50 @@ namespace SnapWheel
         {
             string p = Path.Combine(shotDir, file);
             if (!File.Exists(p)) return null;
-            try { using (Bitmap b = new Bitmap(p)) return new Bitmap(b); } catch { return null; }
+            try { using (Bitmap b = new Bitmap(p)) return Trim(new Bitmap(b)); } catch { return null; }
+        }
+
+        // 把渲染图裁到"真正有内容"的那一块。
+        // 为什么必须裁：这些渲染图是定尺寸画布（660×660），轮盘本身只占角落一小块，
+        // 其余都是透明的。直接按原图缩到 440 高 → 真正看得见的轮盘只有一百多像素，
+        // 摆进九宫格就是"一个小白方块"，缩到朋友圈缩略图完全看不出是什么。
+        // 用 LockBits 扫（项目规矩：逐像素绝不走 GetPixel）。
+        static Bitmap Trim(Bitmap b)
+        {
+            int minX = b.Width, minY = b.Height, maxX = -1, maxY = -1;
+            System.Drawing.Imaging.BitmapData d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                int stride = d.Stride, hgt = b.Height, wid = b.Width;
+                byte[] buf = new byte[stride * hgt];
+                System.Runtime.InteropServices.Marshal.Copy(d.Scan0, buf, 0, buf.Length);
+                for (int y = 0; y < hgt; y++)
+                {
+                    int row = y * stride;
+                    for (int x = 0; x < wid; x++)
+                    {
+                        if (buf[row + x * 4 + 3] > 12)          // 只要 alpha 够，就算有内容
+                        {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+            }
+            finally { b.UnlockBits(d); }
+            if (maxX < minX || maxY < minY) return b;           // 全透明：原样还回去
+            int pad = 14;
+            minX = Math.Max(0, minX - pad); minY = Math.Max(0, minY - pad);
+            maxX = Math.Min(b.Width - 1, maxX + pad); maxY = Math.Min(b.Height - 1, maxY + pad);
+            Rectangle r = new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            Bitmap o = new Bitmap(r.Width, r.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (Graphics g = Graphics.FromImage(o))
+                g.DrawImage(b, new Rectangle(0, 0, r.Width, r.Height), r, GraphicsUnit.Pixel);
+            b.Dispose();
+            return o;
         }
 
         // 一张方图：深色渐变底 + 序号角标 + 大标题 + 两行说明 + 右下角界面渲染
@@ -92,8 +163,10 @@ namespace SnapWheel
                 using (SolidBrush sb = new SolidBrush(Sub))
                 { TextRenderer.DrawText(g, line2, fs, new Point(84, (int)(y + 58)), Color.FromArgb(148, 158, 178), TextFormatFlags.NoPadding); }
 
-                // 右上角标（hero 打新，其它打卖点）
-                if (no == 4 || no == 6) Chip(g, "0.6.0 新增", 1080 - 300, 122, 22);   // 右上角：原来贴在文案下，会压住第二行
+                // 右上角标：**过期的角标一个都不留**。
+                // 原来图4/图6 挂着「0.6.0 新增」—— 那是好几个版本以前的东西了，
+                // 挂在那儿等于告诉别人"这是新功能"。只有真的这次新加的才配挂角标。
+                if (no == 1) Chip(g, "1.0 正式版", 1080 - 320, 122, 22);
 
                 // 界面渲染：贴在下方（hero 靠右放小一点，避免压住文案）
                 if (no == 4) LongDemo(g);          // 长截图没有现成渲染图，现场画个示意
@@ -145,23 +218,83 @@ namespace SnapWheel
                 using (Font fn = new Font(FONT, 22))
                     TextRenderer.DrawText(g, "5 / 9", fn, new Point(1080 - 86 - 74, 78), Color.FromArgb(110, 150, 160, 180), TextFormatFlags.NoPadding);
 
-                Center(g, "快照轮环", 96, FontStyle.Bold, 300, Color.White);
-                Center(g, "一个常驻屏幕角落的圆环，把截图这件事变顺手", 28, FontStyle.Regular, 480, Sub);   // 96pt 大标题底约 428，原来 440 只差 12px
+                // 大标题已经由 CenterBox 画掉了（见下面 boxes）
 
-                // 三个硬数据：一行三列，各自居中
-                string[] num = { "274 KB", "0", "1" };
+                // 下面这一串**位置由实测高度算出来**，不再写死 y。
+                // 上一版写死了一串 y，"快照轮环"（84pt）的底正好压住下面那行"1.0 正式版" ——
+                // 和界面里那些"量的时候用一套、画的时候用另一套"是同一个形状。
+                // 量完再画，结构上就不可能重叠。
+                List<Rectangle> boxes = new List<Rectangle>();
+                // 大标题也走 CenterBox —— **画和量同一个来源**，不另算一份。
+                boxes.Add(CenterBox(g, "快照轮环", 84, FontStyle.Bold, 250, Color.White, 540));
+                boxes.AddRange(CenterStack(g, 430, 14, new string[] {
+                    "1.0 正式版",
+                    "一个常驻屏幕角落的圆环，把截图这件事变顺手"
+                }, new float[] { 46, 26 }, new FontStyle[] { FontStyle.Bold, FontStyle.Regular },
+                   new Color[] { Accent, Sub }));
+
+                // 三个硬数据：一行三列，各自居中。
+                // ⚠️ 体积**必须是量出来的**：这里原来写死 274 KB，而实际早就 365 KB 了 ——
+                // 正是 docs/RELEASE.md 开头点名的那个"同一个事实写在两个地方，迟早不一致"。
+                // 现在从构建产物读，读不到就问调用方要，绝不猜。
+                string[] num = { kbText, "0", "1" };
                 string[] cap = { "整个程序的大小", "第三方依赖", "个 exe 双击就跑" };
                 int[] col = { 240, 540, 840 };
                 for (int i = 0; i < 3; i++)
                 {
                     Center(g, num[i], 54, FontStyle.Bold, 620, Accent, col[i]);
-                    Center(g, cap[i], 24, FontStyle.Regular, 706, Sub, col[i]);
+                    Center(g, cap[i], 24, FontStyle.Regular, 702, Sub, col[i]);
+                    using (Font f2 = new Font(FONT, 54, FontStyle.Bold))
+                    {
+                        Size s2 = TextRenderer.MeasureText(g, num[i], f2, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                        boxes.Add(new Rectangle(col[i] - s2.Width / 2, 620, s2.Width, s2.Height));
+                    }
                 }
-                Center(g, "Windows 10 / 11 · 免安装 · 开源 MIT", 26, FontStyle.Regular, 880, Color.FromArgb(200, 226, 234, 244));
+                boxes.AddRange(CenterStack(g, 806, 16, new string[] {
+                    "这一版没加功能，只让它「有反应」：",
+                    "拖出去有拖痕 · 新截的会亮 · 切轮盘会翻 · 环会随内容变粗",
+                    "Windows 10 / 11 · 免安装 · 开源 MIT"
+                }, new float[] { 28, 26, 26 }, new FontStyle[] { FontStyle.Regular, FontStyle.Regular, FontStyle.Regular },
+                   new Color[] { Color.FromArgb(215, 226, 238, 250), Sub, Color.FromArgb(200, 226, 234, 244) }));
+
+                // 中心这张图上**所有文字块两两不重叠、且全在画布内** —— 由程序量，不靠人看。
+                // 用户点名要避免的"文字被裁/溢出/叠在一起"，这类事只有量才靠得住。
+                int bad = 0, clipped = 0;
+                for (int i = 0; i < boxes.Count; i++)
+                {
+                    Rectangle r = boxes[i];
+                    if (r.X < 40 || r.Y < 40 || r.Right > 1080 - 40 || r.Bottom > 1080 - 40) clipped++;
+                    for (int j = i + 1; j < boxes.Count; j++)
+                        if (r.IntersectsWith(boxes[j])) bad++;
+                }
+                Console.WriteLine(bad == 0 && clipped == 0
+                    ? "  图5 文字自检：  " + boxes.Count + " 块文字块，无重叠、无出界"
+                    : "  图5 文字自检：  ★ 有 " + bad + " 处重叠、" + clipped + " 处出界 ★  文字块数 " + boxes.Count);
 
                 b.Save(Path.Combine(outDir, "图5.png"), System.Drawing.Imaging.ImageFormat.Png);
                 Console.WriteLine("  写出 图5.png  快照轮环（中心品牌位）");
             }
+        }
+
+        // 竖向堆叠居中：**位置由实测高度算出来**，不写死 y（见 Center5 里的说明）。
+        // 顺带把每行的矩形还回来 —— 调用方要拿它去查"有没有压到别的东西"。
+        static List<Rectangle> CenterStack(Graphics g, int top, int gap, string[] texts, float[] pts, FontStyle[] styles, Color[] cols)
+        {
+            List<Rectangle> boxes = new List<Rectangle>();
+            int y = top;
+            for (int i = 0; i < texts.Length; i++)
+            {
+                using (Font f = new Font(FONT, FitSize(g, texts[i], pts[i], 1000), styles[i]))
+                {
+                    Size sz = TextRenderer.MeasureText(g, texts[i], f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                    if (sz.Width > 1080 - 120) sz = new Size(1080 - 120, sz.Height);      // 兜底：真放不下按最宽算
+                    Rectangle box = new Rectangle(540 - sz.Width / 2, y, sz.Width, sz.Height);
+                    TextRenderer.DrawText(g, texts[i], f, box, cols[i], TextFormatFlags.NoPadding);
+                    boxes.Add(box);
+                    y += sz.Height + gap;
+                }
+            }
+            return boxes;
         }
 
         // 居中画一行字（cx 省略时按整幅 1080 居中）
@@ -172,10 +305,21 @@ namespace SnapWheel
 
         static void Center(Graphics g, string text, float pt, FontStyle st, int y, Color col, int cx)
         {
+            CenterBox(g, text, pt, st, y, col, cx);
+        }
+
+        // **画和量同源**：返回的就是刚才真正画出去的那个矩形。
+        // 为什么强调这一条：第一版自检里我是"另外按坐标算一个矩形"塞进去比对的 ——
+        // 负向验证时把标题挪到会叠字的位置，自检照样报"无重叠"，**因为它量的和画的不是一回事**。
+        // 这个项目在绘制上摔过四次同一个坑（量用一套、画用另一套），这里不犯第五次。
+        static Rectangle CenterBox(Graphics g, string text, float pt, FontStyle st, int y, Color col, int cx)
+        {
             using (Font f = new Font(FONT, FitSize(g, text, pt, 1000), st))
             {
                 Size sz = TextRenderer.MeasureText(g, text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
-                TextRenderer.DrawText(g, text, f, new Point(cx - sz.Width / 2, y), col, TextFormatFlags.NoPadding);
+                Rectangle box = new Rectangle(cx - sz.Width / 2, y, sz.Width, sz.Height);
+                TextRenderer.DrawText(g, text, f, box, col, TextFormatFlags.NoPadding);
+                return box;
             }
         }
 
