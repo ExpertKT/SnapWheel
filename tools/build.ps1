@@ -217,6 +217,11 @@ if ($Test) {
     #   dragout-shot  ：拖出去的两套反馈分流对不对、动画会不会停下来
     Run-Test '交互-命中区'     'hit-test.cs'              'SnapWheel.HitTest' $null
     Run-Test '交互-拖出反馈'   'dragout-shot.cs'          'SnapWheel.DragOutShot' $null
+    # 设置窗口打开速度：那个 250ms 的根因是构造里**两行的先后顺序**，
+    # 而两种写法画面**逐像素一模一样**（13.5 万个采样点零差异）——
+    # 谁顺手换回去，任何渲染测试和探针都看不出来，只有用户能感觉到"卡了一下"。
+    # 越是看不出来的性能回归，越需要一条会红的断言盯着。
+    Run-Test '设置打开速度'    'settings-open-perf.cs'    'SnapWheel.SettingsOpenPerf' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null
