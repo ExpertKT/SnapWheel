@@ -41,7 +41,7 @@ namespace SnapWheel
         ComboBox _cbLang;                    // 界面语言（0.6.0）
         TextBox _txtDir;
         NumericUpDown _numSec;
-        ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch;
+        ComboBox _cmbHotkey, _cmbCorner, _cmbDel, _cmbSwitch, _cmbEdge;
         // ---- 第 2 页「轮盘与外观」 ----
         NumericUpDown _numMax, _numThumb, _numRad, _numSlots, _numLabel, _numPeek;
         ComboBox _cmbScale, _cmbRing, _cmbRing2;

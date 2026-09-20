@@ -75,6 +75,22 @@ namespace SnapWheel
             _cmbDel.SelectedIndex = (s.DeleteMode == "single") ? 1 : 0;
             g.Controls.Add(Row(MkLabel(Lang.T("删除方式", "Delete gesture")), _cmbDel), 1, 3);
 
+            // 轮盘贴哪条边。
+            // 为什么要有这个：Windows 的"工作区"**总是**扣掉任务栏那一条 ——
+            // 哪怕任务栏是自动隐藏的，也照样预留 48 像素。
+            // 于是自动隐藏的用户会看到轮盘底下悬着一条看不见的空隙，像没靠到底。
+            _cmbEdge = new ComboBox();
+            _cmbEdge.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbEdge.Width = S(170);
+            _cmbEdge.Margin = new Padding(0, 6, 0, 0);
+            _cmbEdge.Items.AddRange(new object[] {
+                Lang.T("自动（任务栏隐藏时贴屏幕边）", "Auto (screen edge when the taskbar auto-hides)"),
+                Lang.T("贴屏幕边（会被任务栏压住一角）", "Screen edge (may sit under the taskbar)"),
+                Lang.T("贴工作区边（永远避让任务栏）", "Work-area edge (always avoids the taskbar)") });
+            _cmbEdge.SelectedIndex = (s.EdgeAnchor == "screen") ? 1 : (s.EdgeAnchor == "work") ? 2 : 0;
+            // 放在第 8 行第 1 列：第 3、4 行都满了，第 5、6 行被"保存目录""剪贴板"横跨两列占掉。
+            g.Controls.Add(Row(MkLabel(Lang.T("轮盘靠边方式", "Which edge the ring hugs")), _cmbEdge), 1, 8);
+
             _chkTop = new CheckBox();
             _chkTop.AutoSize = true;
             _chkTop.Text = Lang.T("总在最前（始终置顶显示）", "Always on top");

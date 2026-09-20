@@ -61,6 +61,14 @@ namespace SnapWheel
         // 本地使用统计：**默认关**。打开后只在本机记"某件事发生了一次"，
         // 不记内容、不联网。用来回答"我到底在用它做什么" —— 这个问题靠想是想不出来的。
         public bool UsageLog = false;
+        // 轮盘贴哪条边："auto"（默认，任务栏自动隐藏时贴屏幕边）/ "screen" / "work"。
+        //
+        // 为什么要有它：Windows 的"工作区"**总是**扣掉任务栏那一条 ——
+        // **哪怕任务栏是自动隐藏的，也照样预留**（实测 48 像素）。
+        // 于是用工作区定位时，自动隐藏的用户会看到轮盘底下悬着一条看不见的空隙，像没靠到底。
+        // 而反过来，任务栏常显时贴屏幕边又会让环压住任务栏一角。
+        // 两种都说得通，所以做成可选的，默认自动判断。
+        public string EdgeAnchor = "auto";
         public int UiScale = 0;               // 界面缩放 %：0=自动（按显示器 DPI），60..250
         public bool CollapseMode = true;      // 0.6.0 起默认开：不用时缩到屏幕边上的小把手（用户习惯）
         public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
@@ -158,6 +166,7 @@ namespace SnapWheel
                         else if (k == "ShowCountLabel") s.ShowCountLabel = (v == "1");
             else if (k == "DiagMode") s.DiagMode = (v == "1");
             else if (k == "UsageLog") s.UsageLog = (v == "1");
+            else if (k == "EdgeAnchor" && (v == "auto" || v == "screen" || v == "work")) s.EdgeAnchor = v;
                         else if (k == "UiScale") { int n; if (int.TryParse(v, out n) && n >= 0 && n <= 250) s.UiScale = n; }
                         else if (k == "CollapseMode") s.CollapseMode = (v == "1");
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
@@ -303,6 +312,7 @@ namespace SnapWheel
                 lines.Add("ShowCountLabel=" + (ShowCountLabel ? "1" : "0"));
             lines.Add("DiagMode=" + (DiagMode ? "1" : "0"));
             lines.Add("UsageLog=" + (UsageLog ? "1" : "0"));
+            lines.Add("EdgeAnchor=" + EdgeAnchor);
                 lines.Add("UiScale=" + UiScale);
                 lines.Add("CollapseMode=" + (CollapseMode ? "1" : "0"));
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));

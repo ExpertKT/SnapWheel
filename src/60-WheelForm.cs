@@ -427,7 +427,9 @@ namespace SnapWheel
 
         public void PlaceBottomLeft()
         {
-            Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+            // 贴哪条边由设置决定（见 Native.AnchorRect 里的说明）：
+            // 默认 auto = 任务栏自动隐藏时贴屏幕物理边，否则贴工作区边。
+            Rectangle wa = Native.AnchorRect(_settings.EdgeAnchor);
             int size = Width;
             int left = (Sx() > 0) ? wa.Left : wa.Right - size;
             int top = (Sy() > 0) ? wa.Top : wa.Bottom - size;

@@ -36,6 +36,66 @@ namespace SnapWheel
         // （读一张 1600x1000 实测 ~10ms，正好落在"缩略图滑入"那几帧上）。返回 0 表示读不到，调用方要兜底。
         [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
 
+        // ==================== 任务栏状态（0.9.11 轮盘靠边方式） ====================
+        // 为什么需要它：Windows 的"工作区"**总是**把任务栏那一条扣掉，
+        // 哪怕任务栏是自动隐藏的也照样预留（本机实测：Bounds 1707×1067，WorkingArea 1707×1019，
+        // 底下那 48px 明明看不见、鼠标一碰就冒出来，可工作区就是不给）。
+        // 结果自动隐藏任务栏的用户看到的轮盘底下总悬着一条缝，像"没靠到底"。
+        // ABM_GETSTATE 拿到的是 appbar 状态位，ABS_AUTOHIDE 就是"当前处于自动隐藏模式"。
+        [StructLayout(LayoutKind.Sequential)]
+        public struct APPBARDATA
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public uint uCallbackMessage;
+            public uint uEdge;
+            public RECT rc;
+            public IntPtr lParam;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT { public int left, top, right, bottom; }
+
+        [DllImport("shell32.dll")] public static extern IntPtr SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
+        public const uint ABM_GETSTATE = 0x00000004;
+        public const int ABS_AUTOHIDE = 0x0000001;
+
+        // 任务栏现在是不是"自动隐藏"状态。读不到就一律当"不是"（保守：宁可留一条缝，也不要盖住任务栏）。
+        public static bool TaskbarAutoHide()
+        {
+            try
+            {
+                APPBARDATA d = new APPBARDATA();
+                d.cbSize = Marshal.SizeOf(typeof(APPBARDATA));
+                IntPtr r = SHAppBarMessage(ABM_GETSTATE, ref d);
+                return ((long)r & ABS_AUTOHIDE) != 0;
+            }
+            catch { return false; }
+        }
+
+        // 纯判断，不碰任何系统状态 —— 这样 tests\edge-anchor-test.cs 能把六种组合全跑一遍。
+        // reserved = 工作区确实比屏幕小（有东西占了一条），autohide = 任务栏正处于自动隐藏。
+        public static bool AnchorIsScreen(string mode, bool reserved, bool autohide)
+        {
+            if (mode == "screen") return true;
+            if (mode == "work") return false;
+            return reserved && autohide;      // auto
+        }
+
+        // 轮盘该贴着哪块矩形靠边（mode = Settings.EdgeAnchor："auto" / "screen" / "work"）。
+        //   screen：永远贴屏幕物理边（任务栏不是自动隐藏时会被压住一角）
+        //   work  ：永远贴工作区边（永远避让任务栏，也就是老行为）
+        //   auto  ：工作区确实被扣掉了一块、且任务栏正处于自动隐藏 → 贴屏幕边；否则贴工作区边
+        public static Rectangle AnchorRect(string mode)
+        {
+            Rectangle b, w;
+            try { b = Screen.PrimaryScreen.Bounds; w = Screen.PrimaryScreen.WorkingArea; }
+            catch { return new Rectangle(0, 0, 1024, 768); }
+            bool reserved = (w.Width < b.Width) || (w.Height < b.Height);
+            bool autohide = reserved && TaskbarAutoHide();
+            return AnchorIsScreen(mode, reserved, autohide) ? b : w;
+        }
+
+
         // 优先"每显示器 DPI 感知 v2"：多屏不同缩放时不会把窗口拉伸糊掉，坐标也按物理像素走
         public static void SetDpiAwarenessBest()
         {

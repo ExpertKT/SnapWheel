@@ -36,6 +36,7 @@ namespace SnapWheel
                 s.AutoStart = _chkAutoStart.Checked;
                 s.DeleteMode = (_cmbDel.SelectedIndex == 1) ? "single" : "double";
                 s.SwitchMode = (_cmbSwitch.SelectedIndex == 1) ? "swipe" : "radial";
+                s.EdgeAnchor = (_cmbEdge.SelectedIndex == 1) ? "screen" : (_cmbEdge.SelectedIndex == 2 ? "work" : "auto");
                 s.ClipboardImport = _chkClip.Checked;
                 s.CopyOnCapture = _chkCopy.Checked;
                 s.ShowBalloon = _chkBalloon.Checked;

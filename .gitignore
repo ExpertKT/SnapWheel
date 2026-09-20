@@ -32,3 +32,6 @@ AGENT-BRIEF.md
 
 # 演示视频（本地产物，55MB；需要时用 tests/demo-video.cs 重新生成，不进仓库）
 docs/*.avi
+
+# 读代码时的学习/预测笔记（本地草稿，不入库）
+tests/learn/
