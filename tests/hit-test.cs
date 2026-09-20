@@ -130,6 +130,8 @@ namespace SnapWheel
                         if (c.A > 60 && c.G > c.R + 25 && c.G > c.B + 25) n++;
                     }
             }
+            // 量完把锁存还回去 —— 否则后面那条"松手后提示还在淡出"的检查会被这里关了提示而误报
+            S(f, "_dropExternalShown", true);
             return n;
         }
 
@@ -411,15 +413,33 @@ namespace SnapWheel
                 int nHalf = CountInHint(f, dw, 0.5f);
                 int nFull = CountInHint(f, dw, 1.0f);
                 int nNone = CountInHint(f, dw, 0.0f);
-                s.DiagMode = false;
+                // ⚠️ 这里**先别关**诊断模式 —— 下面那条"松手后还在淡出"也要读注册表。
+                //    第一版就是在这儿关掉了，于是那条永远量到 0（误报"提示直接没了"）。
                 Check("拖放态：半透明时的像素明显少于全显（说明 alpha 真的跟着进度走）",
                       nHalf > 0 && nHalf < nFull * 0.88f, "半=" + nHalf + " 全=" + nFull + "（alpha 总和）");
                 Check("拖放态：进度为 0 时提示不画（不能残留）", nNone == 0, "还有 " + nNone + " 个像素");
+
+                // 3) **用户报的就是这一条**：松手之后 `_dropActive` 已经翻成 false，
+                //    但进度还没退完 —— 这一帧提示**必须还在**（正在淡出）。
+                //    之前在 DrawWheel 的调用处写了 `if (_dropActive && _dropExternal)`，
+                //    于是"出现"有过渡、"消失"是硬切。用户原话就是："环是有的（有过渡），提示没有"。
+                //
+                //    时序要摆对：先让"正在进行外部拖放"的锁存建立起来，**再**模拟松手那一帧。
+                //    （上面那个淡出循环会把 _dropVis 跑到 0，锁存也就在那时被清掉了 ——
+                //      不重建的话这一条永远量到 0，跟真实情况对不上。）
+                S(f, "_dropActive", true); S(f, "_dropExternal", true);
+                tk.Invoke(f, null);                       // 锁存
+                S(f, "_dropActive", false);               // 松手：OnDragDropWheel 就是先翻这个再 Render()
+                int nFadeOut = CountInHint(f, dw, 0.60f); // 这一帧，_dropVis 还剩 0.6
+                Check("拖放态：松手后（_dropActive 已翻 false）提示仍在淡出，不是硬切",
+                      nFadeOut > 0 && nFadeOut < nFull, "淡出中=" + nFadeOut + " 全显=" + nFull);
+                S(f, "_dropActive", true);
 
                 // 3) 环上的绿光晕也得跟着淡 —— 整窗像素数在两端要差出一大截
                 int w0 = CountGreen(f, dw, 0f), w1 = CountGreen(f, dw, 1f);
                 Check("拖放态：环随之变绿、也跟着复原（绿像素 0 时远少于 1 时）", w1 > w0 * 1.5 + 200,
                       "0 时 " + w0 + " / 1 时 " + w1);
+                s.DiagMode = false;
 
                 S(f, "_dropActive", false); S(f, "_dropVis", 0f); S(f, "_dropExternal", false); S(f, "_dropCount", 0);
                 Application.DoEvents();

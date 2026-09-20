@@ -762,6 +762,12 @@ namespace SnapWheel
             bool wasTop = _wheel.TopMost;
             PushNoTopMost();
             SettingsForm f = new SettingsForm(_settings);
+            // 用户报"设置界面偶尔会出现在下层而不是顶层"。
+            // 原因：`ShowDialog()` 没传 owner，而这个进程的窗口都带 WS_EX_NOACTIVATE、
+            // 切到设置前还会把轮盘的置顶临时关掉（PushNoTopMost）—— 于是对话框既没有属主、
+            // 又不在置顶组里，什么时候被别的窗口盖住全看运气。
+            // 设置是**用户刚点出来的模态框**，开着的时候就该在最上面，这里明确置顶。
+            try { f.TopMost = true; } catch { }
             DialogResult r = f.ShowDialog();
             if (r == DialogResult.OK)
             {

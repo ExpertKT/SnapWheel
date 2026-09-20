@@ -136,6 +136,7 @@ namespace SnapWheel
             if (disposing)
             {
                 // 自己的定时器必须自己停（v0.5.1 的教训：窗口关了定时器还在跑，白烧 CPU）
+                if (_fadeTimer != null) { try { _fadeTimer.Stop(); _fadeTimer.Dispose(); } catch { } _fadeTimer = null; }
                 if (_ptimer != null) { try { _ptimer.Stop(); _ptimer.Dispose(); } catch { } _ptimer = null; }
                 if (_pwatch != null) { try { _pwatch.Stop(); } catch { } _pwatch = null; }
                 FreeSlide();
@@ -190,6 +191,45 @@ namespace SnapWheel
         {
             base.OnShown(e);
             Gfx.RepaintAll(this);          // 补一次整窗重绘，按钮四角不会闪白块
+            StartFadeIn();
+        }
+
+        // ---- 打开时的淡入 ----
+        // 用户反馈：点设置后窗口出现较慢，而且**期间没有任何东西缓解"加载感/卡顿感"**。
+        // 实测 `new SettingsForm()` 约 250ms（构造**体内**的标记加起来只有 ~15ms，
+        // 大头还没定位到，见下面注释），那 250ms 里屏幕上什么都不发生；
+        // 等到窗口出现又是"啪"地全亮 —— 一头一尾都是硬切。
+        // 这一下至少把**出现**变成渐显：眼睛看到的是"它在长出来"，不是"突然多了一坨"。
+        //
+        // ⚠️ 还没解决的是那 250ms 本身。之所以没顺手去"优化"它：
+        //    构造体内的分段计时加起来只有 15ms，说明时间不在我改得到的那段代码里 ——
+        //    没定位到就改，只会把别的地方弄坏（这个项目在"猜一个改法试一次"上摔过很多次）。
+        System.Windows.Forms.Timer _fadeTimer;
+        float _fadeT = 0f;
+        bool _fadeDone;
+
+        void StartFadeIn()
+        {
+            if (_fadeDone) return;          // 只为"打开"那一次，切页不重放
+            _fadeDone = true;
+            try
+            {
+                Opacity = 0.34;
+                _fadeTimer = new System.Windows.Forms.Timer();
+                _fadeTimer.Interval = 15;
+                _fadeTimer.Tick += new EventHandler(delegate(object o, EventArgs e2)
+                {
+                    try
+                    {
+                        _fadeT += 0.17f;
+                        if (_fadeT >= 1f) { _fadeT = 1f; _fadeTimer.Stop(); _fadeTimer.Dispose(); _fadeTimer = null; }
+                        Opacity = 0.34 + 0.66 * _fadeT;
+                    }
+                    catch { try { Opacity = 1.0; } catch { } }
+                });
+                _fadeTimer.Start();
+            }
+            catch { try { Opacity = 1.0; } catch { } }
         }
 
         public SettingsForm(Settings s)
@@ -403,6 +443,7 @@ namespace SnapWheel
             Controls.Add(root);      // 全部建完才挂上去：整棵树只排一次
             PerformLayout();
             SizeToContent();         // 再按"内容首选尺寸 × DPI"定默认尺寸 / 最小尺寸（见方法里的说明）
+
         }
 
         // ============================ 默认尺寸 / 记住用户拖过的尺寸 ============================

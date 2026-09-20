@@ -446,9 +446,11 @@ namespace SnapWheel
                     need = true;
                 }
                 else if (cur2 != want2) { _dropVis = want2; need = true; }
-                // "这次是不是外部拖放"要**锁存**到完全淡出为止（见字段说明）
+                // "这次是不是外部拖放"要**锁存**到完全淡出为止（见字段说明）。
+                // ⚠️ 清除必须加"已经不在拖放中"这个条件：拖放刚开始那一帧 _dropVis 还是 0，
+                //    先锁存、后按 _dropVis 清掉的话，等于刚锁上就没了。
                 if (_dropActive && _dropExternal) _dropExternalShown = true;
-                if (_dropVis <= 0.001f) _dropExternalShown = false;
+                if (!_dropActive && _dropVis <= 0.001f) _dropExternalShown = false;
             }
 
             // 提示条（"已加入 N 张图片"）淡入淡出

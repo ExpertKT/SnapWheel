@@ -361,8 +361,14 @@ namespace SnapWheel
             //    优先级：拖放提示（正卡着用户一个动作）> 长按提示 > 操作回执。
             //    这样它们既不会互相压住，也不用各自找位置（各自找位置就是之前那些重叠的来源）。
             bool statusTaken = false;
-            if (_dropActive && _dropExternal && a > 90) { DrawDropHint(g, a); statusTaken = true; }
-            if (!statusTaken && _closeHoldP > 0.10f) { DrawCloseHoldHint(g, a); statusTaken = true; }
+            // ⚠️ 这里**不能**再写 `_dropActive &&` —— 调用处一卡这个 bool，
+            //    "出现"那一下内部还有机会淡入（_dropVis 在涨），
+            //    "消失"时 _dropActive 已经翻了 false，调用处直接跳过 → **硬切**。
+            //    用户报的正是"消失没有过渡，环是有的"（环那边读的是 _dropVis，不受影响）。
+            //    要不要画、画多淡，全交给 DrawDropHint 自己按 _dropVis 判断。
+            //    它也不占状态区那一格 —— 它的位置在轮盘上端，和那三条不在一块。
+            DrawDropHint(g, a);
+            if (_closeHoldP > 0.10f) { DrawCloseHoldHint(g, a); statusTaken = true; }
             if (!statusTaken) { DrawToast(g, a); statusTaken = true; }
             DrawDiag(g);               // ⑦ （没有开诊断就什么都不画）
         }
