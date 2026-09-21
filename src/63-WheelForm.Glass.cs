@@ -107,6 +107,42 @@ namespace SnapWheel
 
 
         // 由 AnimTick 在 UI 线程调用：把后台糊好的底换上去
+        // 测试用：因为"新底和旧底一样"而跳掉了几次交叉淡入
+        public static int GlassSkipForTest = 0;
+
+        // 两片底图是不是**一模一样**（尺寸、偏移、像素）。
+        // 用 LockBits 逐字节比，别用 GetPixel：658x658 就是 43 万次调用，那才是真的慢。
+        // 逐字节全比，不做"抽样比几个点"——抽样会漏掉局部变化，而那正是要淡入的东西。
+        // 这个函数 3.5 秒才跑一次，一次约 1ms，完全可以接受。
+        static bool SameBackdrop(Bitmap a, Bitmap b, Point offA, Point offB)
+        {
+            if (a == null || b == null) return false;
+            if (a.Width != b.Width || a.Height != b.Height) return false;
+            if (offA.X != offB.X || offA.Y != offB.Y) return false;
+            try
+            {
+                Rectangle r = new Rectangle(0, 0, a.Width, a.Height);
+                BitmapData da = a.LockBits(r, ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+                try
+                {
+                    BitmapData db = b.LockBits(r, ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+                    try
+                    {
+                        int len = da.Stride * a.Height;
+                        if (db.Stride * b.Height != len) return false;
+                        byte[] ba = new byte[len], bb = new byte[len];
+                        System.Runtime.InteropServices.Marshal.Copy(da.Scan0, ba, 0, len);
+                        System.Runtime.InteropServices.Marshal.Copy(db.Scan0, bb, 0, len);
+                        for (int i = 0; i < len; i++) if (ba[i] != bb[i]) return false;
+                        return true;
+                    }
+                    finally { b.UnlockBits(db); }
+                }
+                finally { a.UnlockBits(da); }
+            }
+            catch { return false; }     // 比不了就当"变了"，保守：宁可白淡一次，也不要少淡一次
+        }
+
         void ApplyPendingBackdrop()
         {
             Bitmap fresh = null;
@@ -117,6 +153,30 @@ namespace SnapWheel
                 fresh = _glassPending; off = _glassPendingOffset; _glassPending = null;
             }
             if (StyleFlatOnly()) { try { fresh.Dispose(); } catch { } return; }
+            // ⚠️ **新底和旧底一模一样时，别做交叉淡入。**
+            // 定时刷新每 3.5 秒抓一次屏，抓到的内容和手上这张**经常完全相同**
+            // （你在看文档、看网页、桌面没动的时候）。而交叉淡入那 0.38 秒里，每一帧都要把
+            // 两张**整窗**底图混一次（实测 3.78ms，是那一档最大的单项），再加上控件层缓存失效
+            // 要整层重画 —— 全是为了把一张图淡入到它自己身上。
+            // 实测：用户机器上 10 秒里的 67 帧几乎全是这种"白干"的帧，平均 17ms、最慢 29ms。
+            //
+            // 比的是**两片已经在内存里的位图**，不是"再抓一次屏幕看变没变"——
+            // 后者早就量过、是反的（抓屏是按次计费的固定成本，采小块比整屏还贵，见 63 文件顶部的历史注释）。
+            if (_backdropBlur != null && Visible && SameBackdrop(fresh, _backdropBlur, off, _backdropOffset))
+            {
+                // 内容一样：直接换掉、**不碰** _backdropOld/_backdropFade，
+                // 于是这一轮没有任何过渡要播，一帧都不用重画。
+                try { _backdropBlur.Dispose(); } catch { }
+                _backdropBlur = fresh;
+                _backdropOffset = off;
+                _backdropValid = true;
+                _backdropAt = DateTime.Now;
+                _backdropGen++;
+                BackdropChanged();
+                _rendered = false;
+                GlassSkipForTest++;
+                return;
+            }
             if (_backdropBlur != null && Visible)
             {
                 if (_backdropOld != null) { try { _backdropOld.Dispose(); } catch { } }
