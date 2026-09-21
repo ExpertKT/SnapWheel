@@ -286,26 +286,34 @@ namespace SnapWheel
                         g.DrawLine(pl, lx + 2.2f * _k, ly + 9f * _k, lx, ly + 11f * _k);
                     }
                     break;
-                    case IdxPin:        // 贴图：一颗图钉（圆头 + 尖针），画在常亮底色上
+                    case IdxPin:        // 贴图：一颗**钉子**（扁头 + 直杆 + 尖），画在常亮底色上
                     {
                         float px = d2.Left + d2.Width / 2f, py = d2.Top + d2.Height / 2f;
                         using (SolidBrush bw2 = new SolidBrush(Color.FromArgb(a, 255, 255, 255)))
-                        using (Pen pw2 = new Pen(Color.FromArgb(a, 255, 255, 255), 1.8f * _k))
-                        using (GraphicsPath pin = new GraphicsPath())
                         {
-                            pw2.StartCap = LineCap.Round; pw2.EndCap = LineCap.Round;
-                            // 头 + 针放进**同一个路径、一次填充**。
-                            // 分两次填的话，圆头和针的重叠处会各抗锯齿一次，交界上留一道浅色接缝
-                            // （放大 6 倍能明显看到，像是断开的）。FillMode.Winding 会把并集填实。
-                            pin.FillMode = FillMode.Winding;
-                            pin.AddEllipse(px - 5.4f * _k, py - 8.2f * _k, 10.8f * _k, 10.8f * _k);
-                            pin.AddPolygon(new PointF[] {
-                                new PointF(px - 2.6f * _k, py + 1.6f * _k),
-                                new PointF(px + 2.6f * _k, py + 1.6f * _k),
-                                new PointF(px,             py + 8.6f * _k) });
-                            g.FillPath(bw2, pin);
-                            // 头上一道横杠：少了它看着像个气球不像图钉
-                            g.DrawLine(pw2, px - 4.6f * _k, py - 8.6f * _k, px + 4.6f * _k, py - 8.6f * _k);
+                            // 整个钉子轮廓用**一个多边形**画完：扁头 → 直杆 → 尖。
+                            // 上一版是"圆头 + 尖针"，圆头配那个收腰的尖看着不像钉子（用户说看着像别的东西），
+                            // 而且圆头和针分两次填、交界会各抗锯齿一次留一道接缝。
+                            // 一个多边形两件事都解决：轮廓明确、没有内部接缝。
+                            // 比例很重要：钉子**比宽高**（约 2.6:1）。
+                            // 第一版头宽 11px、整体才 11px 高，方方正正一条横杠压着一条短杆 ——
+                            // 渲染出来就是个字母「T」。把杆拉长、头收窄才对。
+                            float hw = 3.6f * _k;      // 扁头半宽
+                            float hy = py - 9.2f * _k; // 扁头顶
+                            float hb = py - 6.6f * _k; // 扁头底（厚度 2.6k）
+                            float sw = 1.3f * _k;      // 杆半宽
+                            float sy = py + 4.2f * _k; // 杆底（从这里开始收成尖）
+                            float ty = py + 9.8f * _k; // 尖端
+                            g.FillPolygon(bw2, new PointF[] {
+                                new PointF(px - hw, hy),
+                                new PointF(px + hw, hy),
+                                new PointF(px + hw, hb),
+                                new PointF(px + sw, hb),
+                                new PointF(px + sw, sy),
+                                new PointF(px,      ty),
+                                new PointF(px - sw, sy),
+                                new PointF(px - sw, hb),
+                                new PointF(px - hw, hb) });
                         }
                     }
                     break;

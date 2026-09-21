@@ -244,18 +244,30 @@ namespace SnapWheel
                          "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
                        + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
 
+            AddTip(mL, ref y, "1.0.0", Lang.T("截完不用等，直接「贴」到屏幕上", "Pin it straight from the capture"),
+                Lang.T("截图浮层工具条最右边多了一颗**钉子**：框完点它，图立刻钉在你框的那块位置，"
+                       + "**并且照常存进轮环** —— 不用再等轮盘拉出来、再用中键去点缩略图。"
+                       + "那颗钉子的底色是**常亮**的（这条栏上别的一律是深底细线条），一眼就能找到。"
+                       + "钉出来的图和轮环里是**各自独立**的：关掉贴图不会影响环上那张。",
+                         "A nail now sits at the right end of the capture toolbar. Click it and the shot is pinned on screen "
+                       + "at the spot you framed - and it still goes into the ring as usual, so there is no more waiting for "
+                       + "the wheel to slide out and middle-clicking a thumbnail. The nail has a permanently lit background "
+                       + "(everything else on that bar is a thin line icon on a dark background), so it is easy to find. "
+                       + "The pinned copy and the ring copy are independent: closing the pin does not affect the ring."));
+
             AddTip(mL, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
-                Lang.T("这一版没有加新功能，补的全是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
+                Lang.T("这一版除了上面那颗钉子，补的主要是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
                        + "（默认是「留一份」，所以格子**不合拢** —— 图并没有走）；**新截的那张**会亮一下再慢慢冷下去，"
-                       + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下。"
+                       + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下"
+                       + "（药丸和上面的字会**一起**放大缩小）。"
                        + "另外环会**随内容变粗**，早上偏暖、深夜自己暗一点，环下面也多了一层影子。"
                        + "涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。",
-                         "This release adds no features, only feedback: dragging an image out makes its cell flinch and leaves a short "
-                       + "trail in the drag direction (the default keeps a copy, so the cell does NOT close up - nothing actually left); "
-                       + "a freshly captured image glows then cools, so you can see at a glance which one is new; a ripple spreads out when "
-                       + "an image arrives; switching wheels flips the name pill. The ring also thickens with content, warms up in the "
-                       + "morning, dims at night, and now casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in "
-                       + "Settings > Style."));
+                         "Besides the nail above, this release is mostly about feedback: dragging an image out makes its cell flinch "
+                       + "and leaves a short trail in the drag direction (the default keeps a copy, so the cell does NOT close up - "
+                       + "nothing actually left); a freshly captured image glows then cools, so you can see at a glance which one is "
+                       + "new; a ripple spreads out when an image arrives; switching wheels flips the name pill (the pill and its "
+                       + "text scale together). The ring also thickens with content, warms up in the morning, dims at night, and now "
+                       + "casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings > Style."));
 
             int tipW = _contentW - Ui.S(3);
             Label tip = new Label();
