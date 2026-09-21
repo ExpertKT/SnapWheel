@@ -39,7 +39,9 @@ namespace SnapWheel
                 Page(5, "Grab text from\nany screenshot", "OCR plus one-click translation, even on dark low-contrast text", "OCR + translate", "ocr.png");
                 // Size is read from the built exe, never hardcoded (the old text said 274 KB
                 // while the real binary had long since grown to 365 KB).
-                Page(6, "One exe.\n" + kbText + ". Zero deps.", "Version 1.0 \u00b7 Portable \u00b7 MIT licensed \u00b7 github.com/ExpertKT/SnapWheel", "Just download", "settings.png");
+                // 1.0's new feature gets its own page: the nail at the right end of the toolbar.
+    Page(6, "Pin it straight\nfrom the capture", "Click the nail and the shot is pinned where you framed it - and it still lands in the ring", "New in 1.0", "annotate.png");
+    Page(7, "One exe.\n" + kbText + ". Zero deps.", "Version 1.0 \u00b7 Portable \u00b7 MIT licensed \u00b7 github.com/ExpertKT/SnapWheel", "Just download", "settings.png");
                 WriteCopy();
                 Console.WriteLine("done -> " + outDir);
             }
@@ -134,7 +136,7 @@ namespace SnapWheel
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
                     TextRenderer.DrawText(g, "SnapWheel", fb, new Point(72, 64), Accent, TextFormatFlags.NoPadding);
                 using (Font fn = new Font(FONT, 24))
-                    TextRenderer.DrawText(g, no + " / 6", fn, new Point(W - 72 - 90, 68), Color.FromArgb(120, 150, 165, 190), TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, no + " / 7", fn, new Point(W - 72 - 90, 68), Color.FromArgb(120, 150, 165, 190), TextFormatFlags.NoPadding);
 
                 if (!string.IsNullOrEmpty(chip)) Chip(g, chip, 72, 138);
 

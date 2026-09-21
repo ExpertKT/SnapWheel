@@ -41,9 +41,12 @@ namespace SnapWheel
                 Page(4, "网页想截全？\n让它自己滚", "滚动长截图：框一块区域，剩下的它自己滚自己拼", "长截图", "longdemo");
                 Page(5, "圈住文字\n就能复制", "取字 + 一键翻译，暗色小字也认得准", "取字 · 翻译", "ocr.png");
                 // 最后一页讲正式版：体积**读构建产物**，不写死（原来写 274 KB，实际早就 365 KB）
-                Page(6, "一个 exe\n" + kbText + " 零依赖", "1.0 正式版 · 免安装 · 开源 MIT · GitHub 搜 SnapWheel", "下载即用", "settings.png");
+                // 1.0 的新功能单独占一页：工具条最右边那颗钉子。配图用**现渲染**的浮层图
+                // （ui-shot 生成），旧图里没有钉子 —— 新功能不露面等于没宣传。
+                Page(6, "截图浮层里\n多了一颗钉子", "框完直接贴到屏幕上，同时照常存进轮环", "1.0 新增", "annotate.png");
+                Page(7, "一个 exe\n" + kbText + " 零依赖", "1.0 正式版 · 免安装 · 开源 MIT · GitHub 搜 SnapWheel", "下载即用", "settings.png");
                 WriteCopy();
-                Console.WriteLine("完成：6 张竖版图文 + 发帖文案 已输出到 " + outDir);
+                Console.WriteLine("完成：7 张竖版图文 + 发帖文案 已输出到 " + outDir);
             }
             catch (Exception ex) { Console.WriteLine("失败：" + ex.Message); }
         }
@@ -136,7 +139,7 @@ namespace SnapWheel
                 using (Font fb = new Font(FONT, 26, FontStyle.Bold))
                     TextRenderer.DrawText(g, "SnapWheel 快照轮环", fb, new Point(72, 64), Accent, TextFormatFlags.NoPadding);
                 using (Font fn = new Font(FONT, 24))
-                    TextRenderer.DrawText(g, no + " / 6", fn, new Point(W - 72 - 90, 68), Color.FromArgb(120, 150, 165, 190), TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, no + " / 7", fn, new Point(W - 72 - 90, 68), Color.FromArgb(120, 150, 165, 190), TextFormatFlags.NoPadding);
 
                 // 角标：一页一个卖点标签（吸睛用）
                 if (!string.IsNullOrEmpty(chip)) Chip(g, chip, 72, 138);

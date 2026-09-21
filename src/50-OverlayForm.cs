@@ -336,8 +336,15 @@ namespace SnapWheel
                 using (SolidBrush bg2 = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
                 {
                     SizeF sz2 = g.MeasureString(hint, f2);
+                    // ⚠️ 提示条必须排在**所有顶部手柄之上**，不能只按"选区上沿减 36"。
+                    // 旋转手柄在选区上方 30px、锁定手柄在 62px，两个半径都是 13 ——
+                    // 旧写法 hy = Top - 高 - 36 正好落在这一行上：
+                    // 只要选区**窄于约 600px**，提示条从左边起、那半截就被选区顶部中央的圆盘压住
+                    // （渲染出浮层图一眼就能看到字被圆盘盖掉一截）。
+                    // 手柄的几何在 RotateHandlePos / LockHandlePos 里，改那边要同步这里。
+                    float topHandles = 62f * _k + 13f;      // 最高的那个（锁定）手柄的顶端
                     float hx = bb2.Left;
-                    float hy = bb2.Top - sz2.Height - 36;
+                    float hy = bb2.Top - topHandles - sz2.Height - 4;
                     if (hy < 4) hy = bb2.Bottom + 30;
                     g.FillRectangle(bg2, hx, hy, sz2.Width + 8, sz2.Height + 4);
                     g.DrawString(hint, f2, fg2, hx + 4, hy + 2);

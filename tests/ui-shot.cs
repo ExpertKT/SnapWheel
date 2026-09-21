@@ -31,6 +31,13 @@ namespace SnapWheel
             return mi.Invoke(o, args);
         }
 
+        static void Set(object o, string name, object val)
+        {
+            FieldInfo fi = o.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance);
+            if (fi == null) throw new Exception("找不到字段 " + name);
+            fi.SetValue(o, val);
+        }
+
         static void Pump(int ms)
         {
             DateTime end = DateTime.Now.AddMilliseconds(ms);
@@ -256,6 +263,38 @@ namespace SnapWheel
 
             Console.WriteLine("设置窗口:");
             ShotSettings(s, Path.Combine(outDir, "settings.png"));
+
+            // 截图浮层（带工具条）：**1.0 的宣传物料要用它**，因为工具条最右边那颗钉子是新功能，
+            // 用旧图铺出去等于"新功能没露面"。桌面用一张正经的模拟壁纸，不写"假桌面"之类的自述。
+            Console.WriteLine("截图浮层:");
+            {
+                const int OW = 900, OH = 560;
+                using (Bitmap desk = new Bitmap(OW, OH, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(desk))
+                    {
+                        using (System.Drawing.Drawing2D.LinearGradientBrush lg = new System.Drawing.Drawing2D.LinearGradientBrush(
+                            new Rectangle(0, 0, OW, OH), Color.FromArgb(38, 44, 60), Color.FromArgb(18, 22, 34), 60f))
+                            g.FillRectangle(lg, 0, 0, OW, OH);
+                        for (int i = 0; i < 5; i++)
+                            using (SolidBrush b2 = new SolidBrush(Color.FromArgb(28 + i * 5, 255, 255, 255)))
+                                g.FillRectangle(b2, 40 + i * 24, 40 + i * 18, OW - 80 - i * 48, OH - 80 - i * 36);
+                    }
+                    OverlayForm ov = new OverlayForm(new Rectangle(0, 0, OW, OH), desk);
+                    Set(ov, "_hasSel", true);
+                    Set(ov, "_c", new PointF(300, 300));
+                    Set(ov, "_sz", new SizeF(420, 210));
+                    Set(ov, "_dragging", false);
+                    Call(ov, "PlaceToolbar");
+                    using (Bitmap b = new Bitmap(OW, OH, PixelFormat.Format32bppPArgb))
+                    {
+                        using (Graphics g = Graphics.FromImage(b))
+                            Call(ov, "PaintOverlay", new PaintEventArgs(g, new Rectangle(0, 0, OW, OH)));
+                        b.Save(Path.Combine(outDir, "annotate.png"), ImageFormat.Png);
+                    }
+                    ov.Dispose();
+                }
+            }
 
             Console.WriteLine("新手引导:");
             {

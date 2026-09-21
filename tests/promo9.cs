@@ -267,8 +267,8 @@ namespace SnapWheel
                     }
                 }
                 boxes.AddRange(CenterStack(g, 806, 16, new string[] {
-                    "这一版没加功能，只让它「有反应」：",
-                    "拖出去有拖痕 · 新截的会亮 · 切轮盘会翻 · 环会随内容变粗",
+                    "截完直接「贴」到屏幕上：框完点工具条最右边那颗钉子",
+                    "环会「有反应」：拖出去有拖痕 · 新截的会亮 · 切轮盘会翻",
                     "Windows 10 / 11 · 免安装 · 开源 MIT"
                 }, new float[] { 28, 26, 26 }, new FontStyle[] { FontStyle.Regular, FontStyle.Regular, FontStyle.Regular },
                    new Color[] { Color.FromArgb(215, 226, 238, 250), Sub, Color.FromArgb(200, 226, 234, 244) }));
