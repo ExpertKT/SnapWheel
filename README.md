@@ -66,7 +66,8 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 - **The ring reacts now.** Dragging an image out makes its cell flinch and leaves a short trail in the drag direction (the default keeps a copy, so the cell does *not* close up — nothing actually left). A fresh capture glows then cools. A ripple spreads out when an image arrives. Switching wheels flips the name pill. The ring thickens with content, warms up in the morning, dims at night, and casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings → Style.
 - **Settings opens 9× faster** (250 ms → 30 ms). The cause was not slow code — it was the **order of two lines** in the constructor, and both orders render *pixel-identical*.
 - **No more dropped frames from cross-fading an image into itself.** The periodic screen grab usually returns exactly what we already have (you're reading a document), and the cross-fade was re-blending two full-window bitmaps every frame for nothing.
-- **Three reported bugs fixed:** the green drop hint's *disappearance* had no transition (the ring's did), the name pill's **text** didn't scale with its pop animation, and the settings window opened slowly.
+- **Screen recorders can finally see the ring** (Settings → Style). The window asks Windows to exclude it from screen capture so your own screenshots stay clean - but since Windows 10 2004 that also hides it from recorders, so demo videos came out with no ring in them.
+- **Four reported bugs fixed:** the green drop hint's *disappearance* had no transition (the ring's did), the name pill's **text** didn't scale with its pop animation, the settings window opened slowly, and **right-clicking to leave the capture overlay also opened the desktop context menu** (the overlay closed on button-*down*, so the button-*up* landed on the desktop).
 
 Each of these has a paragraph with the root cause and the measured numbers in the [v1.0.0 release notes](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0). Full history in [CHANGELOG.md](CHANGELOG.md).
 
@@ -94,7 +95,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
   /out:SnapWheel-nokey.exe src\*.cs
 ```
 
-`tools\build.ps1` wraps the whole thing (compile both lines, run the 23 test suites, produce the release zips).
+`tools\build.ps1` wraps the whole thing (compile both lines, run the 24 test suites, produce the release zips).
 
 ## How it is built
 
@@ -167,7 +168,8 @@ MIT — see [LICENSE](LICENSE).
 - **环会「有反应」了**：拖出去时那一格会颤一下、朝拖的方向留一道拖痕（默认「留一份」，所以格子**不合拢** —— 图并没有走）；新截的那张亮一下再慢慢冷下去；图进来时环上扩散一圈涟漪；切轮盘时名字药丸翻一下（**药丸和上面的字一起**放大缩小）。环还会随内容变粗、早上偏暖深夜变暗、下面多一层影子。涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。
 - **点设置不再卡一下**：`new SettingsForm()` **250ms → 30ms**，快 9 倍。根因不是"哪段代码慢"，而是构造函数里**两行的先后顺序** —— 而两种写法**画出来逐像素一模一样**（13.5 万个采样点零差异），所以任何渲染测试都看不出来。
 - **动画不再掉帧**：定时抓屏经常抓到和手上**完全相同**的画面（你在看文档时就是这样），而换底那 0.38 秒里每一帧都在把一张图**淡入到它自己身上**。现在一样就直接换上，一帧都不用重画。
-- **修掉三个 bug**：绿提示的**消失**没有过渡（环是有的）、名字药丸的**字**不跟着动画缩放、设置窗口打开慢。
+- **录屏终于能拍到轮盘了**（设置 → 风格）：窗口默认对屏幕捕获隐身，这样你自己截图时不会带上它；但 Windows 10 2004 之后这个标记连录屏一起挡了，所以演示视频里根本没有轮盘。
+- **修掉四个 bug**：绿提示的**消失**没有过渡（环是有的）、名字药丸的**字**不跟着动画缩放、设置窗口打开慢、**右键退出截图会顺便右键到桌面**（浮层在按下时就退了，抬起落到了桌面上）。
 
 每一条的根因和量到的数字都写在 [v1.0.0 发布说明](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0)里。完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 
