@@ -123,6 +123,11 @@ namespace SnapWheel
             S(f, "_nameSwapT", 0.5f);
             int w1, h1, n1; Ink(f, dw, rc, out w1, out h1, out n1);
 
+            // CI 上量到过 0 像素（本机 189）。本机复现不出来（强制 K=1/1.25/1.5 都一样），
+            // 所以把当时的现场打出来，让 CI 的日志自己说清楚是"药丸没画"还是"位置不对"。
+            Console.WriteLine("  窗口 {0}x{1}  UiK={2}  药丸矩形={3}  在窗口内={4}",
+                f.Width, f.Height, G(f, "UiK"), rc,
+                (rc.X >= 0 && rc.Y >= 0 && rc.Right <= f.Width && rc.Bottom <= f.Height));
             Console.WriteLine("  静息   字墨迹 {0}x{1}（{2} 像素）", w0, h0, n0);
             Console.WriteLine("  翻到顶 字墨迹 {0}x{1}（{2} 像素）", w1, h1, n1);
             Console.WriteLine();
