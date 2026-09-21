@@ -29,6 +29,7 @@ namespace SnapWheel
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+        public const uint WDA_NONE = 0x00;                 // 恢复正常（能被录屏/截图拍到）
         [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
         // 剪贴板序号：剪贴板内容一变这个计数器就往前走（系统给的全局值，同一会话里所有进程共享）。

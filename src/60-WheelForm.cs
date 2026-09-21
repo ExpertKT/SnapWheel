@@ -427,12 +427,33 @@ namespace SnapWheel
         }
 
 
+        // 轮盘要不要对屏幕捕获隐身。
+        //
+        // 默认隐身（WDA_EXCLUDEFROMCAPTURE）：自己截图 / 抓玻璃底时不会把轮盘拍进去。
+        // 但那个 API 在 Windows 10 2004+ 上对**所有**基于 Windows.Graphics.Capture 的捕获都生效，
+        // **录屏也算** —— 于是用户录演示视频时轮盘根本不出现，而截图浮层（普通窗口、没设这个标记）正常。
+        // 演示模式打开就撤掉它。
+        // 代价：自己截图时轮盘会进图，所以演示模式下**同时停掉毛玻璃定时刷新**
+        // （否则轮盘会把自己的影子糊进自己的玻璃里）。
+        public void ApplyCaptureVisibility()
+        {
+            try
+            {
+                if (Handle == IntPtr.Zero) return;
+                Native.SetWindowDisplayAffinity(Handle,
+                    _settings.Recordable ? Native.WDA_NONE : Native.WDA_EXCLUDEFROMCAPTURE);
+                _rendered = false;      // 让下一帧重画，别留旧缓存
+            }
+            catch (Exception ex) { Err.Log("CaptureVisibility", ex); }
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
             // 让窗口对截屏隐身：这样玻璃底可以随时重抓（不会把轮盘自己拍进去），
-            // 顺带好处是用户截图时轮盘不会出现在图里
-            try { Native.SetWindowDisplayAffinity(Handle, Native.WDA_EXCLUDEFROMCAPTURE); } catch { }
+            // 顺带好处是用户截图时轮盘不会出现在图里。
+            // ⚠️ 但演示模式要能被录到 —— 详见 ApplyCaptureVisibility。
+            ApplyCaptureVisibility();
             try { Native.AddClipboardFormatListener(Handle); } catch { }   // 剪贴板里有新图 -> 自动收进轮盘
             // 句柄建好之后 DPI 才查得准；自动模式下补一次布局
             if (_settings.UiScale <= 0)
@@ -803,6 +824,7 @@ namespace SnapWheel
         public void AfterSettingsApplied()
         {
             ApplyTopMost();
+            ApplyCaptureVisibility();   // 演示模式开关改完立刻生效（不然要重启才管用）
             ApplyLayout();
             // 收起态被关掉时，别让轮盘卡在"只剩个把手"的状态里
             if (!_settings.CollapseMode && _collapsed) ExpandWheel();

@@ -48,7 +48,7 @@ namespace SnapWheel
         CheckBox _chkCollapse, _chkSingle, _chkIntroAnim, _chkScrollReset;
         // ---- 第 3 页「风格」 ----
         ComboBox _cmbStyle, _cmbAccent, _cmbAnim;
-        CheckBox _chkName, _chkCount, _chkGlassRefresh;
+        CheckBox _chkName, _chkCount, _chkGlassRefresh, _chkRecordable;
         // v1.0「有生命感」的三个开关（默认开、可关，见 61d-WheelForm.Atmos.cs）
         CheckBox _chkRipple, _chkRingShadow, _chkDayMood;
         // ---- 第 4 页「万能键与高级」 ----

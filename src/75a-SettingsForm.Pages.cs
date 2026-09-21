@@ -303,7 +303,7 @@ namespace SnapWheel
         void BuildPage3()
         {
             TableLayoutPanel g = _pages[2];
-            SetupRows(g, 5);   // v1.0：多了「有生命感」那三个开关
+            SetupRows(g, 6);   // v1.0：多了「有生命感」那三个开关 + 演示模式
             Settings s = _s;
 
             g.Controls.Add(Section(Lang.T("风格", "Style")), 0, 0);
@@ -386,6 +386,19 @@ namespace SnapWheel
             Control moodRow = Row(_chkRipple, _chkRingShadow, _chkDayMood);
             g.Controls.Add(moodRow, 0, 4);
             g.SetColumnSpan(moodRow, 2);
+
+            // 演示模式（v1.0）：录屏录不到轮盘 —— 因为它默认对屏幕捕获隐身。
+            // 打开这一项才能把轮盘录进视频里；代价是自己截图时轮盘会进图，
+            // 所以这里同时把毛玻璃的定时刷新停掉（见 WheelForm.ApplyCaptureVisibility）。
+            _chkRecordable = new CheckBox();
+            _chkRecordable.AutoSize = true;
+            _chkRecordable.Text = Lang.T("录屏时能拍到轮盘（演示用；打开后自己截图也会带上它）",
+                                        "Let screen recorders capture the ring\n(for demos; your own screenshots will include it too)");
+            _chkRecordable.Checked = s.Recordable;
+            _chkRecordable.Margin = new Padding(0, 8, 0, 0);
+            Control recRow = Row(_chkRecordable);
+            g.Controls.Add(recRow, 0, 5);
+            g.SetColumnSpan(recRow, 2);
         }
 
         // ---- 第 4 页：万能键与高级 ----

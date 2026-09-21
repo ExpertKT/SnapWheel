@@ -233,6 +233,9 @@ if ($Test) {
     # 其中"Result 必须生成"这条最容易漏 —— 绕过 Confirm() 自己写出口，
     # 看起来也是 OK 退出，但图既不进轮环也不进剪贴板。
     Run-Test '浮层贴图'       'overlay-pin-test.cs'      'SnapWheel.OverlayPinTest' $null
+    # 演示模式：默认轮盘对屏幕捕获隐身（自己截图不带它），但那个 API 连录屏一起挡了。
+    # 这条盯"打开演示模式后真的能被录到、且立刻生效"。
+    Run-Test '录屏可见'       'capture-visible-test.cs'  'SnapWheel.CaptureVisibleTest' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null

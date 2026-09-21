@@ -578,7 +578,9 @@ namespace SnapWheel
             // （窗口已设置 WDA_EXCLUDEFROMCAPTURE，抓屏不会把轮盘自己拍进去，所以显示中也能抓）
             // 省电模式（电池上）：**只**停"每 3.5 秒的定时重抓"这一档 —— 轮盘刚显示 / 切盘 / 拖放 / 隐藏时
             // 那几处 RequestBackdropAsync() 照旧（否则玻璃底色会缺）。见 12-Power.cs。
-            if (_settings.GlassRefresh && Visible && _show > 0.99f && !_intro && !PowerSaveOn())
+            // 演示模式（能被录到）下**必须停掉定时刷新**：这时轮盘对捕获不隐身了，
+            // 再定时抓背景就会把自己的影子糊进自己的玻璃里。
+            if (_settings.GlassRefresh && !_settings.Recordable && Visible && _show > 0.99f && !_intro && !PowerSaveOn())
             {
                 if ((DateTime.Now - _backdropAt).TotalSeconds > 3.5)
                 {

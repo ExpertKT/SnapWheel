@@ -83,6 +83,11 @@ namespace SnapWheel
         public bool ClipboardImport = false;  // 0.6.0 起默认关：复制图片不再自动收进轮盘（免得Lang.T("复制一下就被抓走", "Copy to collect")）
         public bool CopyOnCapture = true;     // 截图确认时同时把图放进剪贴板（要立刻粘贴就直接 Ctrl+V）
         public bool GlassRefresh = true;      // 定时重抓玻璃底，避免轮盘挂久了糊的是旧桌面
+        // 演示模式：让轮盘**能被录屏/截图拍到**。
+        // 默认对屏幕捕获隐身（WDA_EXCLUDEFROMCAPTURE），好处是自己截图时轮盘不会进图；
+        // 但那个 API 在 Win10 2004+ 对**所有**基于 Windows.Graphics.Capture 的捕获都生效，
+        // 录屏也就一起拍不到了（用户报的"录视频时轮盘不出现、截图界面却正常"）。
+        public bool Recordable = false;
         public bool ShowBalloon = false;      // 0.6.0 起默认关：不弹托盘气泡
         public int ExpandSpeed = 100;         // 展开动画速度 %（越大越快；独立于整体动画速度）
         public int CollapseSpeed = 150;       // 收起动画速度 %（默认"快"一档，收起要干脆）
@@ -184,6 +189,7 @@ namespace SnapWheel
                         else if (k == "ClipboardImport") s.ClipboardImport = (v == "1");
                         else if (k == "CopyOnCapture") s.CopyOnCapture = (v == "1");
                         else if (k == "GlassRefresh") s.GlassRefresh = (v == "1");
+            else if (k == "Recordable") s.Recordable = (v == "1");
                         else if (k == "ShowBalloon") s.ShowBalloon = (v == "1");
                         else if (k == "ExpandSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.ExpandSpeed = n; }
                         else if (k == "CollapseSpeed") { int n; if (int.TryParse(v, out n) && n >= 40 && n <= 250) s.CollapseSpeed = n; }
@@ -333,6 +339,7 @@ namespace SnapWheel
                 lines.Add("ClipboardImport=" + (ClipboardImport ? "1" : "0"));
                 lines.Add("CopyOnCapture=" + (CopyOnCapture ? "1" : "0"));
                 lines.Add("GlassRefresh=" + (GlassRefresh ? "1" : "0"));
+        lines.Add("Recordable=" + (Recordable ? "1" : "0"));
                 lines.Add("ShowBalloon=" + (ShowBalloon ? "1" : "0"));
                 lines.Add("ExpandSpeed=" + ExpandSpeed);
                 lines.Add("CollapseSpeed=" + CollapseSpeed);
