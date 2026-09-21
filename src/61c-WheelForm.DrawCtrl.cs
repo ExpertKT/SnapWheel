@@ -177,18 +177,28 @@ namespace SnapWheel
                     // 为什么是名字而不是别处：**"我现在在哪个轮盘上"是持续性信息** ——
                     // 原来只有环上闪一下，太轻，一眨眼就过去了，切完还得再确认一次。
                     float pop = _nameSwapT < 1f ? (float)Math.Sin(_nameSwapT * Math.PI) : 0f;   // 0→1→0
-                    if (pop > 0.001f)
-                    {
-                        float grow2 = 5f * pop;
-                        pw2 += grow2 * 2f; ph2 += grow2 * 2f;
-                    }
                     float wx = kcx - pw2 / 2f;
                     float wy = kr.Y + kr.Height + 4f;
-                    if (pop > 0.001f) wy -= 2.5f * pop;          // 稍微抬一点，弹跳感更像"翻了一下"
-                    Diag("名字药丸（当前轮盘名）", new RectangleF(wx, wy, pw2, ph2));
-                    RectangleF pill2 = new RectangleF(wx, wy, pw2, ph2);
+                    RectangleF pill2 = new RectangleF(kcx - pw2 / 2f, wy, pw2, ph2);   // **基础**矩形（不含缩放）
                     _namePillRect = pill2;                       // 记下来给命中测试用（点它能改名）
-                    using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
+                    // 整块内容绕**药丸中心**一起缩放 —— 药丸、圆点、文字是同一份几何，缩一个变换就够了。
+                    // ⚠️ 上一版是"只把矩形宽高改大"，字还是原字号、只是被重新居中：
+                    //    看起来就是"框在动、字不动"，用户一眼就看出来了。
+                    //    用变换而不是各自算尺寸，是因为后者迟早会有一处忘掉（这个项目在
+                    //    "量的时候用一套、画的时候用另一套"上摔过四次）。
+                    float popSc = 1f + 0.09f * pop;
+                    float liftY = -2.5f * pop;                   // 顺便抬高一点，弹跳感更像"翻了一下"
+                    GraphicsState stPill = g.Save();
+                    try
+                    {
+                        float pcx = pill2.X + pill2.Width / 2f, pcy = pill2.Y + pill2.Height / 2f;
+                        g.TranslateTransform(pcx, pcy + liftY);
+                        g.ScaleTransform(popSc, popSc);
+                        g.TranslateTransform(-pcx, -pcy);
+                        Diag("名字药丸（当前轮盘名）",
+                             new RectangleF(pcx - pill2.Width * popSc / 2f, pcy + liftY - pill2.Height * popSc / 2f,
+                                            pill2.Width * popSc, pill2.Height * popSc));
+                        using (GraphicsPath pg2 = Gfx.Round(pill2, ph2 / 2f))
                     {
                         BackdropClip(g, pg2, an);
                         Gfx.GlassPanel(g, pg2, pill2, Gfx.A(GlassBase(), GlassA((int)((_nameHover ? 210 : 176) * an / 255f))),
@@ -202,14 +212,17 @@ namespace SnapWheel
                     float dy2 = pill2.Y + ph2 / 2f;
                     using (SolidBrush db2 = new SolidBrush(Color.FromArgb((int)(250 * an / 255f), acc.R, acc.G, acc.B)))
                         g.FillEllipse(db2, pill2.X + 11f, dy2 - dot / 2f, dot, dot);
-                    using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
-                        g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
+                        using (SolidBrush bw = new SolidBrush(Color.FromArgb((int)(245 * an / 255f), 255, 255, 255)))
+                            g.DrawString(wn, fw, bw, pill2.X + 13f + dot, pill2.Y + (ph2 - ws.Height) / 2f + 1);
+                    }
+                    finally { g.Restore(stPill); }
                     // 悬停时在右边补一句Lang.T("点一下改名", "Click to rename")
                     if (_nameHover && an > 80)
                     {
                         using (Font ft = new Font("Microsoft YaHei UI", 9f))
                         using (SolidBrush bt = new SolidBrush(Color.FromArgb((int)(220 * an / 255f), 235, 238, 245)))
-                            g.DrawString(Lang.T("点一下改名", "Click to rename"), ft, bt, pill2.Right + 8f, dy2 - ft.Height / 2f + 1);
+                            g.DrawString(Lang.T("点一下改名", "Click to rename"), ft, bt, pill2.Right + 8f,
+                                         pill2.Y + pill2.Height / 2f - ft.Height / 2f + 1);   // 用基础矩形算
                     }
                 }
                 g.TranslateTransform(-sn.X, -sn.Y);

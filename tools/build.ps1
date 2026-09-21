@@ -222,6 +222,10 @@ if ($Test) {
     # 谁顺手换回去，任何渲染测试和探针都看不出来，只有用户能感觉到"卡了一下"。
     # 越是看不出来的性能回归，越需要一条会红的断言盯着。
     Run-Test '设置打开速度'    'settings-open-perf.cs'    'SnapWheel.SettingsOpenPerf' $null
+    # 名字药丸"翻一下"时，**字要跟着一起放大**。用户报过一次"框动字不动"：
+    # 上一版只把药丸矩形改大、字还是原字号只是被重新居中 —— 光看代码很容易漏（矩形确实变了）。
+    # 量"字墨迹的包围盒"就一目了然。
+    Run-Test '药丸动画'       'pill-pop-test.cs'         'SnapWheel.PillPopTest' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null
