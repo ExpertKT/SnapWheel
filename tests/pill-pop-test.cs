@@ -54,10 +54,17 @@ namespace SnapWheel
             }
         }
 
-        // 量"字墨迹"：药丸附近接近纯白的像素的包围盒
-        static void Ink(WheelForm f, MethodInfo dw, RectangleF rc, out int w, out int h, out int n)
+        // 量"字墨迹"：药丸里**最亮的那一簇**像素的包围盒
+        //
+        // ⚠️ 判据必须是**相对亮度**，不能用绝对颜色。
+        // 原来写死"近白"（A>200 且 R>232 且 G>236 且 B>240），本机够用；但在 CI 那台 runner 上
+        // 整帧的文字都比本机暗 —— 测得整窗只有 34 个采样点达标、而且全在药丸之外，
+        // 于是药丸**明明画了**（_namePillRect 和真实矩形逐位一致）却量到 0 个像素，CI 直接红。
+        // 现在先扫一遍求最大亮度，再取 >= 0.82 倍的那些：字比药丸底亮这件事在本机和 CI 上都成立，
+        // 跟全局透明度、跟"白到什么程度"都无关。
+        static void Ink(WheelForm f, MethodInfo dw, RectangleF rc, out int w, out int h, out int n, out int maxL)
         {
-            w = 0; h = 0; n = 0;
+            w = 0; h = 0; n = 0; maxL = 0;
             int minX = 99999, maxX = -1, minY = 99999, maxY = -1;
             using (Bitmap b = new Bitmap(Math.Max(1, f.Width), Math.Max(1, f.Height), PixelFormat.Format32bppPArgb))
             {
@@ -67,8 +74,17 @@ namespace SnapWheel
                 for (int y = y0; y < y1; y++)
                     for (int x = x0; x < x1; x++)
                     {
+                        Color c0 = b.GetPixel(x, y);
+                        if (c0.A < 40) continue;
+                        int l0 = (c0.R + c0.G + c0.B) / 3;
+                        if (l0 > maxL) maxL = l0;
+                    }
+                int thr = (int)(maxL * 0.82f); if (thr < 40) thr = 40;
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0; x < x1; x++)
+                    {
                         Color c = b.GetPixel(x, y);
-                        if (c.A > 200 && c.R > 232 && c.G > 236 && c.B > 240)
+                        if (c.A > 40 && (c.R + c.G + c.B) / 3 >= thr)
                         {
                             n++;
                             if (x < minX) minX = x; if (x > maxX) maxX = x;
@@ -118,10 +134,10 @@ namespace SnapWheel
 
             // 静息（没在翻）
             S(f, "_nameSwapT", 1f);
-            int w0, h0, n0; Ink(f, dw, rc, out w0, out h0, out n0);
+            int w0, h0, n0, l0m; Ink(f, dw, rc, out w0, out h0, out n0, out l0m);
             // 翻到最大（_nameSwapT=0.5 → sin(π/2)=1）
             S(f, "_nameSwapT", 0.5f);
-            int w1, h1, n1; Ink(f, dw, rc, out w1, out h1, out n1);
+            int w1, h1, n1, l1m; Ink(f, dw, rc, out w1, out h1, out n1, out l1m);
 
             // CI 上量到过 0 像素（本机 189）。本机复现不出来（强制 K=1/1.25/1.5 都一样），
             // 所以把当时的现场打出来，让 CI 的日志自己说清楚是"药丸没画"还是"位置不对"。
@@ -150,7 +166,8 @@ namespace SnapWheel
             string diag = " ｜ 窗口 " + f.Width + "x" + f.Height + " UiK=" + G(f, "UiK")
                   + " 药丸矩形=" + rc + " _namePillRect=" + rawPill
                   + " 显示名字=" + ((Settings)G(f, "_settings")).ShowNameLabel
-                  + " 整窗近白=" + allInk + " bbox=(" + ax0 + "," + ay0 + ")-(" + ax1 + "," + ay1 + ")";
+                  + " 整窗近白=" + allInk + " bbox=(" + ax0 + "," + ay0 + ")-(" + ax1 + "," + ay1 + ")"
+                  + " 药丸内最亮=" + l0m + "/" + l1m;
             Check("字墨迹真的存在（量不到就说明测的不是字）", n0 > 60 && n1 > 60,
                   "静息 " + n0 + " / 翻到顶 " + n1 + diag);
             Check("翻的时候**字跟着一起放大**（面积至少大 6%）",
