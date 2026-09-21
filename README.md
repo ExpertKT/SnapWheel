@@ -1,8 +1,10 @@
-# SnapWheel 快照轮环 · “Maybe the best screenshot tool out there”
+# SnapWheel 快照轮环
 
 **English** ・ [中文说明](#中文说明) ・ [⬇️ Download v1.0.0](https://github.com/ExpertKT/SnapWheel/releases/latest)
 
-**Screenshots that never become files.** Capture, and the shot slides into a ring in the corner of your screen — drag it straight into any app when you need it.
+**Screenshots that never become files.** Frame a region and the shot slides into a ring in the corner of your screen — drag it out when you need it, and it lands in whatever app you drop it on.
+
+> “Maybe the best screenshot tool out there” — a line of self-praise. Decide for yourself once you've used it.
 
 ![SnapWheel demo](docs/demo.gif)
 
@@ -109,7 +111,11 @@ MIT — see [LICENSE](LICENSE).
 
 ## 中文说明
 
+**截图不落地。** 框完直接滑进屏幕角落的环里，要用的时候拖出去就是发出去。
+
 > **截完图还要先保存、再切窗口、再去文件夹里翻出来 —— 其实你只是想把这张图粘进微信。**
+
+*“Maybe the best screenshot tool out there” —— 一句自夸，你用完再判。*
 
 **SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
 
