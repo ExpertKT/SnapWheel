@@ -132,7 +132,9 @@ namespace SnapWheel
             Console.WriteLine("  翻到顶 字墨迹 {0}x{1}（{2} 像素）", w1, h1, n1);
             Console.WriteLine();
 
-            Check("字墨迹真的存在（量不到就说明测的不是字）", n0 > 60 && n1 > 60, "静息 " + n0 + " / 翻到顶 " + n1);
+            Check("字墨迹真的存在（量不到就说明测的不是字）", n0 > 60 && n1 > 60,
+                  "静息 " + n0 + " / 翻到顶 " + n1 + " ｜ 窗口 " + f.Width + "x" + f.Height + " UiK=" + G(f, "UiK")
+                  + " 药丸矩形=" + rc + " 在窗口内=" + (rc.X >= 0 && rc.Y >= 0 && rc.Right <= f.Width && rc.Bottom <= f.Height));
             Check("翻的时候**字跟着一起放大**（面积至少大 6%）",
                   n1 > n0 * 1.06f, "静息 " + n0 + " → 翻到顶 " + n1 + "，几乎没变大 = 框动字不动");
             Check("翻的时候字的宽度也变大", w1 > w0, w0 + " → " + w1);
