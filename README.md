@@ -1,8 +1,8 @@
-# “Maybe the best screenshot tool out there” — SnapWheel：快照轮环
+# SnapWheel 快照轮环 · “Maybe the best screenshot tool out there”
 
-**English** ・ [中文说明](#中文说明)
+**English** ・ [中文说明](#中文说明) ・ [⬇️ Download v1.0.0](https://github.com/ExpertKT/SnapWheel/releases/latest)
 
-**Screenshots that never become files. Capture, and the shot slides into a ring in the corner of your screen — drag it straight into any app when you need it.**
+**Screenshots that never become files.** Capture, and the shot slides into a ring in the corner of your screen — drag it straight into any app when you need it.
 
 ![SnapWheel demo](docs/demo.gif)
 
@@ -10,8 +10,9 @@
 |---|---|
 | 🎯 **Capture into the corner** | `Ctrl+Shift+S`, drag a region — no save dialog, no window switching, no file hunting |
 | ↔️ **Drag out to send** | Drop a thumbnail into WeChat / Word / Explorer / any app, release, done. Copy semantics: the ring keeps a copy |
-| 📜 **Scrolling capture** | Frame an area and it scrolls + stitches a long image by itself, stopping when the page ends *(new in 0.6.0)* |
-| 🔍 **OCR + translation** | Copy text out of any screenshot, translate it in one click. Works on dark, low-contrast text *(new in 0.6.0)* |
+| 📌 **Pin to screen** | Click the **nail** at the right end of the capture toolbar — the shot is pinned where you framed it **and** goes into the ring |
+| 📜 **Scrolling capture** | Frame an area and it scrolls + stitches a long image by itself, stopping when the page ends |
+| 🔍 **OCR + translation** | Copy text out of any screenshot, translate it in one click. Works on dark, low-contrast text |
 | ↩️ **Undoable** | Undo the last delete (the last 8 are kept). Nothing is written outside `%APPDATA%` |
 
 A single exe · portable · no installer · no registry writes (autostart optional) · no model files bundled · **zero third-party dependencies**.
@@ -26,10 +27,10 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 
 ## Quick start
 
-1. Download `SnapWheel-v0.6.0-full.zip` from [Releases](../../releases), unpack anywhere.
+1. Download `SnapWheel-v1.0.0-full.zip` from [Releases](../../releases), unpack anywhere.
 2. Run `SnapWheel.exe`. It sits in the corner with a small pull-tab.
 3. Press `Ctrl+Shift+S`, drag a region, release. The shot lands in the ring.
-4. Drag the thumbnail into any app to use it.
+4. Drag the thumbnail into any app to use it — or click the **nail** on the capture toolbar to pin it on screen instead.
 
 **Two build lines ship from the same source:**
 
@@ -49,11 +50,23 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 | Zoom preview | Hold still on a thumbnail for ~0.3 s |
 | Send it | Drag a thumbnail out to WeChat / a folder / anywhere |
 | Keep an image | Drag it from anywhere onto the ring |
-| Pin to screen | Click the **nail** at the right end of the capture toolbar — the shot is pinned where you framed it **and** goes into the ring. Or middle-click a thumbnail; scroll to zoom, drag to move, double-click / `Esc` to close |
+| Pin to screen | Click the **nail** at the right end of the capture toolbar. Or middle-click a thumbnail; scroll to zoom, drag to move, double-click / `Esc` to close |
 | Browse | Scroll the wheel over the ring |
 | Rename | Click the name pill |
 | Import | Tray menu → Import images… |
 | Scrolling capture | Open the capture overlay, frame the area, click the long-image button on the toolbar. It scrolls and stitches; `Enter` finishes early, `Esc` cancels |
+
+## What's new in 1.0
+
+**1.0 means: from this version on, I'm willing to stand behind the promises above.** This release adds one feature, a round of "it reacts now" polish, and fixes three bugs users reported — none of which had their cause where it looked like it was.
+
+- **📌 Pin straight from the capture.** A nail now sits at the right end of the overlay toolbar: click it and the shot is pinned where you framed it, **and** it still goes into the ring. No more waiting for the wheel to slide out and middle-clicking a thumbnail.
+- **The ring reacts now.** Dragging an image out makes its cell flinch and leaves a short trail in the drag direction (the default keeps a copy, so the cell does *not* close up — nothing actually left). A fresh capture glows then cools. A ripple spreads out when an image arrives. Switching wheels flips the name pill. The ring thickens with content, warms up in the morning, dims at night, and casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings → Style.
+- **Settings opens 9× faster** (250 ms → 30 ms). The cause was not slow code — it was the **order of two lines** in the constructor, and both orders render *pixel-identical*.
+- **No more dropped frames from cross-fading an image into itself.** The periodic screen grab usually returns exactly what we already have (you're reading a document), and the cross-fade was re-blending two full-window bitmaps every frame for nothing.
+- **Three reported bugs fixed:** the green drop hint's *disappearance* had no transition (the ring's did), the name pill's **text** didn't scale with its pop animation, and the settings window opened slowly.
+
+Each of these has a paragraph with the root cause and the measured numbers in the [v1.0.0 release notes](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0). Full history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
@@ -79,7 +92,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
   /out:SnapWheel-nokey.exe src\*.cs
 ```
 
-`tools\build.ps1` wraps the whole thing (compile both lines, run tests, produce the release zips).
+`tools\build.ps1` wraps the whole thing (compile both lines, run the 23 test suites, produce the release zips).
 
 ## How it is built
 
@@ -121,95 +134,36 @@ MIT — see [LICENSE](LICENSE).
 
   ![SnapWheel](docs/wheel.png)
 
----
-
-## 它是什么
+### 它是什么
 
 屏幕角落常驻的一段**四分之一圆环**。截图不弹保存框、不落地成文件，直接变成环上的缩略图；要用的时候从环上拖到微信、文件夹、任何地方；反过来，从桌面或浏览器把图片拖到环带上就能收进来。
 
-**纯 C# / WinForms 实现（src\ 下按类型分文件），绿色免安装，零第三方依赖** —— 一个 370 KB 的 exe，拷到任何 Windows 10/11 上双击就能跑。
+支持多个「轮盘」：长按环中间的万能键往四个方向拖，可以新建 / 切换 / 删除 / 返回。
 
-## 这次更新（v1.0.0 正式版）
+### 能干什么
 
-**1.0 的意思是：从这一版起，上面那些承诺我敢替你担保了。** 这一轮补的是一条**新功能**、一批"手感"、和三个用户报上来但根因都不在表面上的 bug。
-
-### 【新】截完直接「贴」到屏幕上
-
-截图浮层工具条最右边加了一颗**钉子**：框完点它，图立刻钉在你框的那块位置，**并且照常存进轮环**。
-
-以前贴图只能"截完 → 等轮盘拉出来 → 中键点缩略图"，中间隔着两步。现在一步到底。
-
-那颗钉子的底色是**常亮**的 —— 这条栏上别的一律是深底细线条（只有鼠标悬停和当前选中的工具有底色），所以它是整条栏的视觉落点之一，一眼能找到。
-
-> 图钉画了两版：第一版"圆头 + 尖针"，用户说看着像别的东西；改成"扁头 + 直杆 + 尖"的**钉子**才对。
-> 中间还有一版头太宽、整体太矮，渲染出来是个字母「T」—— **钉子要比宽高（约 2.6:1）**，这个比例是渲染出来看出来的，不是想出来的。
-
-做这条时踩了两个"看起来对、其实不对"的坑，都留了断言：
-
-| 坑 | 后果 |
+| | |
 |---|---|
-| 照抄了旁边「长图」的出口（自己写 `DialogResult=OK; Close()`） | `Result` 是空的 —— 图**既不进轮环也不进剪贴板**，正好把"自动保存到轮环"弄没了。必须走 `Confirm()`（= 用户按了确定） |
-| 拿 `ScreenFor()` 的返回值当选区坐标算中心 | 它是**「选区在哪块屏幕上」**（返回那块屏的 Bounds），于是不管框哪儿都钉到**显示器正中央** |
+| 🎯 **截图进角落** | `Ctrl+Shift+S` 框一块 —— 不弹保存框、不切窗口、不用翻文件夹 |
+| ↔️ **拖出去就是发出去** | 缩略图拖进微信 / Word / 资源管理器 / 任何程序，松手就到。**复制语义**：环上留着一份 |
+| 📌 **贴到屏幕上**（1.0 新增） | 截图浮层工具条最右边那颗**钉子**：框完点它，图钉在你框的位置，**同时照常进轮环** |
+| 📜 **滚动长截图** | 框一块区域，它自己滚、自己拼，翻到底自动停 |
+| 🔍 **取字 + 翻译** | 圈住文字就能复制，一键翻成中文 / 英文。暗色小字也认得准 |
+| ↩️ **删错了能后悔** | 撤销上一次删除（保留最近 8 次）。除了 `%APPDATA%`，不往任何地方写东西 |
 
-第二个是**测试先红、才发现**的。
+绿色免安装 · 免注册表（开机自启可选）· 不打包任何模型文件 · **零第三方依赖**。
 
-### 环会「有反应」了
+### 这次更新（v1.0.0 正式版）
 
-这一版补的主要是反馈，让每一件事都看得出发生过：
+**1.0 的意思是：从这一版起，上面那些承诺我敢替你担保了。** 这一版加了**一条新功能**、一批「手感」，并修掉三个用户报上来的 bug —— 而这三个的根因**都不在看起来的地方**。
 
-- **拖出去**：那一格会颤一下，并向拖的方向留下一道短促的拖痕（默认「留一份」，所以格子**不合拢** —— 图并没有走）
-- **新截的那张**：亮一下再慢慢冷下去，一眼就知道哪张是刚截的
-- **图进来**：环上扩散一圈涟漪
-- **切轮盘**：名字药丸翻一下 —— 药丸和上面的字**一起**放大缩小
-- 环会**随内容变粗**，早上偏暖、深夜自己暗一点，环下面多了一层影子
+- **📌 截完直接「贴」到屏幕上**：截图浮层工具条最右边多了一颗钉子，框完点它，图立刻钉在你框的那块位置，**并且照常存进轮环**。以前要"截完 → 等轮盘拉出来 → 中键点缩略图"，隔着两步。
+- **环会「有反应」了**：拖出去时那一格会颤一下、朝拖的方向留一道拖痕（默认「留一份」，所以格子**不合拢** —— 图并没有走）；新截的那张亮一下再慢慢冷下去；图进来时环上扩散一圈涟漪；切轮盘时名字药丸翻一下（**药丸和上面的字一起**放大缩小）。环还会随内容变粗、早上偏暖深夜变暗、下面多一层影子。涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。
+- **点设置不再卡一下**：`new SettingsForm()` **250ms → 30ms**，快 9 倍。根因不是"哪段代码慢"，而是构造函数里**两行的先后顺序** —— 而两种写法**画出来逐像素一模一样**（13.5 万个采样点零差异），所以任何渲染测试都看不出来。
+- **动画不再掉帧**：定时抓屏经常抓到和手上**完全相同**的画面（你在看文档时就是这样），而换底那 0.38 秒里每一帧都在把一张图**淡入到它自己身上**。现在一样就直接换上，一帧都不用重画。
+- **修掉三个 bug**：绿提示的**消失**没有过渡（环是有的）、名字药丸的**字**不跟着动画缩放、设置窗口打开慢。
 
-涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。
-
-> 药丸那一条用户报得很准："胶囊的动画很不错，但是字不会和动画一起放大缩小"。
-> 我上一版只把**药丸的矩形**改大，字还是原字号、只是被重新居中 —— 看着就是"框动字不动"。
-> 现在整块内容绕中心一起缩放（一个变换），几何只有一份，不可能再一边动一边不动。
-> 检查量的是**字墨迹的包围盒**：静息 189 像素 → 翻到顶 212 像素。
-
-### 点设置不再卡一下：250ms → 30ms
-
-用户报"点设置后窗口出现较慢"。量下来 `new SettingsForm()` 要 **250ms**，而那 250ms 里屏幕上什么都不发生。
-
-一路拆到根因 —— **和"哪段代码慢"无关，是构造函数里两行的先后顺序**：
-
-| 写法 | 耗时 |
-|---|---|
-| 先 `ShowPage(0)` 建第 1 页、再 `Controls.Add(root)` 挂树（旧，注释还写着"全部建完才挂上去：整棵树只排一次"） | **255ms** |
-| 先挂树、再建页 | **29ms** |
-
-**而两种写法画出来逐像素一模一样**（831×653 的窗口，13.5 万个采样点零差异）——
-也就是说这个性能回归**任何渲染测试、任何探针都看不出来**，只有用户能感觉到"卡了一下"。
-正因为它"看不出来"，专门留了一条会红的断言盯着（门槛 120ms）。
-
-原因：页面挂在窗体上之后，布局和文字测量能走系统已经建好的那套上下文；在**还没挂到窗体**的树上布局，每个控件都要各自去建一次。实测布局耗时随控件数近似平方增长：9 个控件 101ms、17 个 278ms。
-
-### 动画掉帧：底图没变就不做交叉淡入
-
-用户报"动画偶尔掉帧"。从他机器上的帧日志看：**20% 的帧超过 25ms**，平均帧耗时中位数 20.6ms（正好压在预算线上）。
-
-分段计时定位到最大的一项：**换底时每帧要把两张整窗底图混一次，3.78ms**。
-
-而定时刷新每 3.5 秒抓一次屏，抓到的内容**经常和手上那张完全相同**（看文档、看网页、桌面没动的时候）——
-于是每一帧都在把一张图**淡入到它自己身上**，还要连累控件层缓存失效、整层重画。用户 10 秒里的 67 帧几乎全是这种白干的帧。
-
-现在换上之前先比一比**两片已经在内存里的位图**（`LockBits` 逐字节，3.5 秒才跑一次，约 1ms）；一样就直接换上、不碰过渡状态 —— 没有任何过渡要播，一帧都不用重画。
-
-> 顺带说一个**试了但实测更慢、已撤**的方向：把混色降到半分辨率。
-> 混色本身便宜了，但缩放采样比 1:1 贴图还贵 —— 3.78ms 反而涨到 5.31ms。
-
-### 绿提示的"消失"补上了过渡
-
-用户报："绿提示的出现消失、还有环的随之变绿复原，没有任何过渡"。他描述得很准 —— **出现有过渡、消失没有**。
-
-根因：我把提示内部改成按进度淡入淡出，但**调用处还卡着一个 `_dropActive` 布尔**。出现时它是 true，内部还有机会淡入；消失时它已经翻了 false，**调用处直接跳过** → 硬切。环那边读的是进度、不受影响，所以他看到的是"环有过渡、提示没有"。
-
----
-
-**1.0.0 的完整清单**：一条新功能（浮层贴图）、七项手感反馈、设置窗口快 9 倍、掉帧白干帧清零，以及三个用户报的 bug（绿提示消失硬切、药丸字不跟缩放、设置打开慢）。
+每一条的根因和量到的数字都写在 [v1.0.0 发布说明](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0)里。完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 版本历史
 
