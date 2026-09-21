@@ -847,6 +847,23 @@ namespace SnapWheel
                 // 反过来的话，刚截这张的"现在就滑进来"会被那张错峰表覆盖 —— 要等 1 秒多才动，
                 // 而且这期间视口还没跟过去（见 MarkNew），用户看到的就是"动画和位置合不上、突然闪现"。
                 _wheel.MarkNew(ni);              // only the brand-new shot plays the slide-in
+
+                // 1.0.0：在浮层里点了「贴图」——
+                // **先照常进轮环**（上面这一整套：入环、统计、重抓背景、拉出动画、MarkNew 全部照跑），
+                // 再额外钉一张到屏幕上。用户要的就是"框选完就能贴图，而且自动保存到轮环上"，
+                // 两件事都要，所以不是二选一的分支。
+                if (ov.WantPin)
+                {
+                    try
+                    {
+                        // 必须**克隆**：ov.Result 那张位图的所有权在轮环（StoreItem）手上，
+                        // 直接把同一个对象交给 PinForm，关掉贴图时 Dispose 会把环上那张也弄没。
+                        using (Bitmap pinImg = new Bitmap(ov.Result))
+                            OnPin(new Bitmap(pinImg), ov.PinAt);
+                        Usage.Ev("Pin.FromShot", "截图时直接贴图");
+                    }
+                    catch (Exception ex) { Err.Log("Pin.FromShot", ex); }
+                }
             }
             else if (wasExpanded)
             {

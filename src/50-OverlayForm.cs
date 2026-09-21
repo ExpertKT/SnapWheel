@@ -28,6 +28,14 @@ namespace SnapWheel
         public bool WantLongShot = false;
         public Rectangle LongShotRegion = Rectangle.Empty;
 
+        // 1.0.0：浮层工具条上的「贴图」按钮 —— 框完就能直接钉到屏幕上，
+        // 同时**照常存进轮环**（走的是原来那条 ov.Result 路，不是另开一条）。
+        // 之前贴图只能"截完 → 等轮盘拉出来 → 中键点缩略图"，中间隔着两步，
+        // 用户的原话是"框选完就能选择贴图"。
+        public bool WantPin = false;
+        // 钉哪儿：用**选区中心**（屏幕坐标），PinForm 会以它为中心摆好、并夹进屏幕范围
+        public Point PinAt = Point.Empty;
+
         bool _dragging;      // 新建选区
         Point _start;
         bool _moving;

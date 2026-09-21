@@ -71,7 +71,10 @@ namespace SnapWheel
         const int IdxLong = IdxBg + 5;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
         const int IdxSave = IdxBg + 6;     // 0.7.0：另存为（把当前框选含标注存到指定位置）
         const int IdxEmoji = IdxBg + 7;    // 0.7.0：贴 emoji（弹面板选一个，插入后可拖可缩放）
-        const int BtnCount = IdxBg + 8;
+        const int IdxPin = IdxBg + 8;      // 1.0.0：贴图（框完直接钉到屏幕上，同时照常进轮环）
+        // internal 而不是私有：测试要按它算工具条几何。**别再在测试里抄一份数字** ——
+        // ui-probe 里原来硬编码着 n=18，这次加一个按钮就直接过期了（纯函数测试会继续绿，但测的是旧几何）。
+        internal const int BtnCount = IdxBg + 9;
 
 
 
@@ -289,6 +292,26 @@ namespace SnapWheel
                         Close();
                     }
 
+                    else if (i == IdxPin)
+                    {
+                        // 1.0.0：框完直接贴到屏幕上，**同时照常存进轮环**。
+                        //
+                        // ⚠️ 这里必须调 Confirm()，不能自己写一句 DialogResult=OK; Close();
+                        //    第一版我照抄了上面「长图」那条出口（那句是给"交给 App 去跑另一件事"用的），
+                        //    结果 `Result` 是空的 —— 因为 Result 只在 Confirm() 里由 CropSelection 生成。
+                        //    那样图既不会进轮环、也不会进剪贴板，正好把用户要的"自动保存到轮环"弄没了。
+                        //    走 Confirm() 就等于"用户按了确定"，只是额外带一个"钉上去"的意图。
+                        WantPin = true;
+                        // 钉在**选区中心**：用户框哪儿，图就出现在哪儿。
+                        //
+                        // ⚠️ 别用 ScreenFor() 来算这个 —— 它是"**选区在哪块屏幕上**"（返回那块屏幕的
+                        //    Bounds），上面「长图」要的是那个（它要在整块屏上抓帧）。
+                        //    第一版我拿它的中心当坐标，结果不管框哪儿都钉到**显示器正中央**。
+                        //    这里要的是选区自己的位置：浮层的客户坐标 + 虚拟屏幕左上角 = 屏幕坐标
+                        //    （和 ScreenFor 内部换算用的是同一条约定：浮层左上角 = 虚拟屏幕左上角）。
+                        PinAt = new Point(_vs.Left + (int)_c.X, _vs.Top + (int)_c.Y);
+                        Confirm();
+                    }
                     else if (i == IdxSave) { SaveAs(); Invalidate(); return true; }
                     else if (i == IdxEmoji) { PickEmoji(); Invalidate(); return true; }
                     else if (i == IdxRedo) Redo();

@@ -229,6 +229,10 @@ if ($Test) {
     # 换底：新底和旧底一模一样时不许做交叉淡入 —— 定时抓屏经常抓到完全相同的画面，
     # 而淡入那 0.38 秒每帧要混两张整窗底图（实测 3.78ms，是最大单项）。
     Run-Test '换底跳过'       'glass-skip-test.cs'       'SnapWheel.GlassSkipTest' $null
+    # 截图浮层的「贴图」按钮：点它要**同时**钉到屏幕和存进轮环。
+    # 其中"Result 必须生成"这条最容易漏 —— 绕过 Confirm() 自己写出口，
+    # 看起来也是 OK 退出，但图既不进轮环也不进剪贴板。
+    Run-Test '浮层贴图'       'overlay-pin-test.cs'      'SnapWheel.OverlayPinTest' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null

@@ -145,7 +145,19 @@ namespace SnapWheel
                 Rectangle r = _toolBtns[i];
                 bool isTool = i < 6;
                 bool sel = isTool && ((AnnotKind)i == _tool);
-                if (sel || i == _toolHover)
+                // 1.0.0「贴图」按钮：**常亮实心**，不做成"又一个线条图标"。
+                // 用户原话："贴图按钮的存在感不能太弱"。
+                // 这条栏上其余全是"深底 + 细线条图标"，只在两种情况才有底色：鼠标悬停、以及
+                // **当前选中的工具**。贴图是唯一一个**永远**实心的 —— 所以哪怕选中的工具也在左边亮着，
+                // 它还是整条栏的视觉落点之一，一眼能找到。
+                bool isPin = (i == IdxPin);
+                if (isPin)
+                {
+                    using (GraphicsPath bp = Gfx.Round(r, 7f * _k))
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb((int)((i == _toolHover ? 255 : 232) * a / 255f), 0, 138, 228)))
+                        g.FillPath(b, bp);
+                }
+                else if (sel || i == _toolHover)
                 {
                     using (GraphicsPath bp = Gfx.Round(r, 7f * _k))
                     using (SolidBrush b = new SolidBrush(sel ? Color.FromArgb((int)(235 * a / 255f), 0, 122, 204)
@@ -272,6 +284,29 @@ namespace SnapWheel
                         g.DrawLine(pl, lx, ly + 7.5f * _k, lx, ly + 11f * _k);
                         g.DrawLine(pl, lx - 2.2f * _k, ly + 9f * _k, lx, ly + 11f * _k);
                         g.DrawLine(pl, lx + 2.2f * _k, ly + 9f * _k, lx, ly + 11f * _k);
+                    }
+                    break;
+                    case IdxPin:        // 贴图：一颗图钉（圆头 + 尖针），画在常亮底色上
+                    {
+                        float px = d2.Left + d2.Width / 2f, py = d2.Top + d2.Height / 2f;
+                        using (SolidBrush bw2 = new SolidBrush(Color.FromArgb(a, 255, 255, 255)))
+                        using (Pen pw2 = new Pen(Color.FromArgb(a, 255, 255, 255), 1.8f * _k))
+                        using (GraphicsPath pin = new GraphicsPath())
+                        {
+                            pw2.StartCap = LineCap.Round; pw2.EndCap = LineCap.Round;
+                            // 头 + 针放进**同一个路径、一次填充**。
+                            // 分两次填的话，圆头和针的重叠处会各抗锯齿一次，交界上留一道浅色接缝
+                            // （放大 6 倍能明显看到，像是断开的）。FillMode.Winding 会把并集填实。
+                            pin.FillMode = FillMode.Winding;
+                            pin.AddEllipse(px - 5.4f * _k, py - 8.2f * _k, 10.8f * _k, 10.8f * _k);
+                            pin.AddPolygon(new PointF[] {
+                                new PointF(px - 2.6f * _k, py + 1.6f * _k),
+                                new PointF(px + 2.6f * _k, py + 1.6f * _k),
+                                new PointF(px,             py + 8.6f * _k) });
+                            g.FillPath(bw2, pin);
+                            // 头上一道横杠：少了它看着像个气球不像图钉
+                            g.DrawLine(pw2, px - 4.6f * _k, py - 8.6f * _k, px + 4.6f * _k, py - 8.6f * _k);
+                        }
                     }
                     break;
                     case IdxSave:       // 另存为：向下箭头 + 底线（存盘）

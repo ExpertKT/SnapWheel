@@ -260,7 +260,8 @@ namespace SnapWheel
                 new Rectangle(0, 0, 1920, 1080),
             };
             RectangleF sel = new RectangleF(450, 410, 700, 420);   // 和上面的浮层探针同一块选区
-            const int bw = 34, bh = 30, gp = 6, outer = 6, n = 18; // OverlayForm 里的常量（96 DPI 下不缩放）
+            const int bw = 34, bh = 30, gp = 6, outer = 6;   // OverlayForm 里的常量（96 DPI 下不缩放）
+            int n = OverlayForm.BtnCount;                    // 直接引用真实常量，别再抄一份数字
             const int chipH = 32, chipW = 495;
 
             for (int i = 0; i < screens.Length; i++)
