@@ -36,6 +36,8 @@ namespace SnapWheel
         // 钉哪儿：用**选区中心**（屏幕坐标），PinForm 会以它为中心摆好、并夹进屏幕范围
         public Point PinAt = Point.Empty;
 
+        // 右键已经按下、还没抬起 —— 退出要等抬起的理由见 OnMouseUp
+        bool _rightPending;
         bool _dragging;      // 新建选区
         Point _start;
         bool _moving;
@@ -379,7 +381,7 @@ namespace SnapWheel
         // ---------- 交互 ----------
         protected override void OnMouseDown(MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Right) { Cancel(); return; }
+            if (e.Button == MouseButtons.Right) { _rightPending = true; return; }   // 退出见 OnMouseUp（等到抬起才关）
             if (e.Button != MouseButtons.Left) return;
             if (AnnotMouseDown(e)) return;
 
@@ -584,6 +586,16 @@ namespace SnapWheel
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            // ⚠️ 右键**必须等到抬起**才退出，不能在按下时就 Cancel()。
+            // 按下就关窗的话，紧接着那一下"右键抬起"会落到浮层**下面**的窗口上 ——
+            // 桌面收到抬起就弹右键菜单（用户报的"右键退出截图模式时会顺便右键到桌面，出来列表"）。
+            // 等到抬起再关，按下和抬起就都被浮层吃掉了，桌面什么也收不到。
+            // 浮层在按下时已经捕获了鼠标，所以抬起一定会回到这里，不会漏。
+            if (e.Button == MouseButtons.Right)
+            {
+                if (_rightPending) { _rightPending = false; Cancel(); }
+                return;
+            }
             if (AnnotMouseUp(e)) return;
             bool wasRotating = _rotating;
             _moving = false; _resizeCorner = -1; _rotating = false;

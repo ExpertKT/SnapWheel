@@ -232,7 +232,7 @@ if ($Test) {
     # 截图浮层的「贴图」按钮：点它要**同时**钉到屏幕和存进轮环。
     # 其中"Result 必须生成"这条最容易漏 —— 绕过 Confirm() 自己写出口，
     # 看起来也是 OK 退出，但图既不进轮环也不进剪贴板。
-    Run-Test '浮层贴图'       'overlay-pin-test.cs'      'SnapWheel.OverlayPinTest' $null
+    Run-Test '浮层交互'       'overlay-pin-test.cs'      'SnapWheel.OverlayPinTest' $null
     # 演示模式：默认轮盘对屏幕捕获隐身（自己截图不带它），但那个 API 连录屏一起挡了。
     # 这条盯"打开演示模式后真的能被录到、且立刻生效"。
     Run-Test '录屏可见'       'capture-visible-test.cs'  'SnapWheel.CaptureVisibleTest' $null

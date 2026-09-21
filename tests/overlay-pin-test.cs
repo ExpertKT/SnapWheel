@@ -143,6 +143,23 @@ namespace SnapWheel
                       res.Width + "x" + res.Height + " vs " + sel.Width + "x" + sel.Height);
 
             o2.Dispose();
+
+            // ⑤ 右键退出：**按下时不能关窗**，要等抬起。
+            // 按下就关的话，紧接着那一下"右键抬起"会落到浮层下面的窗口上，
+            // 桌面收到抬起就弹出右键菜单 —— 用户报的"右键退出截图模式时会顺便右键到桌面，出来列表"。
+            OverlayForm o3 = Make(sel, Point.Empty, out pinIdx);
+            MethodInfo mdown = typeof(OverlayForm).GetMethod("OnMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+            MethodInfo mup = typeof(OverlayForm).GetMethod("OnMouseUp", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (mdown == null || mup == null) { Check("⑤ 找得到鼠标事件方法", false, "OnMouseDown/OnMouseUp"); return; }
+            // 注意：这里**不看 IsDisposed** —— 测试里窗体从没 Show 过，Dispose 与否说明不了问题。
+            // 看的是 "有没有真的走退出这条路"：Cancel() 会把 DialogResult 设成 Cancel。
+            o3.DialogResult = DialogResult.None;
+            mdown.Invoke(o3, new object[] { new MouseEventArgs(MouseButtons.Right, 1, 400, 400, 0) });
+            Check("⑤ 右键**按下**时窗口不退出（要等抬起，否则抬起会漏给桌面）",
+                  o3.DialogResult == DialogResult.None, "按下就退了：DialogResult=" + o3.DialogResult);
+            mup.Invoke(o3, new object[] { new MouseEventArgs(MouseButtons.Right, 1, 400, 400, 0) });
+            Check("⑤ 右键**抬起**时才退出", o3.DialogResult == DialogResult.Cancel, "DialogResult=" + o3.DialogResult);
+            o3.Dispose();
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             Environment.ExitCode = fail == 0 ? 0 : 1;
