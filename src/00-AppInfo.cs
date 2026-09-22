@@ -17,7 +17,7 @@ namespace SnapWheel
 #if NO_KEY
         public const string Version = "0.2.22";   // 变体：多 Wheel + 框选缩放/锁定（无万能键）★ 0.2 线最终版
 #else
-        public const string Version = "1.0.0";   // 正式版：摘掉 BETA。功能冻结，此后只补"有生命感"那一类反馈
+        public const string Version = "1.0.1";   // 正式版：摘掉 BETA。功能冻结，此后只补"有生命感"那一类反馈
 #endif
         public const string Author = "exper7";
         public const string Name = "SnapWheel";
