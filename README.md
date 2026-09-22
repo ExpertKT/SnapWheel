@@ -1,6 +1,6 @@
 # SnapWheel 快照轮环
 
-**English** ・ [中文说明](#中文说明) ・ [⬇️ Download v1.0.0](https://github.com/ExpertKT/SnapWheel/releases/latest)
+**English** ・ [中文说明](#中文说明) ・ [⬇️ Download](https://github.com/ExpertKT/SnapWheel/releases/latest)
 
 **Screenshots that never become files.** Frame a region and the shot slides into a ring in the corner of your screen — drag it out when you need it, and it lands in whatever app you drop it on.
 
@@ -29,7 +29,7 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 
 ## Quick start
 
-1. Download `SnapWheel-v1.0.0-full.zip` from [Releases](../../releases), unpack anywhere.
+1. Download the **full** build from [Releases](../../releases) (the zip is named `SnapWheel-v…-full.zip`), unpack anywhere.
 2. Run `SnapWheel.exe`. It sits in the corner with a small pull-tab.
 3. Press `Ctrl+Shift+S`, drag a region, release. The shot lands in the ring.
 4. Drag the thumbnail into any app to use it — or click the **nail** on the capture toolbar to pin it on screen instead.
@@ -60,7 +60,7 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 
 ## Latest release
 
-**v1.1.0 — scrolling capture reworked.** It used to capture your whole screen instead of the area you framed, and the stitcher mis-aligned content. Both are fixed, and the notes say plainly what the technique cannot do: frame only the part that scrolls.
+**Latest: scrolling capture, reworked.** It used to capture your whole screen instead of the area you framed, and the stitcher mis-aligned content. Both are fixed, and the notes say plainly what the technique cannot do: frame only the part that scrolls.
 
 [See all changes →](https://github.com/ExpertKT/SnapWheel/releases) · [CHANGELOG](CHANGELOG.md)
 
@@ -155,7 +155,7 @@ MIT — see [LICENSE](LICENSE).
 
 ### 最新版
 
-**v1.1.0 —— 滚动长截图重做。** 以前它抓的是整块屏幕、不是你框的那块，拼接位置也会算错。两样都修了，并且把用法边界写清楚了：**只框会跟着滚的那块内容**（边栏、悬浮窗不跟着滚，会被重复拼进去）。
+**最新版：滚动长截图重做。** 以前它抓的是整块屏幕、不是你框的那块，拼接位置也会算错。两样都修了，并且把用法边界写清楚了：**只框会跟着滚的那块内容**（边栏、悬浮窗不跟着滚，会被重复拼进去）。
 
 [全部更新内容 →](https://github.com/ExpertKT/SnapWheel/releases) ・ [CHANGELOG](CHANGELOG.md)
 

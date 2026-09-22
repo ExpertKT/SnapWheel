@@ -55,11 +55,30 @@ try { $majorVer = [int]($Version.Split('.')[0]) } catch { $majorVer = 0 }
 $statusWord = if ($majorVer -ge 1) { 'stable-brightgreen' } else { 'BETA-orange' }
 $text = Swap $text 'status-[A-Za-z0-9.]+-(orange|brightgreen|green|yellow|blue)' ("status-" + $statusWord) '状态徽章'
 
-if ($text -eq $orig) {
+$readmeChanged = ($text -ne $orig)
+if ($readmeChanged) { [System.IO.File]::WriteAllText($readme, $text, (New-Object System.Text.UTF8Encoding($false))) }
+
+# ⑤ 包里那份 使用说明.txt 的第一行版本号。
+# 同一个道理：它是**从构建结果推出来的**，写死在文件里迟早和 exe 对不上
+# （实测已经发生过一次：文档停在 v0.5.1，而包里的 exe 已经是 v1.1.0）。
+# 这是"同一个事实写在两个地方"的又一个形状 —— 让它由构建同步。
+$manualChanged = $false
+$manual = Join-Path $root 'dist\使用说明.txt'
+if (Test-Path $manual) {
+    $mt = [System.IO.File]::ReadAllText($manual, [System.Text.Encoding]::UTF8)
+    $mt2 = [regex]::Replace($mt, '(?m)^SnapWheel 快照轮环\s+v\d+\.\d+\.\d+', ("SnapWheel 快照轮环  v" + $Version), 1)
+    if ($mt2 -ne $mt) {
+        [System.IO.File]::WriteAllText($manual, $mt2, (New-Object System.Text.UTF8Encoding($false)))
+        $manualChanged = $true
+    }
+}
+
+if (-not $readmeChanged -and -not $manualChanged) {
     Write-Host "  [OK] README 同步    v$Version / $kb KB（本来就是最新的）" -ForegroundColor Green
     exit 0
 }
-
-[System.IO.File]::WriteAllText($readme, $text, (New-Object System.Text.UTF8Encoding($false)))
-Write-Host ("  [OK] README 同步    v{0} / {1} KB  改动：{2}" -f $Version, $kb, ($changes -join '、')) -ForegroundColor Green
+$what = @()
+if ($readmeChanged) { $what += ($changes -join '、') }
+if ($manualChanged) { $what += '使用说明版本号' }
+Write-Host ("  [OK] README 同步    v{0} / {1} KB  改动：{2}" -f $Version, $kb, ($what -join '、')) -ForegroundColor Green
 exit 0
