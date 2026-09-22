@@ -371,10 +371,13 @@ namespace SnapWheel
                        + "The result window can translate to Chinese or English in one click. Without capturing: tray > OCR the clipboard image. "
                        + "It uses the Windows built-in recognition engine, no network needed."));
             AddTip(x, ref y, "0.6.0", Lang.T("滚动长截图：一整页长图", "Scrolling capture: one long image"),
-                Lang.T("截图浮层上点「长图」，然后自己慢慢往下滚页面，它会自动把各屏拼成一张完整的长图，"
-                       + "并且会自动避开底部那一条会变动的区域（比如任务栏、进度条）。",
-                         "In the capture overlay click the long-shot button, then scroll the page yourself; it stitches the screens "
-                       + "into one image and automatically avoids the changing strip at the bottom (taskbar, progress bars)."));
+                Lang.T("截图浮层上点「长图」，然后自己慢慢往下滚页面，它会自动把各屏拼成一张完整的长图。"
+                       + "**框选时只框会跟着滚的那块内容** —— 左边栏、浏览器标签栏、悬浮窗这些**不跟着滚**的东西，"
+                       + "会被当成新内容一屏一屏地重复拼进去（这是长截图这种做法的边界，同类工具都一样）。"
+                       + "任务栏那一条已经自动排除了，不用自己躲。",
+                         "In the capture overlay click the long-shot button, then scroll the page yourself; it stitches the screens into one long image. "
+                       + "Frame ONLY the part that scrolls: sidebars, browser toolbars and floating panels do not scroll, so they get stitched in again "
+                       + "on every screen (that is the limit of this technique, the same for every tool). The taskbar is excluded automatically."));
             AddTip(x, ref y, "0.7.0", Lang.T("另存为 / 直接复制", "Save as / copy"),
                 Lang.T("缩略图上按 Ctrl+S 可以「另存为」（选路径和格式）；直接点一下缩略图则是把这张图复制到剪贴板。",
                          "Ctrl+S on a thumbnail opens Save-as (path and format); a plain click copies that image to the clipboard."));

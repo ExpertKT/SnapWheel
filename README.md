@@ -13,7 +13,7 @@
 | 🎯 **Capture into the corner** | `Ctrl+Shift+S`, drag a region — no save dialog, no window switching, no file hunting |
 | ↔️ **Drag out to send** | Drop a thumbnail into WeChat / Word / Explorer / any app, release, done. Copy semantics: the ring keeps a copy |
 | 📌 **Pin to screen** | Click the **nail** at the right end of the capture toolbar — the shot is pinned where you framed it **and** goes into the ring |
-| 📜 **Scrolling capture** | Frame an area and it scrolls + stitches a long image by itself, stopping when the page ends |
+| 📜 **Scrolling capture** | Frame an area — **only the part that scrolls** — and it stitches a long image by itself, stopping when the page ends |
 | 🔍 **OCR + translation** | Copy text out of any screenshot, translate it in one click. Works on dark, low-contrast text |
 | ↩️ **Undoable** | Undo the last delete (the last 8 are kept). Nothing is written outside `%APPDATA%` |
 
@@ -56,7 +56,16 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 | Browse | Scroll the wheel over the ring |
 | Rename | Click the name pill |
 | Import | Tray menu → Import images… |
-| Scrolling capture | Open the capture overlay, frame the area, click the long-image button on the toolbar. It scrolls and stitches; `Enter` finishes early, `Esc` cancels |
+| Scrolling capture | Open the capture overlay, frame the area — **frame ONLY the part that scrolls** — then click the long-image button. It scrolls and stitches; `Enter` finishes early, `Esc` cancels |
+
+## What's new in 1.1
+
+**Scrolling capture, reworked.** It was capturing the wrong region and stitching it wrong — this release fixes both, and is explicit about what the technique cannot do.
+
+- **It was capturing your whole screen, not the area you framed.** The helper used to resolve the region returned *which monitor the point is on*, not the selection — so the taskbar (and everything else) ended up in the long image. The field it feeds was always documented as "the selection".
+- **The region is now clamped to the work area**, so framing the whole screen no longer pulls the taskbar in.
+- **Two real bugs in the stitcher.** The row-matching helper had the **scroll direction reversed** (it compared `prev[y-d]` where it should be `prev[y+d]`), so the check never actually fired on a real screen; and the bottom rows — whose reference row is *off-screen*, because that content just scrolled in — were classified as "not moving", shifting every stitch up by one scroll step. That is the doubling users saw: the repeat period in a real long image measured **125 rows**, exactly the single-frame scroll step in the engine log.
+- **⚠️ What it cannot do.** Frame **only the part that scrolls**. Sidebars, browser toolbars and floating panels do **not** scroll, so they get stitched in again on every screen. That is the limit of this technique (the same for every tool), not an implementation detail — the alternative, "auto-detect which strip isn't moving", proved undecidable: a static region and a row that merely fails to match look identical pixel-wise.
 
 ## What's new in 1.0
 
@@ -154,11 +163,20 @@ MIT — see [LICENSE](LICENSE).
 | 🎯 **截图进角落** | `Ctrl+Shift+S` 框一块 —— 不弹保存框、不切窗口、不用翻文件夹 |
 | ↔️ **拖出去就是发出去** | 缩略图拖进微信 / Word / 资源管理器 / 任何程序，松手就到。**复制语义**：环上留着一份 |
 | 📌 **贴到屏幕上**（1.0 新增） | 截图浮层工具条最右边那颗**钉子**：框完点它，图钉在你框的位置，**同时照常进轮环** |
-| 📜 **滚动长截图** | 框一块区域，它自己滚、自己拼，翻到底自动停 |
+| 📜 **滚动长截图** | 框一块区域，它自己滚、自己拼，翻到底自动停（**只框会滚的那块** —— 边栏和悬浮窗不跟着滚，会被重复拼进去）|
 | 🔍 **取字 + 翻译** | 圈住文字就能复制，一键翻成中文 / 英文。暗色小字也认得准 |
 | ↩️ **删错了能后悔** | 撤销上一次删除（保留最近 8 次）。除了 `%APPDATA%`，不往任何地方写东西 |
 
 绿色免安装 · 免注册表（开机自启可选）· 不打包任何模型文件 · **零第三方依赖**。
+
+### 这次更新（v1.1.0）
+
+**滚动长截图重做。** 之前它抓错了地方、也拼错了地方 —— 这一版两样都修了，并且把它**做不到**的事说清楚。
+
+- **它抓的一直是整块屏幕，不是框选的那块。** 那个换算函数返回的是"这个点在**哪块显示器**上"，不是选区 —— 所以任务栏（还有别的一切）都被拍进了长图。而它喂给下游的那个字段，注释一直写着"就是浮层里的选区"。
+- **抓帧区域现在夹进工作区**：框整屏时任务栏那一条自动排除。
+- **拼接引擎里两个真错误。** 一个是判断"这一行跟不跟着滚"的小工具**滚动方向写反了**（写成 `prev[y-d]`，应该是 `prev[y+d]`），于是那条判据**在真机上从来没触发过**；另一个是屏幕**最底下那几行**的参照行在屏幕外（那些内容刚滚进来，上一帧里根本没有），却被算成"不动的区域"，**每一帧的贴图位置都往上一偏**。用户看到的内容重复就是这么来的：真机长图里量出来的重复周期是 **125 行**，而引擎日志里的单帧滚动量也正好是 **125**。
+- **⚠️ 它做不到什么。** 框选时**只框会跟着滚的那块内容**。左边栏、浏览器标签栏、悬浮窗这些**不跟着滚**的东西，会被当成新内容**一屏一屏地重复拼进去**。这是长截图这种做法的边界（同类工具都一样），不是实现细节 —— 我们试过"自动检测哪一条不跟着滚"，结论是**它判不出来**：一个不动的区域，和一段恰好对不上滚动的正文，在逐行像素上是同一个形态。
 
 ### 这次更新（v1.0.0 正式版）
 
