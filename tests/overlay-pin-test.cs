@@ -87,11 +87,13 @@ namespace SnapWheel
             return o;
         }
 
-        static void ClickPin(OverlayForm o, int pinIdx)
+        static void ClickPin(OverlayForm o, int pinIdx) { ClickBtn(o, pinIdx); }
+
+        static void ClickBtn(OverlayForm o, int idx)
         {
             Rectangle[] btns = (Rectangle[])G(o, "_toolBtns");
-            Point pt = new Point(btns[pinIdx].Left + btns[pinIdx].Width / 2,
-                                 btns[pinIdx].Top + btns[pinIdx].Height / 2);
+            Point pt = new Point(btns[idx].Left + btns[idx].Width / 2,
+                                 btns[idx].Top + btns[idx].Height / 2);
             MethodInfo md = typeof(OverlayForm).GetMethod("OnMouseDown",
                 BindingFlags.NonPublic | BindingFlags.Instance);
             if (md == null) throw new Exception("找不到 OnMouseDown");
@@ -160,6 +162,29 @@ namespace SnapWheel
             mup.Invoke(o3, new object[] { new MouseEventArgs(MouseButtons.Right, 1, 400, 400, 0) });
             Check("⑤ 右键**抬起**时才退出", o3.DialogResult == DialogResult.Cancel, "DialogResult=" + o3.DialogResult);
             o3.Dispose();
+
+            // ⑥ 长截图的抓帧区域必须是**选区**，不是整屏。
+            // 用户报："长截图功能会把任务栏截进去"。
+            // 根因：这里原来用的是 ScreenFor() —— 名字像"给我这个点的屏幕坐标"，
+            // 实际返回的是「**这个点在哪块显示器上**」（那块屏的 Bounds）。
+            // 拿它当抓帧区域 = 抓整屏，任务栏自然就进去了。
+            // LongShotForm 的字段注释本来就写着"就是浮层里的选区"，本意如此、只是值一直传错。
+            OverlayForm o4 = Make(sel, Point.Empty, out pinIdx);
+            ClickBtn(o4, OverlayForm.IdxLong);
+            Rectangle reg = (Rectangle)G(o4, "LongShotRegion");
+            bool wantLong = (bool)G(o4, "WantLongShot");
+            Rectangle screen = new Rectangle(0, 0, W, H);
+
+            Console.WriteLine("  选区 {0}  ->  抓帧区域 {1}", sel, reg);
+            Check("⑥ 点长图 -> WantLongShot 为真", wantLong, "还是 false，说明没命中按钮");
+            Check("⑥ 抓帧区域 = 选区（不是整屏 —— 整屏就会把任务栏截进去）",
+                  Math.Abs(reg.Left - sel.Left) <= 2 && Math.Abs(reg.Top - sel.Top) <= 2 &&
+                  Math.Abs(reg.Width - sel.Width) <= 2 && Math.Abs(reg.Height - sel.Height) <= 2,
+                  "抓的是 " + reg + "，选区是 " + sel);
+            Check("⑥ 抓帧区域明显小于整屏（退化成整屏就是那个 bug）",
+                  reg.Width < screen.Width - 8 || reg.Height < screen.Height - 8,
+                  "抓的是 " + reg + "，屏幕是 " + screen);
+            o4.Dispose();
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
             Environment.ExitCode = fail == 0 ? 0 : 1;

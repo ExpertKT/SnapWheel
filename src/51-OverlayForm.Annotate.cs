@@ -68,7 +68,8 @@ namespace SnapWheel
         const int IdxSizeUp = IdxBg + 2;
         const int IdxUndo = IdxBg + 3;
         const int IdxRedo = IdxBg + 4;     // 0.9.10：重做（撤销的反向，只有撤销一直很别扭）
-        const int IdxLong = IdxBg + 5;      // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘)
+        internal const int IdxLong = IdxBg + 5;   // 0.6.0：滚动长截图（拿当前选区当抓帧区域，不再走托盘）
+        // internal：测试要按它点按钮。**别再在测试里抄一份下标** —— ui-probe 抄过的 n=18 就这么过期的。
         const int IdxSave = IdxBg + 6;     // 0.7.0：另存为（把当前框选含标注存到指定位置）
         const int IdxEmoji = IdxBg + 7;    // 0.7.0：贴 emoji（弹面板选一个，插入后可拖可缩放）
         const int IdxPin = IdxBg + 8;      // 1.0.0：贴图（框完直接钉到屏幕上，同时照常进轮环）
@@ -287,7 +288,22 @@ namespace SnapWheel
                     {
                         // 0.6.0：把当前选区交给 App 去跑滚动长截图（只拼这一块，不再抓整屏）
                         WantLongShot = true;
-                        LongShotRegion = ScreenFor(_vs, new Point((int)_c.X, (int)_c.Y), _hasSel);
+                        // ⚠️ 这里**绝对不能**用 ScreenFor()。
+                        //    它是个容易看错的函数：名字像"给我这个点的屏幕坐标"，
+                        //    实际返回的是「**这个点在哪块显示器上**」—— 也就是那块屏的 Bounds。
+                        //    拿它当抓帧区域等于抓**整个屏幕**，任务栏自然就跟着进长图了
+                        //    （用户报的"长截图会把任务栏截进去"就是这么来的）。
+                        //    LongShotForm 那边的字段注释本来就写着"就是浮层里的选区" ——
+                        //    本意如此，只是这个值从 0.6.0 起一直传的是整屏。
+                        //
+                        //    要的是选区在**屏幕坐标**下的矩形：浮层的客户坐标 + 虚拟屏幕左上角
+                        //    （和 ScreenFor 内部换算是同一条约定）。
+                        RectangleF sb = SelBounds();
+                        int lx = (int)Math.Floor(sb.Left), ly = (int)Math.Floor(sb.Top);
+                        LongShotRegion = new Rectangle(
+                            _vs.Left + lx, _vs.Top + ly,
+                            Math.Max(1, (int)Math.Ceiling(sb.Right) - lx),
+                            Math.Max(1, (int)Math.Ceiling(sb.Bottom) - ly));
                         DialogResult = DialogResult.OK;
                         Close();
                     }
