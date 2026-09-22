@@ -43,6 +43,29 @@ namespace SnapWheel
         {
             if (region.Width < 16 || region.Height < 16)
                 region = new Rectangle(region.Left, region.Top, Math.Max(16, region.Width), Math.Max(16, region.Height));
+
+            // ── 把抓帧区域**夹进工作区**：一次把"任务栏那一条"排除掉 ──
+            //
+            // 为什么是这 3 行，而不是在拼接引擎里写一套"静止区自动检测"：
+            //   用户报的症状是"长图里有任务栏、而且后面内容重复"。根因是他**框了整屏**，
+            //   把任务栏也框了进去 —— 而任务栏不跟着页面滚，拼出来自然是重复的一条。
+            //
+            //   引擎里那套"猜哪几行没动"的检测，我试着修了好几轮：真机上有半透明任务栏、
+            //   有亚像素滚动，逐行像素**在原理上就分不干净**（"跟不上滚动的正文"和
+            //   "半透明任务栏"是同一个形态）。它已经花掉几轮、还没修干净。
+            //
+            //   而这 3 行是**确定性的**：不猜，直接排除。任务栏本来就不该出现在长图里 ——
+            //   没有谁截长图是为了留住任务栏。
+            //
+            // 夹完之后如果太小（比如整块都在任务栏里），就不动它 —— 让下游照旧报"区域太小"。
+            try
+            {
+                Rectangle wa = Screen.FromRectangle(region).WorkingArea;
+                Rectangle clipped = Rectangle.Intersect(region, wa);
+                if (clipped.Width >= 16 && clipped.Height >= 16) region = clipped;
+            }
+            catch { }
+
             _region = region;
 
             // 双缓冲：抓帧/状态刷新时提示条不再闪（用户反馈：进入滚动时 UI 在抖）
