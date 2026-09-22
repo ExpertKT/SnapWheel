@@ -120,14 +120,14 @@ MIT — see [LICENSE](LICENSE).
 
 **SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
 
-绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个 371 KB 的 exe，Windows 10 / 11 双击就跑。
+绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个 372 KB 的 exe，Windows 10 / 11 双击就跑。
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![version](https://img.shields.io/badge/version-v1.1.0-blue?style=flat-square)
 ![status](https://img.shields.io/badge/status-stable-brightgreen?style=flat-square)
-![size](https://img.shields.io/badge/exe-371%20KB-lightgrey?style=flat-square)
+![size](https://img.shields.io/badge/exe-372%20KB-lightgrey?style=flat-square)
 ![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
 ![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
 
