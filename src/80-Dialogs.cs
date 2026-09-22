@@ -237,24 +237,70 @@ namespace SnapWheel
         // 为什么抽成方法：窗口现在是**可缩放**的（和设置界面一样），宽度一变，
         // 每一段文字都要重新折行、每段的高度也跟着变 —— 必须整套重排，只改坐标是错的。
         // 重排前先把滚动宿主里的旧标签丢掉、并清掉滚动器的登记，否则旧的会留在原地叠着。
-        // 窗口被拖动之后：**按新宽度整套重排**。
+        // 拖动窗口时**绝不能每动一下就整套重排**。
+        // BuildTips 要重建几十个标签、还要逐段量文字，一次几十毫秒 ——
+        // 拖动中 OnResize 每动一下就触发，全跑一遍就是"拖起来一顿一顿、不连贯"的来源。
+        //
+        // 所以拆成两半：
+        //   · 便宜的（按钮和提示条贴底、可视高度）**立刻**做 —— 手一动就跟着走；
+        //   · 贵的（重新折行、重算高度）**等手停下来**再做（下面那个 140ms 的定时器）。
+        System.Windows.Forms.Timer _relayout;
+
+        void ScheduleRelayout()
+        {
+            if (_relayout == null)
+            {
+                _relayout = new System.Windows.Forms.Timer();
+                _relayout.Interval = 140;
+                _relayout.Tick += delegate(object o, EventArgs e2) { _relayout.Stop(); DoRelayout(); };
+            }
+            _relayout.Stop();
+            _relayout.Start();
+        }
+
+        void DoRelayout()
+        {
+            if (_go == null || _title == null) return;
+            int mL = Ui.S(PadL), mR = Ui.S(PadR);
+            _contentW = Math.Max(Ui.S(200), ClientSize.Width - mL - mR);
+            int contentH = BuildTips(mL, _title, _subtitle) + _btnRowH;
+            FitScroll(contentH);
+            Gfx.RepaintAll(this);
+        }
+
+        // 按钮和提示条永远贴着窗口**下沿**。
+        // ⚠️ 提示条是**跟着按钮走的**（见构造函数里那句），拖窗口时必须一起挪 ——
+        //    我上一版只挪了按钮、漏了它，于是"内容较多的小提示不随窗口下沿动"。
+        void StickBottom()
+        {
+            if (_go == null) return;
+            _go.Top = ClientSize.Height - Ui.S(22) - _go.Height;
+            if (_scrollHint != null)
+                _scrollHint.Top = _go.Top + (_go.Height - _scrollHint.Font.Height) / 2;
+        }
+
+        void FitScroll(int contentH)
+        {
+            int viewH = ClientSize.Height - _btnRowH;
+            if (viewH < Ui.S(80)) return;
+            if (_scrollHost != null) _scrollHost.Size = new Size(ClientSize.Width, viewH);
+            _sc.Finish(contentH, viewH);
+            if (_scrollHint != null) _scrollHint.Visible = _sc.Active;
+            StickBottom();
+        }
+
+        // 窗口被拖动：便宜的那半立刻做，贵的那半排程。
         // 这就是"和设置界面一样"的那一步 —— 宽度一变，每段文字重新折行、高度重算，
         // 而不是只把窗口拉大、内容还按老宽度切着。
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
             if (_go == null || _title == null) return;          // 布局还没建完
-            int mL = Ui.S(PadL), mR = Ui.S(PadR);
-            _contentW = Math.Max(Ui.S(200), ClientSize.Width - mL - mR);
-            int y = BuildTips(mL, _title, _subtitle);
-            int contentH = y + _btnRowH;
+            StickBottom();                                       // 按钮 + 提示条：立刻跟着下沿走
             int viewH = ClientSize.Height - _btnRowH;
-            if (viewH < Ui.S(80)) return;                        // 拖太小了，先不排
-            if (_scrollHost != null) _scrollHost.Size = new Size(ClientSize.Width, viewH);
-            _sc.Finish(contentH, viewH);
-            if (_scrollHint != null) _scrollHint.Visible = _sc.Active;
-            _go.Top = ClientSize.Height - Ui.S(22) - _go.Height;
-            Gfx.RepaintAll(this);
+            if (viewH >= Ui.S(80) && _scrollHost != null)
+                _scrollHost.Size = new Size(ClientSize.Width, viewH);
+            ScheduleRelayout();                                  // 重新折行：等手停下来
         }
 
         int BuildTips(int x, string title, string subtitle)
