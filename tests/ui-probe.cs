@@ -126,7 +126,9 @@ namespace SnapWheel
                     int hNarrow = 0;
                     foreach (Control c in g1.Controls) if (c is Panel) foreach (Control k in c.Controls) hNarrow = Math.Max(hNarrow, k.Bottom);
                     g1.Width = g1.Width + 260;                 // 拖宽
-                    Application.DoEvents();
+                    // ⚠️ 重排是**防抖**的（拖动中每动一下就整套重排会卡，见 GuideForm.OnResize）：
+                    //    所以要等那个 140ms 的定时器真的跑完，再量。
+                    for (int w = 0; w < 12; w++) { Application.DoEvents(); System.Threading.Thread.Sleep(25); }
                     int hWide = 0;
                     foreach (Control c in g1.Controls) if (c is Panel) foreach (Control k in c.Controls) hWide = Math.Max(hWide, k.Bottom);
                     Console.WriteLine("      内容总高：窄 {0} -> 宽 {1}", hNarrow, hWide);
