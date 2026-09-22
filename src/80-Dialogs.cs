@@ -339,7 +339,18 @@ namespace SnapWheel
                        + "Alt+Tab to your target window yourself, steer the cursor with the arrow keys (or WASD) and press Space to drop - "
                        + "it performs a real mouse drag for you, so it works with any window that accepts drops. "
                        + "[ ] switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
-            AddTip(x, ref y, "0.5.0", Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
+            // ⚠️ 这一条原来是**两条**：「要对照着看：贴到屏幕上」(0.5.0) 和
+            // 「截完不用等，直接贴到屏幕上」(1.0.0) —— 标题几乎一样、讲的都是贴图，
+            // 只是方法不同（中键 / 浮层那颗钉子），却在列表里隔了好几条。
+            // 读的人会以为是重复的。合成一条：先说最顺手的（框完直接点钉子），再说中键那条老路。
+            AddTip(x, ref y, "1.0.0", Lang.T("贴到屏幕上：钉着对照看", "Pin it on screen"),
+                Lang.T("**截图浮层工具条最右边那颗钉子**：框完点它，图立刻钉在你框的那块位置，"
+                       + "**并且照常存进轮环** —— 不用再等轮盘拉出来。那颗钉子的底色是**常亮**的"
+                       + "（这条栏上别的一律是深底细线条），一眼就能找到。"
+                       + "也可以缩略图上按一下鼠标中键：滚轮缩放、拖着挪位置、双击或 Esc 关掉，"
+                       + "托盘能一键收掉全部贴图。"
+                       + "钉出来的图和轮环里是**各自独立**的：关掉贴图不会影响环上那张。",
+                         "Click the **nail at the right end of the capture toolbar**: the shot is pinned where you framed it and it still goes into the ring, so there is no waiting for the wheel. The nail has a permanently lit background, so it is easy to find. You can also middle-click a thumbnail: scroll to zoom, drag to move, double-click or Esc to close, and the tray can close them all at once. The pinned copy and the ring copy are independent."));
             AddTip(x, ref y, "0.9.5", Lang.T("截图里少了某个窗口？（是那个程序自己不让人截）", "A window missing from the capture? (that app is blocking it)"),
                 Lang.T("最典型的是微信：按下截图热键后，浮层上微信的位置直接是它背后的桌面 —— 看起来像「微信突然消失了」。"
                        + "这不是 SnapWheel 的问题：微信给 Windows 设了「把我排除在截屏之外」（WDA_EXCLUDEFROMCAPTURE），"
@@ -395,18 +406,7 @@ namespace SnapWheel
                          "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
                        + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
 
-            AddTip(x, ref y, "1.0.0", Lang.T("截完不用等，直接「贴」到屏幕上", "Pin it straight from the capture"),
-                Lang.T("截图浮层工具条最右边多了一颗**钉子**：框完点它，图立刻钉在你框的那块位置，"
-                       + "**并且照常存进轮环** —— 不用再等轮盘拉出来、再用中键去点缩略图。"
-                       + "那颗钉子的底色是**常亮**的（这条栏上别的一律是深底细线条），一眼就能找到。"
-                       + "钉出来的图和轮环里是**各自独立**的：关掉贴图不会影响环上那张。",
-                         "A nail now sits at the right end of the capture toolbar. Click it and the shot is pinned on screen "
-                       + "at the spot you framed - and it still goes into the ring as usual, so there is no more waiting for "
-                       + "the wheel to slide out and middle-clicking a thumbnail. The nail has a permanently lit background "
-                       + "(everything else on that bar is a thin line icon on a dark background), so it is easy to find. "
-                       + "The pinned copy and the ring copy are independent: closing the pin does not affect the ring."));
-
-            AddTip(x, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
+AddTip(x, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
                 Lang.T("这一版除了上面那颗钉子，补的主要是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
                        + "（默认是「留一份」，所以格子**不合拢** —— 图并没有走）；**新截的那张**会亮一下再慢慢冷下去，"
                        + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下"
