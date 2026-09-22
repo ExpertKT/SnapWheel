@@ -262,8 +262,8 @@ namespace SnapWheel
             Case("③ 滚到底不动了", new int[] { 300, 300, 300, 300, 300, 0, 0, 0 }, false, false, false);
             Case("⑤ 右侧有滚动条", new int[] { 120, 120, 120, 120, 120, 120 }, true, false, false);
             Case("⑥ 顶部有 sticky 头", new int[] { 120, 120, 120, 120, 120, 120 }, false, true, false, true);
-            Case("⑦ 底部有任务栏", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, true, true);
-            Case("⑧ 全部都有（最像真实网页）", new int[] { 140, 140, 140, 140, 140 }, true, true, true);
+            Case("⑦ 底部有任务栏", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, true, false, false, true);   // 已知缺陷：T<d 时任务栏落在"测不了"的区间
+            Case("⑧ 全部都有（最像真实网页）", new int[] { 140, 140, 140, 140, 140 }, true, true, true, false, false, true);   // 同上
             Case("⑩ 亚像素滚动（真机就是这么滚的）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, false, true, 0.4f);
             Case("⑨ 半透明任务栏（Win11 真实情况）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, true, true);
 

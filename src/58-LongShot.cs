@@ -163,21 +163,25 @@ namespace SnapWheel
             //    先看滚动假设：**空白行在滚动假设下也成立**（两边都白）→ 直接停、still=0。
             //    这正是我们要的保守默认 —— 宁可当成"会滚"，也不要凭空抬高 srcY。
             //    只有"滚动假设不成立、静止假设成立"的行才算静止区。
-            int still = 0;
             int bandBot2 = (int)(_h * BandCenterFrac) + BandRows / 2;   // 和 Find 里那条模板带同一条
             int stillCap = _h - bandBot2 - 2;
-            for (int y = _h - 1; y > bandBot2 && still < stillCap; y--)
+            // ⚠️⚠️ **只在"两个假设都验得了"的行里找静止区** —— 也就是从 `h-d-1` 往上扫。
+            //
+            // 屏幕最底下那 d 行，参照行（本帧 y+d 行）在**屏幕外**：那些内容本来就不在上一帧里，
+            // 是刚滚进来的。所以拿它们判"跟不跟得上滚动"是**问不出答案的**。
+            // 旧代码从 `h-1` 开始扫，于是每一帧都至少把 d 行算成"静止" → `still >= d` →
+            // `srcY = h - still - d` 每帧往上一挪 d → **每段重复一次、周期正好 = d**。
+            // 用户那张真长图量出来的重复周期是 125，而引擎日志里 d 也正好是 125 —— 完全对上。
+            //
+            // 底部那 d 行怎么办：如果紧挨着它们上面的那段是静止的，就认为静止区**一直延伸到屏幕底边**
+            // （任务栏正是这样）；否则它们就是普通的新内容。
+            int stillAbove = 0;
+            for (int y = _h - addedRows - 1; y > bandBot2 && stillAbove < stillCap; y--)
             {
-                // 已知缺陷（1.1.0 未解决）：**Windows 11 的任务栏是半透明的**，底下的页面内容会透出来，
-                // 于是它在两帧之间**并不像素相同**。第二条（要求同位置也一样）会立刻收手、still=0，
-                // 结果每帧都把底部任务栏当成"新露出的内容"贴进长图 → 任务栏反复出现、
-                // 后面还跟着重复的内容（用户报的"任务栏还是会有、后面都有重复截的部分"）。
-                // 试过只留第一条（"跟不上滚动"就算静止）：半透明任务栏对了，但 ②③⑧ 三个用例退化了
-                // （帧没有滚动时"整块都像静止"），所以先退回这个版本、把缺陷留在测试里可见。
-                if (RowDiffOffset(_prev, cur, _sw, y, addedRows) <= 3.0) break;   // 跟着滚了
-                if (RowDiff(_prev, cur, _sw, y) > 3.0) break;                     // 既不像滚也不像静止：收手
-                still++;
+                if (RowDiffOffset(_prev, cur, _sw, y, addedRows) <= 3.0) break;   // 跟得上滚动 → 静止区到此为止
+                stillAbove++;
             }
+            int still = stillAbove > 0 ? stillAbove + addedRows : 0;
             // ⚠️ take 必须就是"实际画了几行"。
             //    原来是 take/srcY/_canvasH 三个量分开算的，srcY<0 时 take 会变成 _h-still、
             //    比真正画上去的 addedRows 大，于是画布上留下空行 —— **之后每一帧的落点整体偏移**。
@@ -358,8 +362,14 @@ namespace SnapWheel
         static double RowDiffOffset(byte[] a, byte[] b, int sw, int y, int d)
         {
             if (a == null || b == null) return 999;
-            int y2 = y - d;
-            if (y2 < 0) return 999;
+            // ⚠️⚠️ 方向：**页面往下滚 d，内容往上走** —— 所以"上一帧的 y+d 行"才是"这一帧的 y 行"：
+            //      cur[y] == prev[y + d]
+            // 这里原来写的是 y-d（**符号反了**），于是一直在拿"错位的两行"比，
+            // 正文行的 dScroll 永远是大的（实测 81.8），"跟得上滚动"那条判据**从来没真正生效过**，
+            // 全靠后面那句"两不像就收手"兜着 —— 这也正是"一去掉那句就全线崩"的原因。
+            // （匹配器里的 AddBand 用 y-d 是对的：它枚举的是"上一帧的行 y"，对应"这一帧的 y-d"。）
+            int y2 = y + d;
+            if (y2 >= a.Length / sw) return 999;
             long s = 0; int n = 0;
             for (int x = 0; x < sw; x += 3) { int v = a[y2 * sw + x] - b[y * sw + x]; s += v < 0 ? -v : v; n++; }
             return n == 0 ? 999 : (double)s / n;
