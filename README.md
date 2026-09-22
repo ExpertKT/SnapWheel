@@ -58,27 +58,11 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 | Import | Tray menu → Import images… |
 | Scrolling capture | Open the capture overlay, frame the area — **frame ONLY the part that scrolls** — then click the long-image button. It scrolls and stitches; `Enter` finishes early, `Esc` cancels |
 
-## What's new in 1.1
+## Latest release
 
-**Scrolling capture, reworked.** It was capturing the wrong region and stitching it wrong — this release fixes both, and is explicit about what the technique cannot do.
+**v1.1.0 — scrolling capture reworked.** It used to capture your whole screen instead of the area you framed, and the stitcher mis-aligned content. Both are fixed, and the notes say plainly what the technique cannot do: frame only the part that scrolls.
 
-- **It was capturing your whole screen, not the area you framed.** The helper used to resolve the region returned *which monitor the point is on*, not the selection — so the taskbar (and everything else) ended up in the long image. The field it feeds was always documented as "the selection".
-- **The region is now clamped to the work area**, so framing the whole screen no longer pulls the taskbar in.
-- **Two real bugs in the stitcher.** The row-matching helper had the **scroll direction reversed** (it compared `prev[y-d]` where it should be `prev[y+d]`), so the check never actually fired on a real screen; and the bottom rows — whose reference row is *off-screen*, because that content just scrolled in — were classified as "not moving", shifting every stitch up by one scroll step. That is the doubling users saw: the repeat period in a real long image measured **125 rows**, exactly the single-frame scroll step in the engine log.
-- **⚠️ What it cannot do.** Frame **only the part that scrolls**. Sidebars, browser toolbars and floating panels do **not** scroll, so they get stitched in again on every screen. That is the limit of this technique (the same for every tool), not an implementation detail — the alternative, "auto-detect which strip isn't moving", proved undecidable: a static region and a row that merely fails to match look identical pixel-wise.
-
-## What's new in 1.0
-
-**1.0 means: from this version on, I'm willing to stand behind the promises above.** This release adds one feature, a round of "it reacts now" polish, and fixes three bugs users reported — none of which had their cause where it looked like it was.
-
-- **📌 Pin straight from the capture.** A nail now sits at the right end of the overlay toolbar: click it and the shot is pinned where you framed it, **and** it still goes into the ring. No more waiting for the wheel to slide out and middle-clicking a thumbnail.
-- **The ring reacts now.** Dragging an image out makes its cell flinch and leaves a short trail in the drag direction (the default keeps a copy, so the cell does *not* close up — nothing actually left). A fresh capture glows then cools. A ripple spreads out when an image arrives. Switching wheels flips the name pill. The ring thickens with content, warms up in the morning, dims at night, and casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings → Style.
-- **Settings opens 9× faster** (250 ms → 30 ms). The cause was not slow code — it was the **order of two lines** in the constructor, and both orders render *pixel-identical*.
-- **No more dropped frames from cross-fading an image into itself.** The periodic screen grab usually returns exactly what we already have (you're reading a document), and the cross-fade was re-blending two full-window bitmaps every frame for nothing.
-- **Screen recorders can finally see the ring** (Settings → Style). The window asks Windows to exclude it from screen capture so your own screenshots stay clean - but since Windows 10 2004 that also hides it from recorders, so demo videos came out with no ring in them.
-- **Four reported bugs fixed:** the green drop hint's *disappearance* had no transition (the ring's did), the name pill's **text** didn't scale with its pop animation, the settings window opened slowly, and **right-clicking to leave the capture overlay also opened the desktop context menu** (the overlay closed on button-*down*, so the button-*up* landed on the desktop).
-
-Each of these has a paragraph with the root cause and the measured numbers in the [v1.0.0 release notes](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0). Full history in [CHANGELOG.md](CHANGELOG.md).
+[See all changes →](https://github.com/ExpertKT/SnapWheel/releases) · [CHANGELOG](CHANGELOG.md)
 
 ## Requirements
 
@@ -169,27 +153,11 @@ MIT — see [LICENSE](LICENSE).
 
 绿色免安装 · 免注册表（开机自启可选）· 不打包任何模型文件 · **零第三方依赖**。
 
-### 这次更新（v1.1.0）
+### 最新版
 
-**滚动长截图重做。** 之前它抓错了地方、也拼错了地方 —— 这一版两样都修了，并且把它**做不到**的事说清楚。
+**v1.1.0 —— 滚动长截图重做。** 以前它抓的是整块屏幕、不是你框的那块，拼接位置也会算错。两样都修了，并且把用法边界写清楚了：**只框会跟着滚的那块内容**（边栏、悬浮窗不跟着滚，会被重复拼进去）。
 
-- **它抓的一直是整块屏幕，不是框选的那块。** 那个换算函数返回的是"这个点在**哪块显示器**上"，不是选区 —— 所以任务栏（还有别的一切）都被拍进了长图。而它喂给下游的那个字段，注释一直写着"就是浮层里的选区"。
-- **抓帧区域现在夹进工作区**：框整屏时任务栏那一条自动排除。
-- **拼接引擎里两个真错误。** 一个是判断"这一行跟不跟着滚"的小工具**滚动方向写反了**（写成 `prev[y-d]`，应该是 `prev[y+d]`），于是那条判据**在真机上从来没触发过**；另一个是屏幕**最底下那几行**的参照行在屏幕外（那些内容刚滚进来，上一帧里根本没有），却被算成"不动的区域"，**每一帧的贴图位置都往上一偏**。用户看到的内容重复就是这么来的：真机长图里量出来的重复周期是 **125 行**，而引擎日志里的单帧滚动量也正好是 **125**。
-- **⚠️ 它做不到什么。** 框选时**只框会跟着滚的那块内容**。左边栏、浏览器标签栏、悬浮窗这些**不跟着滚**的东西，会被当成新内容**一屏一屏地重复拼进去**。这是长截图这种做法的边界（同类工具都一样），不是实现细节 —— 我们试过"自动检测哪一条不跟着滚"，结论是**它判不出来**：一个不动的区域，和一段恰好对不上滚动的正文，在逐行像素上是同一个形态。
-
-### 这次更新（v1.0.0 正式版）
-
-**1.0 的意思是：从这一版起，上面那些承诺我敢替你担保了。** 这一版加了**一条新功能**、一批「手感」，并修掉三个用户报上来的 bug —— 而这三个的根因**都不在看起来的地方**。
-
-- **📌 截完直接「贴」到屏幕上**：截图浮层工具条最右边多了一颗钉子，框完点它，图立刻钉在你框的那块位置，**并且照常存进轮环**。以前要"截完 → 等轮盘拉出来 → 中键点缩略图"，隔着两步。
-- **环会「有反应」了**：拖出去时那一格会颤一下、朝拖的方向留一道拖痕（默认「留一份」，所以格子**不合拢** —— 图并没有走）；新截的那张亮一下再慢慢冷下去；图进来时环上扩散一圈涟漪；切轮盘时名字药丸翻一下（**药丸和上面的字一起**放大缩小）。环还会随内容变粗、早上偏暖深夜变暗、下面多一层影子。涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。
-- **点设置不再卡一下**：`new SettingsForm()` **250ms → 30ms**，快 9 倍。根因不是"哪段代码慢"，而是构造函数里**两行的先后顺序** —— 而两种写法**画出来逐像素一模一样**（13.5 万个采样点零差异），所以任何渲染测试都看不出来。
-- **动画不再掉帧**：定时抓屏经常抓到和手上**完全相同**的画面（你在看文档时就是这样），而换底那 0.38 秒里每一帧都在把一张图**淡入到它自己身上**。现在一样就直接换上，一帧都不用重画。
-- **录屏终于能拍到轮盘了**（设置 → 风格）：窗口默认对屏幕捕获隐身，这样你自己截图时不会带上它；但 Windows 10 2004 之后这个标记连录屏一起挡了，所以演示视频里根本没有轮盘。
-- **修掉四个 bug**：绿提示的**消失**没有过渡（环是有的）、名字药丸的**字**不跟着动画缩放、设置窗口打开慢、**右键退出截图会顺便右键到桌面**（浮层在按下时就退了，抬起落到了桌面上）。
-
-每一条的根因和量到的数字都写在 [v1.0.0 发布说明](https://github.com/ExpertKT/SnapWheel/releases/tag/v1.0.0)里。完整历史见 [CHANGELOG.md](CHANGELOG.md)。
+[全部更新内容 →](https://github.com/ExpertKT/SnapWheel/releases) ・ [CHANGELOG](CHANGELOG.md)
 
 ## 版本历史
 
