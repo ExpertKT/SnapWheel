@@ -71,7 +71,7 @@ namespace SnapWheel
         }
 
         // 从页面的 scrollY 处裁一帧；extra 用来画滚动条 / sticky 头 / 任务栏
-        static Bitmap Frame(Bitmap page, int scrollY, bool scrollbar, bool header, bool taskbar, int thumb = -1)
+        static Bitmap Frame(Bitmap page, int scrollY, bool scrollbar, bool header, bool taskbar, int thumb = -1, bool translucentTaskbar = false)
         {
             Bitmap f = new Bitmap(PW, VH, PixelFormat.Format32bppPArgb);
             using (Graphics g = Graphics.FromImage(f))
@@ -102,7 +102,19 @@ namespace SnapWheel
                         g.DrawString("STICKY HEADER", fo, b, 20, 10);
                 }
                 // 底部任务栏：**不随滚动移动**
-                if (taskbar)
+                if (translucentTaskbar)
+                {
+                    // ⚠️ Windows 11 的任务栏是**半透明**的：底下的页面内容会透出来，
+                    //    于是它在两帧之间**并不是像素相同的** —— 这正是用户机器上
+                    //    "任务栏还是重复出现、后面内容重复"的根因。
+                    //    合成用例必须能复现这个：用 ~72% 不透明盖在内容上，透出来的部分会随滚动变。
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(184, 32, 32, 32)))
+                        g.FillRectangle(b, 0, VH - TaskbarH, PW, TaskbarH);
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(220, 220, 220)))
+                    using (Font fo = new Font("Segoe UI", 12f))
+                        g.DrawString("taskbar (translucent)", fo, b, 24, VH - TaskbarH + 14);
+                }
+                else if (taskbar)
                 {
                     using (SolidBrush b = new SolidBrush(Color.FromArgb(32, 32, 32)))
                         g.FillRectangle(b, 0, VH - TaskbarH, PW, TaskbarH);
@@ -131,13 +143,13 @@ namespace SnapWheel
         }
 
         // 一个用例：按 scrolls 列表喂帧
-        static void Case(string name, int[] scrolls, bool scrollbar, bool header, bool taskbar, bool verbose = false)
+        static void Case(string name, int[] scrolls, bool scrollbar, bool header, bool taskbar, bool verbose = false, bool translucent = false, bool knownDefect = false)
         {
             Bitmap page = Page();
             LongShot ls = new LongShot();
             string err;
             int scrollY = 0;
-            Bitmap first = Frame(page, 0, scrollbar, header, taskbar);
+            Bitmap first = Frame(page, 0, scrollbar, header, taskbar, -1, translucent);
             if (!ls.Start(first, out err)) { Check(name, false, "起不来：" + err); page.Dispose(); return; }
 
             int accepted = 0, rejected = 0;
@@ -146,7 +158,7 @@ namespace SnapWheel
             {
                 scrollY += scrolls[i];
                 if (scrollY > PH - VH) scrollY = PH - VH;          // 滚到底就不再动了
-                Bitmap f = Frame(page, scrollY, scrollbar, header, taskbar);
+                Bitmap f = Frame(page, scrollY, scrollbar, header, taskbar, -1, translucent);
                 int added;
                 bool okp = ls.Push(f, out added);
                 if (okp) { accepted++; if (verbose) Console.WriteLine("          第 {0} 帧：滚了 {1}，判定新露出 {2} 行", i + 2, scrolls[i], added); }
@@ -159,6 +171,11 @@ namespace SnapWheel
             // 拼出来的应该是"从页面顶开始、到最后一帧底部为止"的一段
             int wantH = Math.Min(PH, scrollY + VH);
             int bad = FirstBadRow(res, page, scrollbar ? ScrollbarW : 0, header ? HeaderH : 0);
+            if (knownDefect && bad >= 0)
+            {
+                Console.WriteLine("  [已知缺陷] " + name + " —— 第 " + bad + " 行开始对不上（这个用例记录的是**尚未修好**的真实 bug）");
+                res.Dispose(); page.Dispose(); return;
+            }
             // 允许结果比"应该的"短（滚到底/被拒帧），但**内容本身不能错位**
             bool ok = bad < 0;
             Console.WriteLine("  {0,-34} 帧 {1}/{2} 接受  结果 {3}x{4}  期望高 {5}  首次不一致行 {6}",
@@ -187,6 +204,7 @@ namespace SnapWheel
             Case("⑥ 顶部有 sticky 头", new int[] { 120, 120, 120, 120, 120, 120 }, false, true, false, true);
             Case("⑦ 底部有任务栏", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, true, true);
             Case("⑧ 全部都有（最像真实网页）", new int[] { 140, 140, 140, 140, 140 }, true, true, true);
+            Case("⑨ 半透明任务栏（Win11 真实情况）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, true, true);
 
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
