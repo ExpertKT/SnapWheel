@@ -83,6 +83,7 @@ namespace SnapWheel
         int _sh;                       // 高（= _h，行不跳采样，只有列跳）
         string _why;
         int _shotCount;
+        bool _stillTrimmed;          // 第一帧那条静止区（任务栏）裁掉了没有
 
         public int Height { get { return _canvasH; } }
         public int Shots { get { return _shotCount; } }
@@ -150,13 +151,38 @@ namespace SnapWheel
             // ⚠️ 取"新露出的内容"必须避开屏幕底部的**静止区**（典型就是任务栏）：它不随页面滚动移动，
             // 直接取屏幕最底部的 addedRows 行，等于每一帧都把任务栏又贴进长图一次 ——
             // 结果就是"长图里全是堆叠的任务栏、几乎没有内容"（用户实测）。
-            // 做法：从最底部往上逐行比对上一帧，找出连续没变的那一段，就是静止区高度。
+            //
+            // ⚠️⚠️ 但"静止"**不能只看"这一行两帧一模一样"**。
+            //    空白行在两帧里当然也一样 —— 于是一张有大片留白的**普通网页**，
+            //    底部会被判成"一大片静止区"，srcY 被抬高，**每一帧都重复贴一段已经贴过的内容**。
+            //    这就是用户报的"错位"，而且它对"正常页面"也会发作（合成长页测试一直没暴露它，
+            //    因为合成图里全是密排的文字、没有留白）。
+            //    正确判据要**同时看两个假设**，顺序不能反：
+            //      · 滚动假设：cur[y] ≈ prev[y-d] → 这一行跟着页面滚了 → 到底了，停
+            //      · 静止假设：cur[y] ≈ prev[y]   → 这一行没动 → 才可能是任务栏
+            //    先看滚动假设：**空白行在滚动假设下也成立**（两边都白）→ 直接停、still=0。
+            //    这正是我们要的保守默认 —— 宁可当成"会滚"，也不要凭空抬高 srcY。
+            //    只有"滚动假设不成立、静止假设成立"的行才算静止区。
             int still = 0;
             int bandBot2 = (int)(_h * BandCenterFrac) + BandRows / 2;   // 和 Find 里那条模板带同一条
-            for (int y = _h - 1; y > bandBot2 && still < _h - bandBot2 - 2; y--)
+            int stillCap = _h - bandBot2 - 2;
+            for (int y = _h - 1; y > bandBot2 && still < stillCap; y--)
             {
-                if (RowDiff(_prev, cur, _sw, y) > 3.0) break;
+                if (RowDiffOffset(_prev, cur, _sw, y, addedRows) <= 3.0) break;   // 跟着滚了
+                if (RowDiff(_prev, cur, _sw, y) > 3.0) break;                     // 既不像滚也不像静止：收手
                 still++;
+            }
+            // ⚠️ take 必须就是"实际画了几行"。
+            //    原来是 take/srcY/_canvasH 三个量分开算的，srcY<0 时 take 会变成 _h-still、
+            //    比真正画上去的 addedRows 大，于是画布上留下空行 —— **之后每一帧的落点整体偏移**。
+            // ⚠️ 第一帧是**整屏**贴进画布的（见 Start），但它底部的 still 行是**静止区**、不是页面内容。
+            //    不裁掉的话，画布开头就带着一条任务栏，之后所有内容都跟着错位
+            //    （实测：任务栏 48px 的用例正好在第 552 行 = 600-48 处开始对不上）。
+            if (!_stillTrimmed && still > 0)
+            {
+                _stillTrimmed = true;
+                _canvasH -= still;
+                if (_canvasH < 1) _canvasH = 1;
             }
             int take = addedRows;
             int srcY = _h - still - take;
@@ -164,8 +190,8 @@ namespace SnapWheel
             if (take <= 0) { _why = "没有可拼的新内容"; return false; }
             using (Graphics g = Graphics.FromImage(_canvas))
             {
-                g.DrawImage(frame, new Rectangle(0, _canvasH, _w, addedRows),
-                                   new Rectangle(0, srcY, _w, addedRows), GraphicsUnit.Pixel);
+                g.DrawImage(frame, new Rectangle(0, _canvasH, _w, take),
+                                   new Rectangle(0, srcY, _w, take), GraphicsUnit.Pixel);
             }
             _canvasH += take;
             _shotCount++;
@@ -199,24 +225,32 @@ namespace SnapWheel
         //   平均差会被大片相同背景稀释（这正是用例 2 滚过头时"线条对齐"假匹配能溜过去的原因）。
         // 输出 badRatio 供调用方判定；样本太少返回 MaxValue 表示这个候选不算数。
         static double Score(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int bandTop2, int bandBot2,
-                            int d, out double badRatio)
+                            int d, bool[] sameRow, out double badRatio)
         {
             long sad = 0; int n = 0, bad = 0;
-            AddBand(prev, cur, sw, bandTop, bandBot, d, ref sad, ref n, ref bad);
-            AddBand(prev, cur, sw, bandTop2, bandBot2, d, ref sad, ref n, ref bad);
+            AddBand(prev, cur, sw, bandTop, bandBot, d, sameRow, ref sad, ref n, ref bad);
+            AddBand(prev, cur, sw, bandTop2, bandBot2, d, sameRow, ref sad, ref n, ref bad);
             if (n < 200) { badRatio = 1; return double.MaxValue; }
             badRatio = (double)bad / n;
             return badRatio * 100.0 + (double)sad / n;
         }
 
         // 把一段横带上的"模板行 y 对新屏行 y-d"累加进统计
-        static void AddBand(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int d,
+        static void AddBand(byte[] prev, byte[] cur, int sw, int bandTop, int bandBot, int d, bool[] sameRow,
                             ref long sad, ref int n, ref int bad)
         {
             for (int y = bandTop; y < bandBot; y += 3)
             {
                 int y2 = y - d;
                 if (y2 < 0) continue;
+                // ⚠️ 跳过"两帧里**同一行**本来就一样"的行 —— 那要么是 sticky 固定顶栏，要么是空白行，
+                // 两种都不携带"滚了多少"的信息，拿来比只会把真匹配污染掉。
+                //
+                // 不做这一步的话，长图**在真实网页上根本接不上**：网页几乎都有 sticky 顶栏，
+                // 而偏移 d 下的参照行 y2 = y-d 会整段落进那一块固定头里。
+                // 实测（合成 sticky 头用例）：带2 的 48% 样本在拿"页面内容"比"固定头"，
+                // bad 从 0.000 涨到 0.21，于是每一帧都被拒、长图停在第一屏。
+                if (sameRow != null && y2 < sameRow.Length && sameRow[y2]) continue;
                 int o1 = y * sw, o2 = y2 * sw;
                 for (int x = 0; x < sw; x += 4)
                 {
@@ -252,6 +286,9 @@ namespace SnapWheel
             if (band2Bot > h - SkipBottom) band2Bot = h - SkipBottom;
             int band2Top = band2Bot - BandRows;
             if (band2Top < 0) band2Top = 0;
+            // 先算一遍"两帧里同一行是不是本来就一样"（每帧一次，别放进 d 循环里 —— 那会把匹配器的开销翻倍）
+            bool[] sameRow = new bool[h];
+            for (int y = 0; y < h; y++) sameRow[y] = RowDiff(prev, cur, sw, y) <= 3.0;
             double best = double.MaxValue, second = double.MaxValue;
             int bestD = 0;
             double bestBad = 1;
@@ -260,7 +297,7 @@ namespace SnapWheel
             for (int d = MinNewRows; d <= maxD; d++)
             {
                 double bad;
-                double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, out bad);
+                double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, sameRow, out bad);
                 if (cost < best) { best = cost; bestD = d; bestBad = bad; }
             }
 
@@ -275,7 +312,7 @@ namespace SnapWheel
                 {
                     if (d > bestD - 24 && d < bestD + 24) continue;
                     double bad;
-                    double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, out bad);
+                    double cost = Score(prev, cur, sw, bandTop, bandBot, band2Top, band2Bot, d, sameRow, out bad);
                     if (cost < second) second = cost;
                 }
             }
@@ -307,6 +344,19 @@ namespace SnapWheel
             // 那条判据只会一路拒。现在由上面的绝对判据（代价上限 + 差异像素比例）把关。
             m.NewRows = bestD;
             return m;
+        }
+
+        // 某一行在两帧之间的平均灰度差，但按**滚动偏移**对齐：cur[y] 对 prev[y-d]。
+        // 空白行在"同位置"和"按偏移"两种假设下都成立（两边都白），
+        // 而跟着滚动的实内容只在"按偏移"下成立 —— 这两条一比就能把空白和静止区分开。
+        static double RowDiffOffset(byte[] a, byte[] b, int sw, int y, int d)
+        {
+            if (a == null || b == null) return 999;
+            int y2 = y - d;
+            if (y2 < 0) return 999;
+            long s = 0; int n = 0;
+            for (int x = 0; x < sw; x += 3) { int v = a[y2 * sw + x] - b[y * sw + x]; s += v < 0 ? -v : v; n++; }
+            return n == 0 ? 999 : (double)s / n;
         }
 
         // 某一行在两帧之间的平均灰度差（用于找屏幕底部的静止区）

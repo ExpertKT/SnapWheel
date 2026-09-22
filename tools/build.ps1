@@ -236,6 +236,10 @@ if ($Test) {
     # 演示模式：默认轮盘对屏幕捕获隐身（自己截图不带它），但那个 API 连录屏一起挡了。
     # 这条盯"打开演示模式后真的能被录到、且立刻生效"。
     Run-Test '录屏可见'       'capture-visible-test.cs'  'SnapWheel.CaptureVisibleTest' $null
+    # 长截图拼接专属测试：合成一张**完全已知**的长页面、按已知偏移喂帧，
+    # 再把结果和原页面逐像素比 —— 错位会直接变成"第 N 行开始差"，光看长图是看不出第几帧错的。
+    # 用例覆盖：正常滚动 / 大步滚动 / 滚到底 / 滚动条 / sticky 顶栏 / 任务栏 / 全都有。
+    Run-Test '长截图拼接'     'longshot-test.cs'         'SnapWheel.LongShotTest' $null
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null
