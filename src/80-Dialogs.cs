@@ -35,6 +35,9 @@ namespace SnapWheel
             _top0.Add(c.Top);
         }
 
+        // 清空登记（重排用：宽度变了要把旧的标签全丢掉重新排）
+        public void Reset() { _cs.Clear(); _top0.Clear(); _scroll = 0; }
+
         // 排完版调用：contentH = 内容理想高度，viewH = 实际能看到的区域高度
         public void Finish(int contentH, int viewH)
         {
@@ -96,6 +99,10 @@ namespace SnapWheel
         bool _brief;                // true = 首次安装的欢迎引导：**只显示前 3 条**，别一上来丢长文
         readonly UiScroll _sc = new UiScroll();
         Label _scrollHint;
+        // 可缩放重排要用的：标题、按钮行高、按钮本身
+        string _title, _subtitle;
+        int _btnRowH;
+        RoundButton _go;
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -140,11 +147,14 @@ namespace SnapWheel
             _seenVer = seenVer == null ? "" : seenVer;
             _brief = brief;
             Text = AppInfo.Name + " 新手上路";
+            _title = title; _subtitle = subtitle;
             Icon = Brand.Get();
             AutoScaleMode = AutoScaleMode.None;
             Font = new Font("Microsoft YaHei UI", 9.5f);
             BackColor = Color.FromArgb(252, 252, 254);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            // 可缩放：和设置界面一样。**不再把高度夹在工作区的 72%** —— 那条上限正是
+            // "小屏笔记本上字被下边缘切掉、又没法把窗口拖大"的直接原因。
+            FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
@@ -159,132 +169,18 @@ namespace SnapWheel
             int mL = Ui.S(PadL), mR = Ui.S(PadR);
             _contentW = winW - mL - mR;
 
-            Label head = new Label();
-            head.Text = title;
-            head.Font = new Font("Microsoft YaHei UI", 15f, FontStyle.Bold);
-            head.ForeColor = Color.FromArgb(28, 30, 36);
-            head.Location = new Point(mL, Ui.S(PadT));
-            W(head, _contentW);
-            Add2(head);
+            int y = BuildTips(mL, title, subtitle);   // 内容整套排一遍（宽度变了会再排，见 OnResize）
 
-            int y = head.Top + head.PreferredSize.Height + Ui.S(8);
-
-            Label sub = new Label();
-            sub.Text = subtitle;
-            sub.ForeColor = Color.FromArgb(120, 124, 134);
-            sub.Location = new Point(mL + Ui.S(3), y);
-            W(sub, _contentW - Ui.S(3));
-            Add2(sub);
-
-            y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
-
-            AddTip(mL, ref y, "0.1.0", Lang.T("第 1 步：截一张", "Step 1: capture"), Lang.T("按 ", "Press ") + Settings.Load().Hotkey + Lang.T(" 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。", " drag to select; corners resize, the dial rotates, double-click / Enter confirms."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销、Ctrl+Y 重做。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo and Ctrl+Y to redo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
-            AddTip(mL, ref y, "0.9.0", Lang.T("不用鼠标也能把图送出去：传递模式", "Send an image without the mouse: carry mode"),
-                Lang.T("先滚轮选好要发的那张，按 ", "Pick the image with the wheel first, then press ")
-                + AppCtx.CarryHotkeyName
-                + Lang.T(" 进入传递模式：屏幕上会出现一个「假光标」，右下角吸附着那张缩略图。"
-                       + "你自己 Alt+Tab 切到微信 / 文档，用方向键（或 WASD）把假光标移过去，按空格放下 —— 它会真的替你完成一次鼠标拖放，"
-                       + "所以任何支持拖放的窗口都适用。[ ] 换一张、Shift 加速、C 只复制不粘贴、Esc 取消。",
-                         " to enter carry mode: a fake cursor appears with that thumbnail attached to it. "
-                       + "Alt+Tab to your target window yourself, steer the cursor with the arrow keys (or WASD) and press Space to drop - "
-                       + "it performs a real mouse drag for you, so it works with any window that accepts drops. "
-                       + "[ ] switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
-            AddTip(mL, ref y, "0.5.0", Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
-            AddTip(mL, ref y, "0.9.5", Lang.T("截图里少了某个窗口？（是那个程序自己不让人截）", "A window missing from the capture? (that app is blocking it)"),
-                Lang.T("最典型的是微信：按下截图热键后，浮层上微信的位置直接是它背后的桌面 —— 看起来像「微信突然消失了」。"
-                       + "这不是 SnapWheel 的问题：微信给 Windows 设了「把我排除在截屏之外」（WDA_EXCLUDEFROMCAPTURE），"
-                       + "系统级的机制，任何用同一种方式抓屏的工具都一样拍不到它，包括 Windows 自带的截图。"
-                       + "想确认的话按 Win+Shift+S 框住微信 —— 同样不在里面，那就是它在反截屏，不是谁坏了。"
-                       + "顺手一提：SnapWheel 自己也给自己设了这个，否则轮盘会拍进你截的每一张图里。",
-                         "The classic case is WeChat: after you press the capture hotkey, the frozen overlay shows whatever is "
-                       + "behind WeChat where its window was - it looks like WeChat vanished. This is not a SnapWheel problem: "
-                       + "WeChat tells Windows to exclude it from screen capture (WDA_EXCLUDEFROMCAPTURE). It is a system-level "
-                       + "switch, so every tool that captures the same way misses it - including the built-in Windows snip. "
-                       + "To confirm: press Win+Shift+S over WeChat and it will be missing there too. For the record, SnapWheel "
-                       + "sets the same flag on itself, otherwise the ring would appear in every screenshot you take."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("反过来：拖回来", "Or the other way: drag it back"), Lang.T("从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。", "Drop an image from the desktop, a web page or a chat window onto the ring to keep it - drag it out again whenever you need it."));
-            AddTip(mL, ref y, "0.4.7", Lang.T("连拖都不用：复制即收纳", "Do not even drag: copy and it is collected"), Lang.T("在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。", "Copy an image anywhere (a screenshot tool, a web page, WeChat) and it slides into the ring. Turn this off in settings if you do not want it."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("按住看大图", "Hold to zoom"), Lang.T("缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。", "Hold a thumbnail for ~0.3 s to preview it enlarged; the zoom factor is adjustable in settings."));
-            AddTip(mL, ref y, "0.3.0", Lang.T("万能键（可以改成你要的）", "Universal key (rebindable)"), Lang.T("长按环内侧那个圆盘会弹出四个方向，往哪个方向松手就执行哪个动作。默认：上=新建轮盘，右=下一个，下=删除，左=上一个 —— 四个动作都能在设置里换。", "Long-press the dial inside the ring and four directions appear; release towards one to run that action. Defaults: up = new wheel, right = next, down = delete, left = previous - all rebindable in settings."));
-            AddTip(mL, ref y, "0.1.1", Lang.T("收起态（默认关）", "Collapsed mode (off by default)"), Lang.T("打开后不用时会缩成屏幕边上的小把手，点一下用彩虹动画拉出来。想让桌面更干净再开。", "When idle it shrinks into a small pull-tab at the screen edge; click it and the ring slides back out. Turn on for a tidier desktop."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("删掉 / 撤回 / 退出", "Delete / undo / quit"),
-                Lang.T("缩略图上点鼠标右键就能删（默认是单击即删，设置里可以改成「双击右键才删」，防手滑）。删错了不要紧："
-                       + "托盘右键 →「撤销上一次删除」能找回来。另外环上那个关闭按钮，按住 0.65 秒松手 = 直接退出程序。",
-                         "Right-click a thumbnail to delete it (single click by default; settings can require a double "
-                       + "right-click to avoid slips). Deleted by mistake? Tray > Undo last delete brings it back. "
-                       + "The close button on the ring, held for 0.65 s and released, quits the app outright."));
-            AddTip(mL, ref y, "0.1.0", Lang.T("托盘", "Tray"), Lang.T("托盘右键还有：导入图片、新手引导、重播开启动画、设置、退出。", "The tray menu also has: import images, getting started, replay startup animation, settings, exit."));
-            AddTip(mL, ref y, "0.5.0", Lang.T("取字：把图里的文字抠出来", "OCR: pull the text out of an image"),
-                Lang.T("在截图浮层上选「取字」工具（或按 O），框住要识别的文字 —— 框得越紧越准。识别完可以直接一键翻译成中文或英文。"
-                       + "不走截图也行：托盘右键 →「取字：识别剪贴板里的图」。用的是 Windows 自带的识别引擎，不需要联网。",
-                         "In the capture overlay pick the OCR tool (or press O) and box the text - the tighter the box, the better. "
-                       + "The result window can translate to Chinese or English in one click. Without capturing: tray > OCR the clipboard image. "
-                       + "It uses the Windows built-in recognition engine, no network needed."));
-            AddTip(mL, ref y, "0.6.0", Lang.T("滚动长截图：一整页长图", "Scrolling capture: one long image"),
-                Lang.T("截图浮层上点「长图」，然后自己慢慢往下滚页面，它会自动把各屏拼成一张完整的长图，"
-                       + "并且会自动避开底部那一条会变动的区域（比如任务栏、进度条）。",
-                         "In the capture overlay click the long-shot button, then scroll the page yourself; it stitches the screens "
-                       + "into one image and automatically avoids the changing strip at the bottom (taskbar, progress bars)."));
-            AddTip(mL, ref y, "0.7.0", Lang.T("另存为 / 直接复制", "Save as / copy"),
-                Lang.T("缩略图上按 Ctrl+S 可以「另存为」（选路径和格式）；直接点一下缩略图则是把这张图复制到剪贴板。",
-                         "Ctrl+S on a thumbnail opens Save-as (path and format); a plain click copies that image to the clipboard."));
-            AddTip(mL, ref y, "0.7.0", Lang.T("符号标注：箭头 / 马赛克之外还有符号", "Symbols besides arrow / mosaic"),
-                Lang.T("标注工具条里还有一组「符号」，可以从三排符号里挑一个盖在图上（标记、箭头、编号），"
-                       + "符号的颜色和大小都能调，拖动可以挪位置。",
-                         "The annotate toolbar also has a Symbols panel: pick from three rows (markers, arrows, numbers) and stamp it "
-                       + "on the image. Colour and size are adjustable, and you can drag it around."));
-            AddTip(mL, ref y, "0.6.0", Lang.T("界面语言：中文 / English", "Interface language: Chinese / English"),
-                Lang.T("设置 → 第一页 →「界面语言」可以选跟随系统 / 中文 / English。选完重启一次生效。",
-                         "Settings > page 1 > Interface language: follow system / Chinese / English. Restart once to apply."));
-            AddTip(mL, ref y, "0.8.1", Lang.T("自动更新（免费、不用装任何东西）", "Auto update (free, nothing to install)"),
-                Lang.T("托盘右键 →「检查更新」会去读项目的发行版页面，有新版本会问你要不要下载并安装 —— 程序自己重启一次就换好了，"
-                       + "轮盘和设置都不会丢。设置里可以关掉「启动时检查」。",
-                         "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
-                       + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
-
-            AddTip(mL, ref y, "1.0.0", Lang.T("截完不用等，直接「贴」到屏幕上", "Pin it straight from the capture"),
-                Lang.T("截图浮层工具条最右边多了一颗**钉子**：框完点它，图立刻钉在你框的那块位置，"
-                       + "**并且照常存进轮环** —— 不用再等轮盘拉出来、再用中键去点缩略图。"
-                       + "那颗钉子的底色是**常亮**的（这条栏上别的一律是深底细线条），一眼就能找到。"
-                       + "钉出来的图和轮环里是**各自独立**的：关掉贴图不会影响环上那张。",
-                         "A nail now sits at the right end of the capture toolbar. Click it and the shot is pinned on screen "
-                       + "at the spot you framed - and it still goes into the ring as usual, so there is no more waiting for "
-                       + "the wheel to slide out and middle-clicking a thumbnail. The nail has a permanently lit background "
-                       + "(everything else on that bar is a thin line icon on a dark background), so it is easy to find. "
-                       + "The pinned copy and the ring copy are independent: closing the pin does not affect the ring."));
-
-            AddTip(mL, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
-                Lang.T("这一版除了上面那颗钉子，补的主要是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
-                       + "（默认是「留一份」，所以格子**不合拢** —— 图并没有走）；**新截的那张**会亮一下再慢慢冷下去，"
-                       + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下"
-                       + "（药丸和上面的字会**一起**放大缩小）。"
-                       + "另外环会**随内容变粗**，早上偏暖、深夜自己暗一点，环下面也多了一层影子。"
-                       + "涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。",
-                         "Besides the nail above, this release is mostly about feedback: dragging an image out makes its cell flinch "
-                       + "and leaves a short trail in the drag direction (the default keeps a copy, so the cell does NOT close up - "
-                       + "nothing actually left); a freshly captured image glows then cools, so you can see at a glance which one is "
-                       + "new; a ripple spreads out when an image arrives; switching wheels flips the name pill (the pill and its "
-                       + "text scale together). The ring also thickens with content, warms up in the morning, dims at night, and now "
-                       + "casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings > Style."));
-
-            int tipW = _contentW - Ui.S(3);
-            Label tip = new Label();
-            tip.Text = Lang.T("小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。", "Tip: if you cannot drag images in, check whether SnapWheel was started as administrator (Windows blocks cross-privilege dragging).");
-            tip.ForeColor = Color.FromArgb(168, 122, 36);
-            tip.Location = new Point(mL + Ui.S(3), y);
-            W(tip, tipW);
-            Add2(tip);
-            y += TxtH(tip, tipW);
-
+        // ---- 底部按钮行（不参与滚动，永远贴窗口底边）----
             int btnRowH = Ui.S(10) + Ui.S(BtnH) + Ui.S(22);     // 底部按钮行占的高度（含上下留白）
             // 内容总高要把**按钮行**也算进去：按钮是贴底固定的、不参与滚动，
             // 不算的话滚到最后几行会被按钮压住（用户反馈"字被确认按钮遮住"）。
+            _btnRowH = btnRowH;
             int contentH = y + btnRowH;
 
             int btnY = contentH + Ui.S(10);                    // 按钮的"内容坐标"
             RoundButton go = new RoundButton();
+            _go = go;
             go.Text = Lang.T("开始使用", "Get started");
             go.Size = Ui.Sz(124, BtnH);
             go.Fill = Color.FromArgb(0, 122, 204);
@@ -307,6 +203,9 @@ namespace SnapWheel
             // 上限不能贴着屏幕高度（原来是 wa.Height - 24）：内容一多窗口就顶满整个屏幕，
             // 看着非常压迫（用户反馈"新手引导的窗口也太长了"）。内容超出时靠滚轮翻看就够了。
             int idealH = contentH;                             // contentH 里已经含了按钮行，别再重复加
+            // 初始高度仍按工作区的 72%：这是用户反馈"新手引导窗口也太长了"之后定下来的。
+            // 小屏上内容放不下**不再靠"把上限调大"解决**，而是靠窗口**可缩放**（见 OnResize）——
+            // 用户想宽自己拖一下，拖了会按新宽度整套重排。
             int maxH = (int)(wa.Height * 0.72);
             if (maxH < Ui.S(260)) maxH = Ui.S(260);
             int winH = Math.Min(idealH, maxH);
@@ -333,6 +232,157 @@ namespace SnapWheel
         Panel _scrollHost;
 
         // 登记一个控件：加进滚动宿主（会被裁剪），也告诉滚动器它的原始位置
+        // 把"大标题 + 副标题 + 全部说明"整套排一遍，返回内容总高。
+        //
+        // 为什么抽成方法：窗口现在是**可缩放**的（和设置界面一样），宽度一变，
+        // 每一段文字都要重新折行、每段的高度也跟着变 —— 必须整套重排，只改坐标是错的。
+        // 重排前先把滚动宿主里的旧标签丢掉、并清掉滚动器的登记，否则旧的会留在原地叠着。
+        // 窗口被拖动之后：**按新宽度整套重排**。
+        // 这就是"和设置界面一样"的那一步 —— 宽度一变，每段文字重新折行、高度重算，
+        // 而不是只把窗口拉大、内容还按老宽度切着。
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (_go == null || _title == null) return;          // 布局还没建完
+            int mL = Ui.S(PadL), mR = Ui.S(PadR);
+            _contentW = Math.Max(Ui.S(200), ClientSize.Width - mL - mR);
+            int y = BuildTips(mL, _title, _subtitle);
+            int contentH = y + _btnRowH;
+            int viewH = ClientSize.Height - _btnRowH;
+            if (viewH < Ui.S(80)) return;                        // 拖太小了，先不排
+            if (_scrollHost != null) _scrollHost.Size = new Size(ClientSize.Width, viewH);
+            _sc.Finish(contentH, viewH);
+            if (_scrollHint != null) _scrollHint.Visible = _sc.Active;
+            _go.Top = ClientSize.Height - Ui.S(22) - _go.Height;
+            Gfx.RepaintAll(this);
+        }
+
+        int BuildTips(int x, string title, string subtitle)
+        {
+            _tipCount = 0;
+            if (_scrollHost != null) { _scrollHost.Controls.Clear(); _sc.Reset(); }
+            Label head = new Label();
+            head.Text = title;
+            head.Font = new Font("Microsoft YaHei UI", 15f, FontStyle.Bold);
+            head.ForeColor = Color.FromArgb(28, 30, 36);
+            head.Location = new Point(x, Ui.S(PadT));
+            W(head, _contentW);
+            Add2(head);
+
+            int y = head.Top + head.PreferredSize.Height + Ui.S(8);
+
+            Label sub = new Label();
+            sub.Text = subtitle;
+            sub.ForeColor = Color.FromArgb(120, 124, 134);
+            sub.Location = new Point(x + Ui.S(3), y);
+            W(sub, _contentW - Ui.S(3));
+            Add2(sub);
+
+            y += TxtH(sub, _contentW - Ui.S(3)) + Ui.S(16);
+
+            AddTip(x, ref y, "0.1.0", Lang.T("第 1 步：截一张", "Step 1: capture"), Lang.T("按 ", "Press ") + Settings.Load().Hotkey + Lang.T(" 拖框选区域，四角缩放、拖旋转键转角度，双击/回车确认。", " drag to select; corners resize, the dial rotates, double-click / Enter confirms."));
+            AddTip(x, ref y, "0.1.0", Lang.T("截完直接标注", "Annotate right after capturing"), Lang.T("浮层上有条工具条：箭头 / 方框 / 马赛克 / 文字，四个颜色可选，Ctrl+Z 撤销、Ctrl+Y 重做。确认之后标注就跟着图一起进轮盘 —— 圈重点不用再去别的软件。", "The overlay has a toolbar: arrow / box / mosaic / text, four colours, Ctrl+Z to undo and Ctrl+Y to redo. Annotations are baked into the image that lands in the ring - no separate editor needed."));
+            AddTip(x, ref y, "0.1.0", Lang.T("第 2 步：拖出去（最常用）", "Step 2: drag it out (the everyday use)"), Lang.T("把环上的缩略图直接拖进微信 / QQ / 文档 / 文件夹，松开就发出去 —— 不用先保存、再选文件。这一下就是它的全部意义。", "Drag a thumbnail straight into WeChat / Word / a folder and release - no saving, no picking files. That is the whole point."));
+            AddTip(x, ref y, "0.9.0", Lang.T("不用鼠标也能把图送出去：传递模式", "Send an image without the mouse: carry mode"),
+                Lang.T("先滚轮选好要发的那张，按 ", "Pick the image with the wheel first, then press ")
+                + AppCtx.CarryHotkeyName
+                + Lang.T(" 进入传递模式：屏幕上会出现一个「假光标」，右下角吸附着那张缩略图。"
+                       + "你自己 Alt+Tab 切到微信 / 文档，用方向键（或 WASD）把假光标移过去，按空格放下 —— 它会真的替你完成一次鼠标拖放，"
+                       + "所以任何支持拖放的窗口都适用。[ ] 换一张、Shift 加速、C 只复制不粘贴、Esc 取消。",
+                         " to enter carry mode: a fake cursor appears with that thumbnail attached to it. "
+                       + "Alt+Tab to your target window yourself, steer the cursor with the arrow keys (or WASD) and press Space to drop - "
+                       + "it performs a real mouse drag for you, so it works with any window that accepts drops. "
+                       + "[ ] switch image, Shift = faster, C = copy only (no paste), Esc = cancel."));
+            AddTip(x, ref y, "0.5.0", Lang.T("要对照着看：贴到屏幕上", "Need a reference? Pin it on screen"), Lang.T("缩略图上按一下鼠标中键（就是滚轮键），这张图就钉在屏幕上了：滚轮缩放、拖着挪位置、双击或 Esc 关掉。写东西时对着参考图很方便。", "Middle-click a thumbnail to pin that image on screen: scroll to zoom, drag to move, double-click or Esc to close. Handy when writing against a reference."));
+            AddTip(x, ref y, "0.9.5", Lang.T("截图里少了某个窗口？（是那个程序自己不让人截）", "A window missing from the capture? (that app is blocking it)"),
+                Lang.T("最典型的是微信：按下截图热键后，浮层上微信的位置直接是它背后的桌面 —— 看起来像「微信突然消失了」。"
+                       + "这不是 SnapWheel 的问题：微信给 Windows 设了「把我排除在截屏之外」（WDA_EXCLUDEFROMCAPTURE），"
+                       + "系统级的机制，任何用同一种方式抓屏的工具都一样拍不到它，包括 Windows 自带的截图。"
+                       + "想确认的话按 Win+Shift+S 框住微信 —— 同样不在里面，那就是它在反截屏，不是谁坏了。"
+                       + "顺手一提：SnapWheel 自己也给自己设了这个，否则轮盘会拍进你截的每一张图里。",
+                         "The classic case is WeChat: after you press the capture hotkey, the frozen overlay shows whatever is "
+                       + "behind WeChat where its window was - it looks like WeChat vanished. This is not a SnapWheel problem: "
+                       + "WeChat tells Windows to exclude it from screen capture (WDA_EXCLUDEFROMCAPTURE). It is a system-level "
+                       + "switch, so every tool that captures the same way misses it - including the built-in Windows snip. "
+                       + "To confirm: press Win+Shift+S over WeChat and it will be missing there too. For the record, SnapWheel "
+                       + "sets the same flag on itself, otherwise the ring would appear in every screenshot you take."));
+            AddTip(x, ref y, "0.1.0", Lang.T("反过来：拖回来", "Or the other way: drag it back"), Lang.T("从桌面、网页、聊天窗口里把图片拖到环带上松手，就收进轮盘了，随时能再拖出去。", "Drop an image from the desktop, a web page or a chat window onto the ring to keep it - drag it out again whenever you need it."));
+            AddTip(x, ref y, "0.4.7", Lang.T("连拖都不用：复制即收纳", "Do not even drag: copy and it is collected"), Lang.T("在任何地方「复制」一张图（截图工具、网页右键、微信里都行），它会自动滑进轮盘。不想要可以在设置里关掉。", "Copy an image anywhere (a screenshot tool, a web page, WeChat) and it slides into the ring. Turn this off in settings if you do not want it."));
+            AddTip(x, ref y, "0.1.0", Lang.T("按住看大图", "Hold to zoom"), Lang.T("缩略图按住约 0.3 秒放大预览，放大倍数在设置里可调。", "Hold a thumbnail for ~0.3 s to preview it enlarged; the zoom factor is adjustable in settings."));
+            AddTip(x, ref y, "0.3.0", Lang.T("万能键（可以改成你要的）", "Universal key (rebindable)"), Lang.T("长按环内侧那个圆盘会弹出四个方向，往哪个方向松手就执行哪个动作。默认：上=新建轮盘，右=下一个，下=删除，左=上一个 —— 四个动作都能在设置里换。", "Long-press the dial inside the ring and four directions appear; release towards one to run that action. Defaults: up = new wheel, right = next, down = delete, left = previous - all rebindable in settings."));
+            AddTip(x, ref y, "0.1.1", Lang.T("收起态（默认关）", "Collapsed mode (off by default)"), Lang.T("打开后不用时会缩成屏幕边上的小把手，点一下用彩虹动画拉出来。想让桌面更干净再开。", "When idle it shrinks into a small pull-tab at the screen edge; click it and the ring slides back out. Turn on for a tidier desktop."));
+            AddTip(x, ref y, "0.1.0", Lang.T("删掉 / 撤回 / 退出", "Delete / undo / quit"),
+                Lang.T("缩略图上点鼠标右键就能删（默认是单击即删，设置里可以改成「双击右键才删」，防手滑）。删错了不要紧："
+                       + "托盘右键 →「撤销上一次删除」能找回来。另外环上那个关闭按钮，按住 0.65 秒松手 = 直接退出程序。",
+                         "Right-click a thumbnail to delete it (single click by default; settings can require a double "
+                       + "right-click to avoid slips). Deleted by mistake? Tray > Undo last delete brings it back. "
+                       + "The close button on the ring, held for 0.65 s and released, quits the app outright."));
+            AddTip(x, ref y, "0.1.0", Lang.T("托盘", "Tray"), Lang.T("托盘右键还有：导入图片、新手引导、重播开启动画、设置、退出。", "The tray menu also has: import images, getting started, replay startup animation, settings, exit."));
+            AddTip(x, ref y, "0.5.0", Lang.T("取字：把图里的文字抠出来", "OCR: pull the text out of an image"),
+                Lang.T("在截图浮层上选「取字」工具（或按 O），框住要识别的文字 —— 框得越紧越准。识别完可以直接一键翻译成中文或英文。"
+                       + "不走截图也行：托盘右键 →「取字：识别剪贴板里的图」。用的是 Windows 自带的识别引擎，不需要联网。",
+                         "In the capture overlay pick the OCR tool (or press O) and box the text - the tighter the box, the better. "
+                       + "The result window can translate to Chinese or English in one click. Without capturing: tray > OCR the clipboard image. "
+                       + "It uses the Windows built-in recognition engine, no network needed."));
+            AddTip(x, ref y, "0.6.0", Lang.T("滚动长截图：一整页长图", "Scrolling capture: one long image"),
+                Lang.T("截图浮层上点「长图」，然后自己慢慢往下滚页面，它会自动把各屏拼成一张完整的长图，"
+                       + "并且会自动避开底部那一条会变动的区域（比如任务栏、进度条）。",
+                         "In the capture overlay click the long-shot button, then scroll the page yourself; it stitches the screens "
+                       + "into one image and automatically avoids the changing strip at the bottom (taskbar, progress bars)."));
+            AddTip(x, ref y, "0.7.0", Lang.T("另存为 / 直接复制", "Save as / copy"),
+                Lang.T("缩略图上按 Ctrl+S 可以「另存为」（选路径和格式）；直接点一下缩略图则是把这张图复制到剪贴板。",
+                         "Ctrl+S on a thumbnail opens Save-as (path and format); a plain click copies that image to the clipboard."));
+            AddTip(x, ref y, "0.7.0", Lang.T("符号标注：箭头 / 马赛克之外还有符号", "Symbols besides arrow / mosaic"),
+                Lang.T("标注工具条里还有一组「符号」，可以从三排符号里挑一个盖在图上（标记、箭头、编号），"
+                       + "符号的颜色和大小都能调，拖动可以挪位置。",
+                         "The annotate toolbar also has a Symbols panel: pick from three rows (markers, arrows, numbers) and stamp it "
+                       + "on the image. Colour and size are adjustable, and you can drag it around."));
+            AddTip(x, ref y, "0.6.0", Lang.T("界面语言：中文 / English", "Interface language: Chinese / English"),
+                Lang.T("设置 → 第一页 →「界面语言」可以选跟随系统 / 中文 / English。选完重启一次生效。",
+                         "Settings > page 1 > Interface language: follow system / Chinese / English. Restart once to apply."));
+            AddTip(x, ref y, "0.8.1", Lang.T("自动更新（免费、不用装任何东西）", "Auto update (free, nothing to install)"),
+                Lang.T("托盘右键 →「检查更新」会去读项目的发行版页面，有新版本会问你要不要下载并安装 —— 程序自己重启一次就换好了，"
+                       + "轮盘和设置都不会丢。设置里可以关掉「启动时检查」。",
+                         "Tray > Check for updates reads the project's release page; if there is a newer version it asks whether to download "
+                       + "and install. The app restarts once and everything is kept. You can turn off the startup check in settings."));
+
+            AddTip(x, ref y, "1.0.0", Lang.T("截完不用等，直接「贴」到屏幕上", "Pin it straight from the capture"),
+                Lang.T("截图浮层工具条最右边多了一颗**钉子**：框完点它，图立刻钉在你框的那块位置，"
+                       + "**并且照常存进轮环** —— 不用再等轮盘拉出来、再用中键去点缩略图。"
+                       + "那颗钉子的底色是**常亮**的（这条栏上别的一律是深底细线条），一眼就能找到。"
+                       + "钉出来的图和轮环里是**各自独立**的：关掉贴图不会影响环上那张。",
+                         "A nail now sits at the right end of the capture toolbar. Click it and the shot is pinned on screen "
+                       + "at the spot you framed - and it still goes into the ring as usual, so there is no more waiting for "
+                       + "the wheel to slide out and middle-clicking a thumbnail. The nail has a permanently lit background "
+                       + "(everything else on that bar is a thin line icon on a dark background), so it is easy to find. "
+                       + "The pinned copy and the ring copy are independent: closing the pin does not affect the ring."));
+
+            AddTip(x, ref y, "1.0.0", Lang.T("环现在会「有反应」了", "The ring reacts now"),
+                Lang.T("这一版除了上面那颗钉子，补的主要是反馈：**拖出去**的时候那一格会颤一下、并向拖的方向留下一道短促的拖痕"
+                       + "（默认是「留一份」，所以格子**不合拢** —— 图并没有走）；**新截的那张**会亮一下再慢慢冷下去，"
+                       + "一眼就知道哪张是刚截的；图进来的时候环上会**扩散一圈涟漪**；**切轮盘**时名字药丸会翻一下"
+                       + "（药丸和上面的字会**一起**放大缩小）。"
+                       + "另外环会**随内容变粗**，早上偏暖、深夜自己暗一点，环下面也多了一层影子。"
+                       + "涟漪 / 影子 / 时间感都能在「设置 → 风格」里单独关掉。",
+                         "Besides the nail above, this release is mostly about feedback: dragging an image out makes its cell flinch "
+                       + "and leaves a short trail in the drag direction (the default keeps a copy, so the cell does NOT close up - "
+                       + "nothing actually left); a freshly captured image glows then cools, so you can see at a glance which one is "
+                       + "new; a ripple spreads out when an image arrives; switching wheels flips the name pill (the pill and its "
+                       + "text scale together). The ring also thickens with content, warms up in the morning, dims at night, and now "
+                       + "casts a soft shadow. Ripple / shadow / time-of-day can each be turned off in Settings > Style."));
+
+            int tipW = _contentW - Ui.S(3);
+            Label tip = new Label();
+            tip.Text = Lang.T("小提示：如果拖图片拖不进去，检查是不是用「以管理员身份运行」启动的（Windows 会拦掉跨权限的拖拽）。", "Tip: if you cannot drag images in, check whether SnapWheel was started as administrator (Windows blocks cross-privilege dragging).");
+            tip.ForeColor = Color.FromArgb(168, 122, 36);
+            tip.Location = new Point(x + Ui.S(3), y);
+            W(tip, tipW);
+            Add2(tip);
+            y += TxtH(tip, tipW);
+
+            return y;
+        }
+
         void Add2(Control c)
         {
             if (_scrollHost == null)
@@ -490,6 +540,8 @@ namespace SnapWheel
             AddTip(mL, ref y, Lang.T("什么时候才需要管理员", "When do you actually need administrator?"), Lang.T("只有要截「管理员窗口」（任务管理器、某些安装程序）时才需要；平时用普通权限最省事，拖拽也正常。", "Only needed to capture elevated windows (Task Manager, some installers). Normal permissions are simpler day to day and dragging works."));
 
             int contentH = y;
+
+        // ---- 底部按钮行（不参与滚动，永远贴窗口底边）----
             int btnRowH = Ui.S(10) + Ui.S(BtnH) + Ui.S(22);
             int right = winW - mR;
             int btnY = contentH + Ui.S(10);

@@ -114,6 +114,29 @@ namespace SnapWheel
                 // 否则"新功能"会悄悄标错版本（这个坑在 0.9.5 出过，见 docs/RELEASE.md 最后一节）。
                 Check("引导 · 从 0.9.4 升上来 → 标 0.9.5 与 1.0.0（1.0.0 有两条）共三条", fromPrev == 3, "实际 " + fromPrev);
                 Check("引导 · 从 0.8.0 升上来 → 0.8.1 / 0.9.0 / 0.9.5 / 1.0.0 共五条", fromOld == 5, "实际 " + fromOld);
+                // 窗口可缩放 + 内容跟着重排（用户要求"和设置界面一样"）。
+                // 判据：把窗口拖宽之后，内容**总高度必须变小**（同样的话在更宽的行里折行更少）。
+                // 如果只把窗口拉大而内容不重排，这个高度不会变 —— 那就是没做成。
+                {
+                    GuideForm g1 = new GuideForm();
+                    g1.StartPosition = FormStartPosition.Manual;
+                    g1.Location = new Point(-4000, -4000);
+                    g1.Show();
+                    Application.DoEvents();
+                    int hNarrow = 0;
+                    foreach (Control c in g1.Controls) if (c is Panel) foreach (Control k in c.Controls) hNarrow = Math.Max(hNarrow, k.Bottom);
+                    g1.Width = g1.Width + 260;                 // 拖宽
+                    Application.DoEvents();
+                    int hWide = 0;
+                    foreach (Control c in g1.Controls) if (c is Panel) foreach (Control k in c.Controls) hWide = Math.Max(hWide, k.Bottom);
+                    Console.WriteLine("      内容总高：窄 {0} -> 宽 {1}", hNarrow, hWide);
+                    Check("引导 · 拖宽之后内容**重新折行**（总高变小 = 真的重排了，不是只把窗口拉大）",
+                          hNarrow > 0 && hWide > 0 && hWide < hNarrow, "窄 " + hNarrow + " -> 宽 " + hWide);
+                    Check("引导 · 窗口可缩放（不再是 FixedDialog）", g1.FormBorderStyle == FormBorderStyle.Sizable,
+                          "实际 " + g1.FormBorderStyle);
+                    g1.Close();
+                }
+
                 Check("引导 · 版本越老【新】越多（单调不减）",
                       atCurrent <= fromPrev && fromPrev <= fromOld && fromOld <= fromNothing,
                       atCurrent + " / " + fromPrev + " / " + fromOld + " / " + fromNothing);
