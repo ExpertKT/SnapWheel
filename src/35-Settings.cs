@@ -121,6 +121,13 @@ namespace SnapWheel
         public bool PinHintDone = false;      // 贴图（中键）的首次提示是否已展示过
         public string GuideSeenVersion = "";  // 上一次自动弹出新手引导/更新说明时的版本号
         public bool TextBg = true;            // 标注文字默认带白底（可关，见截图工具条上的"文字底"）
+        // ---- 取字用哪个引擎（在取字结果框里就能切，见 81-OcrForm.cs）----
+        //   auto   ：系统自带 OCR 优先；系统没有（Win7）就用随包的本地组件 —— 出厂默认
+        //   system ：只用 Windows.Media.Ocr（快，但短标题/小字容易整行漏掉）
+        //   native ：只用随包的 PP-OCR 组件（漏行少，慢一些）
+        // 为什么要做成可切的：两条路的错法不一样（实测同一张图，系统认不出「验证」两个字，
+        // 本地组件认得出来），认不出来的时候用户自己换一条再认一次，比问我"哪个更好"快。
+        public string OcrEngine = "auto";
         public string KeyActions = "new,next,delete,prev";  // 万能键四分区动作：上,右,下,左
         public int Rev = 0;                   // 配置版本号（用于默认值迁移）
 
@@ -213,6 +220,7 @@ namespace SnapWheel
                         else if (k == "PinHintDone") s.PinHintDone = (v == "1");
                         else if (k == "GuideSeenVersion") s.GuideSeenVersion = v;
                         else if (k == "TextBg") s.TextBg = (v == "1");
+                        else if (k == "OcrEngine" && (v == "auto" || v == "system" || v == "native")) s.OcrEngine = v;
                         else if (k == "KeyActions" && v.Length > 0) s.KeyActions = v;
                         else if (k == "Rev") { int n; if (int.TryParse(v, out n)) s.Rev = n; }
                     }
@@ -245,6 +253,21 @@ namespace SnapWheel
             {
                 try { fs[i].SetValue(dst, fs[i].GetValue(src)); } catch { }
             }
+        }
+
+        // 只改一个字段就落盘 —— 给"不在设置窗口里改的"开关用（目前只有取字引擎：
+        // 它在取字结果框里就能切，那个框手里没有 Settings 实例）。
+        // 先读盘再改那一个字段，别的设置项原样保留。
+        public static void SaveOcrEngine(string v)
+        {
+            try
+            {
+                if (v != "auto" && v != "system" && v != "native") return;
+                Settings s = Load();
+                s.OcrEngine = v;
+                s.Save();
+            }
+            catch { }
         }
 
         // ---------- 万能键四个分区能绑的动作 ----------
@@ -360,6 +383,7 @@ namespace SnapWheel
                 lines.Add("PinHintDone=" + (PinHintDone ? "1" : "0"));
                 lines.Add("GuideSeenVersion=" + (GuideSeenVersion ?? ""));
                 lines.Add("TextBg=" + (TextBg ? "1" : "0"));
+                lines.Add("OcrEngine=" + OcrEngine);
                 lines.Add("KeyActions=" + KeyActions);
                 // 配置格式版本：写了它以后就不再被默认值迁移覆盖（迁移逻辑见 Load）。
                 // 这里别写死数字 —— 之前写死 2，把 Load 里刚升到 3 的迁移标记又按回去了，

@@ -9,10 +9,17 @@ namespace SnapWheel
     // 打开时自动把原文放进剪贴板 —— 取字的目的就是"拿去用"，少一步是一步。
     class OcrForm : Form
     {
+        // 换引擎之后重新认同一张图：调用方把"这张图"封进来（剪贴板那张 Bitmap、或选区的像素）
+        public delegate string Redo(out string error);
+
         readonly TextBox _src;
         readonly TextBox _dst;
         readonly RoundButton _tr;
         readonly Label _trState;
+        readonly Label _head;
+        readonly ComboBox _cmbEngine;
+        readonly Label _engNote;
+        readonly Redo _redo;
         bool _busy;
         string _translated = "";
 
@@ -32,8 +39,11 @@ namespace SnapWheel
             Gfx.RepaintAll(this);
         }
 
-        public OcrForm(string text)
+        public OcrForm(string text) : this(text, null) { }
+
+        public OcrForm(string text, Redo redo)
         {
+            _redo = redo;
             if (text == null) text = "";
             bool copied = false;
             try { Clipboard.SetText(text); copied = true; } catch { }
@@ -75,6 +85,7 @@ namespace SnapWheel
             head.Font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
             head.ForeColor = Color.FromArgb(28, 30, 36);
             Controls.Add(head);
+            _head = head;
 
             // ---- 窗口宽度：设计稿 620 × K，但不能被标题或屏幕挤到放不下 ----
             int clientW = Ui.S(620);
@@ -103,6 +114,50 @@ namespace SnapWheel
             Ui.Wrap(sub, contentW);
             Controls.Add(sub);
 
+            // ---- 取字引擎：给用户自己选，并把两个的短处写清楚（不然他不知道"哪个更好"）----
+            // 两个引擎的毛病不一样：系统那个快但短标题/小字容易整行漏（实测「验证」整行消失），
+            // 本地组件漏字少但整屏要 3~4 秒。这不是"我们没调好"，是两套引擎各自的取舍，
+            // 所以把这个选择交给用户，而不是替他定死。
+            Label lEng = new Label();
+            lEng.Text = Lang.T("取字引擎", "OCR engine");
+            lEng.ForeColor = Color.FromArgb(120, 124, 134);
+            Ui.OneLine(lEng);
+            Controls.Add(lEng);
+
+            string[] engItems = new string[]
+            {
+                Lang.T("自动（推荐）", "Auto (recommended)"),
+                Lang.T("系统自带（快）", "System (fast)"),
+                Lang.T("随包本地组件（慢、漏字少）", "Bundled component (slower, fewer misses)")
+            };
+            _cmbEngine = new ComboBox();
+            _cmbEngine.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbEngine.Font = new Font("Microsoft YaHei UI", 9.5f);
+            _cmbEngine.Items.AddRange(engItems);
+            int cbW = Ui.S(170);
+            try
+            {
+                foreach (string it in engItems)
+                {
+                    Size t = TextRenderer.MeasureText(it, _cmbEngine.Font);
+                    if (t.Width + Ui.S(40) > cbW) cbW = t.Width + Ui.S(40);   // 40 = 下拉箭头 + 内边距
+                }
+            }
+            catch { }
+            int cbMax = contentW - lEng.PreferredSize.Width - Ui.S(10);
+            if (cbMax > Ui.S(100) && cbW > cbMax) cbW = cbMax;               // 再长也不许把标签挤出去
+            _cmbEngine.Size = new Size(cbW, Ui.S(24));
+            Controls.Add(_cmbEngine);
+            // 先把初值定好再接事件 —— 否则构造时那一次 SelectedIndex 赋值会当场触发"重新识别"
+            _cmbEngine.SelectedIndex = EngineIndex(Ocr.Engine);
+            _cmbEngine.SelectedIndexChanged += new EventHandler(OnEngineChanged);
+
+            _engNote = new Label();
+            _engNote.Text = EngineNote();
+            _engNote.ForeColor = Color.FromArgb(120, 124, 134);
+            Ui.Wrap(_engNote, contentW);
+            Controls.Add(_engNote);
+
             Label l1 = new Label();
             l1.Text = Lang.T("原文", "Original");
             l1.ForeColor = Color.FromArgb(120, 124, 134);
@@ -115,6 +170,9 @@ namespace SnapWheel
             int headH = head.PreferredHeight;
             int subH = sub.PreferredHeight;
             int l1H = l1.PreferredHeight;
+            int engRowH = Math.Max(lEng.PreferredHeight, _cmbEngine.Height);   // 标签和下拉框取高的那个
+            int engNoteH = _engNote.PreferredHeight;
+            int gEng = Ui.S(6);                                                // 下拉框那行 → 说明文字
 
             // 圆角按钮上的字是 TextRenderer 直接画在按钮矩形里的（见 40-RoundButton.OnPaint）：
             // 宽或高不够就**硬裁**，按钮不会自己缩字号、也不会自己变宽。所以宽高取「设计值 × K」和
@@ -137,7 +195,8 @@ namespace SnapWheel
             int bottomH = Math.Max(copyDstH, closeH);            // 底部那排的行高
 
             // 除两个多行框之外的固定开销（用来判断"一屏放不放得下"）
-            int fixedH = top + headH + gHeadSub + subH + gSubL1 + l1H + gL1Box
+            int fixedH = top + headH + gHeadSub + subH + gSubL1 + engRowH + gEng + engNoteH + gSubL1
+                       + l1H + gL1Box
                        + gBoxRow + rowH + gRowBox + gBoxBot + bottomH + botPad;
             if (scrH > 0)
             {
@@ -158,6 +217,11 @@ namespace SnapWheel
             y += headH + gHeadSub;
             sub.Location = new Point(Ui.S(27), y);               // x 的 27 是设计稿里相对标题(24)的错位，保持原样
             y += subH + gSubL1;
+            lEng.Location = new Point(pad, y);
+            _cmbEngine.Location = new Point(lEng.Right + Ui.S(10), y + Math.Max(0, (engRowH - _cmbEngine.Height) / 2));
+            y += engRowH + gEng;
+            _engNote.Location = new Point(pad, y);
+            y += engNoteH + gSubL1;
             l1.Location = new Point(pad, y);
             y += l1H + gL1Box;
             int srcY = y;
@@ -292,6 +356,69 @@ namespace SnapWheel
             int bottomLine = clientH - botPad;                              // 底部那排共用的底边（原来 = 560 - 48 + 36 的底）
             copyDst.Location = new Point(pad, bottomLine - copyDst.Height);
             close.Location = new Point(clientW - pad - close.Width, bottomLine - close.Height);
+        }
+
+        // ---- 引擎那行的映射：顺序和中英文文案、和 35-Settings.cs 的取值三处一一对应，改一处就得改三处 ----
+        static int EngineIndex(string v)
+        {
+            if (string.Equals(v, "system", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (string.Equals(v, "native", StringComparison.OrdinalIgnoreCase)) return 2;
+            return 0;
+        }
+
+        static string EngineValue(int i)
+        {
+            if (i == 1) return "system";
+            if (i == 2) return "native";
+            return "auto";
+        }
+
+        static string EngineNote()
+        {
+            return Lang.T(
+                "「系统」快（整屏不到 1 秒），但短标题、小字容易整行漏掉；「本地组件」慢（整屏 3~4 秒）漏字少，需要程序旁边有 ocr 目录（32 位 Win7 上只有它）。「自动」= 有系统取字就用系统，Win7 自动改用本地组件。",
+                "System is fast (under a second for a full screen) but often drops short headings and small text; the bundled component is slower (3-4 s) with fewer misses, and needs an 'ocr' folder next to the program (on 32-bit Windows 7 it is the only choice). Auto = the system OCR when present, the bundled one otherwise.");
+        }
+
+        // 换了引擎：存下来 → 让 Ocr 重探一次 → 拿同一张图重新认一遍。
+        // 认不出来就**保留原来的文字**：用户手上的结果不能被一次实验性切换弄丢。
+        void OnEngineChanged(object sender, EventArgs e)
+        {
+            string val = EngineValue(_cmbEngine.SelectedIndex);
+            Settings.SaveOcrEngine(val);
+            Ocr.Engine = val;
+            Ocr.Reconfigure();
+            Usage.Ev("OcrEngine", val);
+            if (_redo == null) return;          // 极少数拿不到原图的调用 → 存下来，下次取字生效
+
+            _cmbEngine.Enabled = false;
+            _engNote.Text = Lang.T("正在用新的引擎重新识别这张图…", "Re-recognising this image with the new engine…");
+            Redo redo = _redo;
+            Thread th = new Thread(new ThreadStart(delegate()
+            {
+                string err = null, txt = null;
+                try { txt = redo(out err); } catch (Exception ex) { err = ex.Message; }
+                try
+                {
+                    BeginInvoke(new MethodInvoker(delegate()
+                    {
+                        _cmbEngine.Enabled = true;
+                        _engNote.Text = EngineNote();
+                        if (txt == null)
+                        {
+                            _engNote.Text = (err ?? Lang.T("重新识别失败", "Re-recognition failed")) + Lang.T("（原文没动）", " (the text above was kept)");
+                            return;
+                        }
+                        _src.Text = txt;
+                        int n = txt.Replace("\r", "").Replace("\n", "").Length;
+                        _head.Text = n > 0 ? (Lang.T("认出来 ", "Recognised ") + n + Lang.T(" 个字", " characters")) : Lang.T("没认出文字", "No text found");
+                        try { Clipboard.SetText(txt); } catch { }
+                    }));
+                }
+                catch { }
+            }));
+            th.IsBackground = true;
+            th.Start();
         }
 
         // 圆角按钮上的字是 TextRenderer 直接画在按钮矩形里（见 40-RoundButton.OnPaint）：

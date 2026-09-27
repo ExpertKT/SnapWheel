@@ -29,11 +29,16 @@ namespace SnapWheel
 
         const uint WDA_NONE = 0x00, WDA_EXCLUDEFROMCAPTURE = 0x11;
 
-        static int pass, fail;
+        static int pass, fail, skip;
         static void Check(string n, bool ok, string d)
         {
             if (ok) { pass++; Console.WriteLine("  [OK]   " + n); }
             else { fail++; Console.WriteLine("  [FAIL] " + n + "   " + d); }
+        }
+        static void Skip(string n, string why)
+        {
+            skip++;
+            Console.WriteLine("  [跳过] " + n + "   " + why);
         }
         static object G(object o, string n)
         {
@@ -81,7 +86,12 @@ namespace SnapWheel
 
             string def = Affinity(f.Handle);
             Console.WriteLine("  默认状态：" + def);
-            Check("① 默认对屏幕捕获隐身（所以自己截图不会带上轮盘）", def == "对捕获隐身", def);
+            // 能力探测，不看版本号：WDA_EXCLUDEFROMCAPTURE 是 Windows 10 2004 才有的。
+            // 老系统上只剩 WDA_MONITOR(0x1)，那会让轮盘在别人的截图/录屏里变成一个黑块 ——
+            // 比不设防更糟，所以那条路径上宁可不设（src/60-WheelForm.cs:443 也是这个取舍）。
+            bool canExclude = (def == "对捕获隐身");
+            if (canExclude) Check("① 默认对屏幕捕获隐身（所以自己截图不会带上轮盘）", true, def);
+            else Check("① 系统不支持隐身时保持不设防（也绝不用 WDA_MONITOR 把窗口变黑块）", def == "可被捕获", def);
 
             // ③ 改完立刻生效
             s.Recordable = true;
@@ -96,7 +106,8 @@ namespace SnapWheel
             s.Recordable = false;
             f.ApplyCaptureVisibility();
             Application.DoEvents();
-            Check("③ 关回去也能立刻恢复隐身", Affinity(f.Handle) == "对捕获隐身", Affinity(f.Handle));
+            if (canExclude) Check("③ 关回去也能立刻恢复隐身", Affinity(f.Handle) == "对捕获隐身", Affinity(f.Handle));
+            else Skip("③ 关回去也能立刻恢复隐身", "这台系统本来就设不上隐身（见 ①）");
 
             // ④ 存盘往返
             s.Recordable = true;
@@ -106,7 +117,7 @@ namespace SnapWheel
 
             f.Dispose();
             Console.WriteLine();
-            Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);
+            Console.WriteLine("通过 {0} / 失败 {1} / 跳过 {2}", pass, fail, skip);
             Environment.ExitCode = fail == 0 ? 0 : 1;
         }
     }

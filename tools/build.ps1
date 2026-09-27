@@ -243,6 +243,10 @@ if ($Test) {
     # 轮盘靠边方式（0.9.11）：任务栏自动隐藏时，工作区照样预留那一条，于是轮盘底下悬一条缝。
     # 这里只测"判断本身"（纯函数，六种组合）；真实任务栏状态测不了，用手测。
     Run-Test '轮盘靠边方式'    'edge-anchor-test.cs'      'SnapWheel.EdgeAnchorTest' $null
+    # 本地取字（Win7 那条兜底路，57-OcrNative.cs）：强制走外部引擎，认一张字已知的图。
+    # 开发机上本来就没有那 21MB 组件，所以**正常情况下它是"跳过"**；只有带着组件跑（或用
+    # SNAPWHEEL_OCR_DIR 指过去）时才有断言 —— 它红了才说明那一路真的坏了。
+    Run-Test '取字-本地引擎'   'ocr-native-test.cs'       'SnapWheel.OcrNativeTest' $null
 
     # 「代码被注释吞掉」检查 —— 编译器和测试都看不见这类事故，但真出过：
     # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。

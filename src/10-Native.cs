@@ -19,6 +19,7 @@ namespace SnapWheel
         [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int v);
         [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern int GetDpiForSystem();
+        [DllImport("gdi32.dll")] public static extern int GetDeviceCaps(IntPtr hdc, int index);   // Win2000+：Win7 上拿 DPI 只能靠它
         [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
         // 0.6.0 滚动长截图：给目标窗口发合成的滚轮消息（这是产品功能，不是测试里的模拟输入）
         [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
@@ -106,17 +107,29 @@ namespace SnapWheel
         }
 
         // 当前进程的缩放比例（1.0 = 96dpi）
+        //
+        // 为什么每一步都得自己一个 try：GetDpiForWindow / GetDpiForSystem 是 Win10 1607 才有的导出，
+        // **Win7 上调用会抛 EntryPointNotFoundException**。原来三个调用挤在同一个 try 里，
+        // Win7 上第一个就抛、直接返回 1f —— 于是 125% 缩放的老机器上整个界面按 100% 画，偏小。
+        // 最后那条 GetDeviceCaps(LOGPIXELSX) 是 Win2000 就有的老路，Win7 上真正管用的就是它。
         public static float DpiScaleOf(IntPtr hwnd)
         {
-            try
+            uint d = 0;
+            try { if (hwnd != IntPtr.Zero) d = GetDpiForWindow(hwnd); } catch { }      // Win10 1607+
+            if (d == 0) { try { d = (uint)GetDpiForSystem(); } catch { } }             // Win10 1607+
+            if (d == 0)
             {
-                uint d = 0;
-                if (hwnd != IntPtr.Zero) d = GetDpiForWindow(hwnd);
-                if (d == 0) d = (uint)GetDpiForSystem();
-                if (d == 0) d = 96;
-                return d / 96f;
+                IntPtr dc = IntPtr.Zero;
+                try
+                {
+                    dc = GetDC(IntPtr.Zero);
+                    if (dc != IntPtr.Zero) d = (uint)GetDeviceCaps(dc, 88);            // LOGPIXELSX = 88
+                }
+                catch { }
+                finally { if (dc != IntPtr.Zero) { try { ReleaseDC(IntPtr.Zero, dc); } catch { } } }
             }
-            catch { return 1f; }
+            if (d == 0) d = 96;
+            return d / 96f;
         }
         // ==================== 传递模式（0.9.0）需要的三个 API ====================
         //

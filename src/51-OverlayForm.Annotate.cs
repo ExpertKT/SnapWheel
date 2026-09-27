@@ -561,7 +561,7 @@ namespace SnapWheel
                     BeginInvoke(new MethodInvoker(delegate()
                     {
                         _ocrBusy = false;
-                        ShowOcrResult(txt, err);
+                        ShowOcrResult(txt, err, data, w, h);
                     }));
                 }
                 catch { _ocrBusy = false; }
@@ -570,7 +570,7 @@ namespace SnapWheel
             th.Start();
         }
 
-        void ShowOcrResult(string txt, string err)
+        void ShowOcrResult(string txt, string err, byte[] data, int w, int h)
         {
             if (txt == null)
             {
@@ -585,7 +585,8 @@ namespace SnapWheel
             {
                 bool wasTop = TopMost;
                 TopMost = false;
-                using (OcrForm of = new OcrForm(txt))
+                // 像素留着：结果框里换引擎时要拿同一块选区重新认一遍
+                using (OcrForm of = new OcrForm(txt, delegate(out string e2) { return Ocr.RecognizePixels(data, w, h, out e2); }))
                 {
                     of.TopMost = true;
                     of.ShowDialog(this);

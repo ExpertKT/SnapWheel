@@ -9,10 +9,20 @@
 //   ① 正常小步滚动        ② 一次滚很多（接近单帧上限）
 //   ③ 滚到底不动了        ④ 页面底部是大片纯色（静止区判定会误判）
 //   ⑤ 右侧有滚动条（每帧都在变，不该进匹配、也不该进结果）
-//   ⑥ 顶部有 sticky 固定头 ⑦ 底部有任务栏（静止区）
+//   ⑥ 顶部有 sticky 固定头
+//   ⑦⑧⑨ 带任务栏/半透明任务栏 —— ⚠️ **这三条是已废弃路线的存档，不是欠账**：
+//        它们是直接调引擎、自己往帧里画任务栏；而生产路径在抓帧之前就把区域夹进了工作区
+//        （59-LongShotForm.cs:47），**引擎收不到这种帧**。留着是为了盯住引擎单独拿去看时的行为。
+//   ⑩ 亚像素滚动 —— ⚠️ **这条是真的还没修，而且生产路径排除不掉**（跟任务栏无关）。
 //
 // 判定标准只有一条，但很硬：**拼出来的图必须是原页面的前缀**（逐像素相等）。
 // 这一条同时管住了"重复贴"、"漏内容"、"整体偏移"三种错。
+//
+// ⚠️ "这个用例现在不会绿"分两种，**必须分开写**（参数 notGreen 里写原因）：
+//   · 已废弃路线的存档（⑦⑧⑨）—— 不是欠账，别照着它排计划
+//   · 真没修的 bug（⑩）        —— 是欠账
+//   2026-09-22 之前这两种印的是同一句话（"尚未修好的真实 bug"），于是有人
+//   照着 ⑦⑧⑨ 排了一个"长截图收尾"的版本来修一条**五个月前就放弃了的路线**。
 //
 // 编译：
 //   csc /nologo /target:exe /main:SnapWheel.LongShotTest /out:%TEMP%\ls.exe /r:System.Runtime.WindowsRuntime.dll src\*.cs tests\longshot-test.cs
@@ -191,7 +201,16 @@ namespace SnapWheel
             return best;
         }
 
-        static void Case(string name, int[] scrolls, bool scrollbar, bool header, bool taskbar, bool verbose = false, bool translucent = false, bool knownDefect = false, float subpixel = 0f)
+        // notGreen：这个用例**现在不会绿**，这里写清"为什么不绿" —— 参数是原因，不是布尔。
+        //
+        // 为什么从 bool 改成 string（2026-09-22）：原来叫 knownDefect，打印的是
+        // "这个用例记录的是**尚未修好**的真实 bug"。**那句话对 ⑦⑧⑨ 是错的** ——
+        // 它们测的是引擎自己的"静止区检测"，而生产路径**在抓帧之前就把任务栏排除了**
+        // （59-LongShotForm.cs:47，3 行，确定性，不猜），引擎**根本收不到带任务栏的帧**。
+        // 于是这三条不是在报 bug，是在给一条**已经放弃的路线**留档。
+        // 一个把"废弃路线的存档"和"真没修的 bug"印成同一句话的测试，会骗到读它的人 ——
+        // 这次就骗到了：有人照着它排了一个"长截图收尾"的版本。
+        static void Case(string name, int[] scrolls, bool scrollbar, bool header, bool taskbar, bool verbose = false, bool translucent = false, string notGreen = null, float subpixel = 0f)
         {
             Bitmap page = Page();
             LongShot ls = new LongShot();
@@ -231,9 +250,9 @@ namespace SnapWheel
                 }
             }
             else bad = FirstBadRow(res, page, scrollbar ? ScrollbarW : 0, header ? HeaderH : 0);
-            if (knownDefect && bad >= 0)
+            if (notGreen != null && bad >= 0)
             {
-                Console.WriteLine("  [已知缺陷] " + name + " —— 第 " + bad + " 行开始对不上（这个用例记录的是**尚未修好**的真实 bug）");
+                Console.WriteLine("  [未达成] " + name + " —— 第 " + bad + " 行开始对不上。原因：" + notGreen);
                 res.Dispose(); page.Dispose(); return;
             }
             // 允许结果比"应该的"短（滚到底/被拒帧），但**内容本身不能错位**
@@ -262,10 +281,21 @@ namespace SnapWheel
             Case("③ 滚到底不动了", new int[] { 300, 300, 300, 300, 300, 0, 0, 0 }, false, false, false);
             Case("⑤ 右侧有滚动条", new int[] { 120, 120, 120, 120, 120, 120 }, true, false, false);
             Case("⑥ 顶部有 sticky 头", new int[] { 120, 120, 120, 120, 120, 120 }, false, true, false, true);
-            Case("⑦ 底部有任务栏", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, true, false, false, true);   // 已知缺陷：T<d 时任务栏落在"测不了"的区间
-            Case("⑧ 全部都有（最像真实网页）", new int[] { 140, 140, 140, 140, 140 }, true, true, true, false, false, true);   // 同上
-            Case("⑩ 亚像素滚动（真机就是这么滚的）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, false, true, 0.4f);
-            Case("⑨ 半透明任务栏（Win11 真实情况）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, true, true);
+            // ⑦⑧⑨ 三条：**已废弃路线的存档，不是待修的 bug。**
+            //   它们直接调 LongShot 引擎、自己往帧里画一条任务栏；而生产路径在抓帧之前
+            //   就把抓帧区域夹进了工作区（59-LongShotForm.cs:47），引擎**收不到这种帧**。
+            //   留着它们是为了盯住"引擎单独拿去看"时的行为，别删 —— 但别再当成欠账。
+            Case("⑦ 底部有任务栏（引擎层）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, true, false, false,
+                 "已废弃路线：生产路径抓帧前已排除任务栏，引擎收不到这种帧。留档用，不是欠账");
+            Case("⑧ 全部都有（最像真实网页）", new int[] { 140, 140, 140, 140, 140 }, true, true, true, false, false,
+                 "同 ⑦：已废弃路线，生产路径收不到这种帧，留档用");
+            Case("⑨ 半透明任务栏（Win11 真实情况）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, true,
+                 "同 ⑦。⚠️ 这条原来记的\"用户机器上任务栏重复的根因\"**已经不成立**：任务栏在抓帧前就被排除，透明不透明都一样");
+            // ⑩ 和上面三条不同：**它是真的还没修，而且生产路径排除不掉。**
+            //   真机滚动量不是整数像素，文字在小数位置上重新抗锯齿 → 相邻帧永远不是逐像素相同，
+            //   误差会**累积**（这次量到第 101 行已经偏 3 行）。它跟任务栏无关。
+            Case("⑩ 亚像素滚动（真机就是这么滚的）", new int[] { 120, 120, 120, 120, 120, 120 }, false, false, false, false, false,
+                 "⚠️ 真没修：亚像素滚动下误差累积（本次量到第 101 行偏 3 行）。生产路径不受任务栏那套保护", 0.4f);
 
             Console.WriteLine();
             Console.WriteLine("通过 {0} / 失败 {1}", pass, fail);

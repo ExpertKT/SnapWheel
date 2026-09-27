@@ -30,6 +30,7 @@ namespace SnapWheel
         public AppCtx()
         {
             _settings = Settings.Load();
+            Ocr.Engine = _settings.OcrEngine;   // 取字引擎（auto/system/native，取字框里可改）
             Usage.On = _settings.UsageLog;      // 本地使用统计（默认关）
             _wheels = new WheelManager(_settings);
             _wheels.LoadImagesFromDisk();
@@ -321,20 +322,27 @@ namespace SnapWheel
             string err = null, txt = null;
             Cursor prev = null;
             try { prev = Cursor.Current; Cursor.Current = Cursors.WaitCursor; } catch { }
-            try { txt = Ocr.Recognize(img, out err); }
-            catch (Exception ex) { err = ex.Message; }
-            finally { try { Cursor.Current = prev; } catch { } try { img.Dispose(); } catch { } }
-
-            if (txt == null)
-            {
-                try { MessageBox.Show(err ?? "识别失败了", AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
-                return;
-            }
             try
             {
-                using (OcrForm of = new OcrForm(txt)) { of.ShowDialog(); }
+                try { txt = Ocr.Recognize(img, out err); }
+                catch (Exception ex) { err = ex.Message; }
+                finally { try { Cursor.Current = prev; } catch { } }
+
+                if (txt == null)
+                {
+                    try { MessageBox.Show(err ?? "识别失败了", AppInfo.Name + " 取字", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
+                    return;
+                }
+                // 这张图要活到结果框关掉为止：框里换引擎时会拿它重新认一遍。
+                // （原来是在 finally 里立刻 Dispose —— 那样"重新识别"根本无从谈起）
+                Bitmap keep = img;
+                try
+                {
+                    using (OcrForm of = new OcrForm(txt, delegate(out string e2) { return Ocr.Recognize(keep, out e2); })) { of.ShowDialog(); }
+                }
+                catch (Exception ex) { Err.Log("OcrForm", ex); }
             }
-            catch (Exception ex) { Err.Log("OcrForm", ex); }
+            finally { try { img.Dispose(); } catch { } }
         }
 
         // 管理员模式说明框：托盘菜单、"拖不动"的那一刻都走这里。
@@ -761,6 +769,9 @@ namespace SnapWheel
         {
             bool wasTop = _wheel.TopMost;
             PushNoTopMost();
+            // 取字引擎在取字框里随时能改（改完它自己写盘）。设置窗口保存的是内存里这一份 _settings，
+            // 所以存之前先把当前值同步过来 —— 否则这里一按确定，就把刚选好的引擎写回去了。
+            _settings.OcrEngine = Ocr.Engine;
             SettingsForm f = new SettingsForm(_settings);
             // 用户报"设置界面偶尔会出现在下层而不是顶层"。
             // 原因：`ShowDialog()` 没传 owner，而这个进程的窗口都带 WS_EX_NOACTIVATE、

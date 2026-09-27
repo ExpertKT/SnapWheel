@@ -63,6 +63,11 @@ namespace SnapWheel
             // ---------- ②b 同上，但**用一块指定大小的屏幕算**（本机屏幕大，小屏那种撞法看不到）----------
             ProbeOverlayOnScreen();
 
+            // ---------- ③ 取字结果框：新插进去的「取字引擎」那一行 ----------
+            ProbeOcrForm();
+            // ---------- ③b 换引擎之后**真的**重新识别并把原文换掉 ----------
+            ProbeOcrSwitch();
+
             Console.WriteLine();
             Console.WriteLine(string.Format("结果：通过 {0}，失败 {1}", pass, fail));
             Environment.ExitCode = fail == 0 ? 0 : 1;
@@ -307,6 +312,151 @@ namespace SnapWheel
                       tool.Width > 0 && tool.Height > 0 && chip.Width > 0 && chip.Height > 0,
                       "工具条=" + tool + "  胶囊=" + chip);
             }
+        }
+        // ---------- ③b 换引擎 = 存设置 + 用同一张图重认 + 把原文换掉 ----------
+        //
+        // 这一段验的是"那根线有没有接上"：切换动作在 UI 线程、重认在后台线程、结果再用 BeginInvoke
+        // 回到 UI 线程改文本框 —— 中间任何一环断了，用户看到的就是"选了没反应"。
+        // 重认本身用一个假的 redo（不真跑 OCR），所以这条检查在哪台机器上都一样快、一样确定。
+        // 副作用：会写一次设置文件，跑完还原成原来的值。
+        static void ProbeOcrSwitch()
+        {
+            OcrForm f = null;
+            string orig = "auto";
+            try
+            {
+                orig = Settings.Load().OcrEngine;
+                f = new OcrForm("原文甲乙丙", delegate(out string error) { error = null; return "重认结果：" + Ocr.Engine; });
+                f.CreateControl();
+                IntPtr h = f.Handle;
+                f.PerformLayout();
+
+                ComboBox cb = null;
+                TextBox src = null;
+                Walk(f, delegate(Control c)
+                {
+                    if (c is ComboBox && cb == null) cb = (ComboBox)c;
+                    if (c is TextBox && src == null) src = (TextBox)c;
+                });
+                if (cb == null || src == null)
+                {
+                    Check("取字框 · 换引擎的探测（找得到下拉框和原文框）", false, "cb=" + (cb != null) + " src=" + (src != null));
+                    return;
+                }
+
+                string before = src.Text;
+                cb.SelectedIndex = 2;                              // → native
+                // 后台线程 + BeginInvoke：必须抽消息它才回得来
+                for (int i = 0; i < 250 && src.Text.IndexOf("重认结果", StringComparison.Ordinal) < 0; i++)
+                {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(20);
+                }
+
+                Check("取字框 · 换引擎之后自动重认并把原文换掉",
+                      src.Text.IndexOf("重认结果：native", StringComparison.Ordinal) >= 0,
+                      "原=" + before + " 现=" + src.Text);
+                Check("取字框 · 换引擎同时写进设置（下次启动记得住）",
+                      string.Equals(Settings.Load().OcrEngine, "native", StringComparison.OrdinalIgnoreCase),
+                      "设置里是 " + Settings.Load().OcrEngine);
+                Check("取字框 · 重认完下拉框恢复可用（不是卡住）", cb.Enabled, "Enabled=" + cb.Enabled);
+            }
+            catch (Exception ex)
+            {
+                Check("取字框 · 换引擎探测", false, "异常：" + ex.Message);
+            }
+            finally
+            {
+                try { Settings.SaveOcrEngine(orig); } catch { }
+                Ocr.Engine = "auto";
+                try { if (f != null) f.Dispose(); } catch { }
+            }
+        }
+
+        // ---------- ③ 取字结果框：新加的「取字引擎」那行 ----------
+        //
+        // 为什么要专门量它：这一行的位置不是写死的，而是"在副标题和「原文」之间插一段"算出来的
+        // （见 81-OcrForm.cs 的 y 累加），而**插进去一块**最容易把下面的东西顶出窗口 ——
+        // 这个项目在 150% DPI 下反复吃过这个亏。所以三档引擎各构造一次，量三件事：
+        // 下拉框在不在/选中的对不对、有没有东西越出客户区、下拉框有没有压住别的标签。
+        static void ProbeOcrForm()
+        {
+            string[] engines = { "auto", "system", "native" };
+            for (int i = 0; i < engines.Length; i++)
+            {
+                string eng = engines[i];
+                OcrForm f = null;
+                try
+                {
+                    Ocr.Engine = eng;
+                    f = new OcrForm("第一行文字\r\n第二行 ABC 1234");
+                    f.CreateControl();
+                    IntPtr h = f.Handle;            // 强制建句柄，触发布局
+                    f.PerformLayout();
+
+                    ComboBox cb = null;
+                    Label note = null;
+                    var labels = new List<Control>();
+                    Walk(f, delegate(Control c)
+                    {
+                        if (c is ComboBox && cb == null) cb = (ComboBox)c;
+                        if (c is Label) labels.Add(c);
+                    });
+
+                    Check("取字框(" + eng + ") · 有「取字引擎」下拉框且有 3 个选项",
+                          cb != null && cb.Items.Count == 3,
+                          cb == null ? "没有 ComboBox" : "选项数 " + cb.Items.Count);
+                    if (cb == null) { f.Dispose(); continue; }
+
+                    // auto/system/native ↔ 0/1/2（映射在 81-OcrForm.cs 的 EngineIndex）
+                    int want = eng == "system" ? 1 : (eng == "native" ? 2 : 0);
+                    Check("取字框(" + eng + ") · 下拉框显示的正是当前引擎",
+                          cb.SelectedIndex == want, "实际 " + cb.SelectedIndex + "，应为 " + want);
+
+                    // 用户明确要的"作说明"：那条说明得真的在，而且是句人话（不是空标签）
+                    for (int k = 0; k < labels.Count; k++)
+                    {
+                        Label lb = labels[k] as Label;
+                        if (lb != null && lb.Text != null && lb.Text.Length > 40 && note == null) note = lb;
+                    }
+                    Check("取字框(" + eng + ") · 引擎那一行有说明文字", note != null, "没找到长说明标签");
+
+                    // 没有任何控件越出客户区（越界 = 被窗口切掉，用户看不到）
+                    int over = 0; string who = "";
+                    Walk(f, delegate(Control c)
+                    {
+                        Rectangle r = InRoot(f, c);
+                        if (r.Right > f.ClientSize.Width + 1 || r.Bottom > f.ClientSize.Height + 1)
+                        {
+                            over++;
+                            if (who.Length == 0) who = c.GetType().Name + "「" + c.Text + "」" + r;
+                        }
+                    });
+                    Check("取字框(" + eng + ") · 没有控件越出窗口（" + f.ClientSize.Width + "x" + f.ClientSize.Height + "）",
+                          over == 0, over + " 个越界，例如 " + who);
+
+                    // 下拉框不能压住别的标签：它和「原文」小标签之间只隔一个间距，间距算错就直接撞上
+                    Rectangle rcb = InRoot(f, cb);
+                    int clash = 0; string ex = "";
+                    for (int k = 0; k < labels.Count; k++)
+                    {
+                        if (labels[k] == note) continue;
+                        Rectangle lb = InRoot(f, labels[k]);
+                        if (lb.IntersectsWith(rcb))
+                        {
+                            clash++;
+                            if (ex.Length == 0) ex = "「" + labels[k].Text + "」" + lb;
+                        }
+                    }
+                    Check("取字框(" + eng + ") · 下拉框没压住别的标签", clash == 0, clash + " 处，例如 " + ex);
+                }
+                catch (Exception ex)
+                {
+                    Check("取字框(" + eng + ") · 探测", false, "异常：" + ex.Message);
+                }
+                finally { try { if (f != null) f.Dispose(); } catch { } }
+            }
+            Ocr.Engine = "auto";                    // 探针不改全局状态，跑完还原
         }
     }
 }

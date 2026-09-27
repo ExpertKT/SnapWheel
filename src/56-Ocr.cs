@@ -21,10 +21,19 @@ namespace SnapWheel
     {
         static bool _probed;
         static object _engine;
+        static bool _native;        // 走 57-OcrNative.cs 那个本地引擎（Win7 兜底）
         static string _lang = "";
         static string _why = "";
 
-        public static bool Available { get { Probe(); return _engine != null; } }
+        // 用户在取字结果框里选的引擎（35-Settings.cs 存着，启动时灌进来）：
+        //   auto   = 系统自带优先，拿不到就退本地组件（老行为，Win7 自动走本地）
+        //   system = 只用系统自带的 Windows.Media.Ocr
+        //   native = 只用随包的本地组件（要求程序旁边有 ocr 目录）
+        // 为什么要让它可选：两个引擎的短处不一样 —— 系统那个快（整屏 <1 秒）但短标题、
+        // 小字容易整行漏（实测「验证」两字整行消失）；本地组件漏字少但整屏要 3~4 秒。
+        public static string Engine = "auto";
+
+        public static bool Available { get { Probe(); return _engine != null || _native; } }
         public static string Language { get { Probe(); return _lang; } }
         public static string Why { get { Probe(); return _why; } }
 
@@ -38,10 +47,58 @@ namespace SnapWheel
         {
             if (_probed) return;
             _probed = true;
+            if (UseNative()) { _native = true; return; }
+            // 用户点名要本地组件、可它没装上：**绝不偷偷换成系统引擎** —— 那样他选了
+            // 「本地组件」还是系统那个结果，只会以为"切换是坏的"。直接报它为什么不可用。
+            if (string.Equals(Engine, "native", StringComparison.OrdinalIgnoreCase))
+            {
+                _why = OcrNative.Why.Length > 0 ? OcrNative.Why
+                     : Lang.T("没有找到随包的取字组件（程序旁边要有 ocr 目录）", "The bundled OCR component was not found (an 'ocr' folder must sit next to the program)");
+                return;
+            }
+            ProbeWinRT();
+        }
+
+        // 换了引擎之后把上一次的探测结果清掉，下一次识别按新引擎重新探一遍。
+        // _engine 是 WinRT 那个引擎对象、_native 是"走本地"的标记，两个都得清。
+        public static void Reconfigure()
+        {
+            _probed = false;
+            _engine = null;
+            _native = false;
+            _lang = "";
+            _why = "";
+        }
+
+        // 走哪条路？
+        //   · 系统自带 OCR（Win10/11）优先 —— 更准、更小、不用额外文件
+        //   · 拿不到（Win7 / Server Core / 精简版）就退到本地引擎（57-OcrNative.cs）
+        // 环境变量 SNAPWHEEL_OCR=native / system 比设置里的选择更强（测试要用它，
+        // 否则"兜底那条路"永远只在 Win7 上被跑过）。
+        static bool UseNative()
+        {
+            string env = Environment.GetEnvironmentVariable("SNAPWHEEL_OCR");
+            if (string.Equals(env, "native", StringComparison.OrdinalIgnoreCase)) return OcrNative.Available;
+            if (string.Equals(env, "system", StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(Engine, "native", StringComparison.OrdinalIgnoreCase)) return OcrNative.Available;
+            if (string.Equals(Engine, "system", StringComparison.OrdinalIgnoreCase)) return false;
+            if (WinRT("Windows.Media.Ocr.OcrEngine") != null) return false;
+            return OcrNative.Available;
+        }
+
+        static void ProbeWinRT()
+        {
             try
             {
                 Type t = WinRT("Windows.Media.Ocr.OcrEngine");
-                if (t == null) { _why = Lang.T("这台系统没有 OCR 组件（需要 Windows 10 及以上）", "This system has no OCR component (Windows 10 or newer required)"); return; }
+                if (t == null)
+                {
+                    // Win7 上本来就没有系统 OCR。本地引擎也没装成的话，把"本地引擎为什么不可用"
+                    // 直接告诉用户（那句话会说明 ocr 目录里该放什么），比只说"需要 Windows 10"有用。
+                    if (Environment.OSVersion.Version.Major < 10 && OcrNative.Why.Length > 0) _why = OcrNative.Why;
+                    else _why = Lang.T("这台系统没有 OCR 组件（需要 Windows 10 及以上）", "This system has no OCR component (Windows 10 or newer required)");
+                    return;
+                }
 
                 // 1) 按系统/用户语言直接来一个
                 MethodInfo fromUser = t.GetMethod("TryCreateFromUserProfileLanguages", BindingFlags.Public | BindingFlags.Static);
@@ -185,6 +242,9 @@ namespace SnapWheel
         {
             error = null;
             Probe();
+            // 本地引擎吃原始像素：上面的 Stretch（低对比度拉伸）是给系统引擎调的参，
+            // PP-OCR 是拿自然图训练的，没在真机上验过的事不往上加。
+            if (_native) return OcrNative.RecognizePixels(bgra, w, h, out error);
             if (_engine == null) { error = _why; return null; }
             try
             {
@@ -354,7 +414,7 @@ namespace SnapWheel
             error = null;
             if (bmp == null) { error = Lang.T("没有图", "No image"); return null; }
             Probe();
-            if (_engine == null) { error = _why; return null; }
+            if (_engine == null && !_native) { error = _why; return null; }
             try
             {
                 // 引擎对超大图有上限（MaxImageDimension，一般 10000），超过就先缩一下
