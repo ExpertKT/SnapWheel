@@ -34,6 +34,8 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 3. Press `Ctrl+Shift+S`, drag a region, release. The shot lands in the ring.
 4. Drag the thumbnail into any app to use it — or click the **nail** on the capture toolbar to pin it on screen instead.
 
+> **On Windows 7?** Download `SnapWheel-Win7-x86.zip` (32-bit) or `SnapWheel-Win7-x64.zip` instead of the full zip — they carry a local OCR component. Unpack it so `ocr\` sits next to `SnapWheel.exe`.
+
 **Two build lines ship from the same source:**
 
 | Build | What it is |
@@ -60,7 +62,7 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 
 ## Latest release
 
-**Latest: scrolling capture, reworked.** It used to capture your whole screen instead of the area you framed, and the stitcher mis-aligned content. Both are fixed, and the notes say plainly what the technique cannot do: frame only the part that scrolls.
+**Latest: Windows 7 support, and you pick the OCR engine.** The ring runs on Windows 7 now — those builds ship a local OCR component, because the engine built into Windows starts at Windows 10. The OCR result window also lets you switch engines: the system one is fast but drops short lines, the bundled one is slower and misses less. Plus 125% display scaling is no longer drawn as 100%, and big screenshots are no longer downscaled to 960 px before OCR.
 
 [See all changes →](https://github.com/ExpertKT/SnapWheel/releases) · [CHANGELOG](CHANGELOG.md)
 
@@ -68,7 +70,7 @@ Multiple "wheels" are supported: long-press the universal key in the middle of t
 
 | | |
 |---|---|
-| OS | Windows 10 / 11 (OCR needs Windows 10+) |
+| OS | Windows 10 / 11 — and **Windows 7**, via the `SnapWheel-Win7-*.zip` builds (the system OCR engine needs Windows 10+, so those carry their own) |
 | Runtime | .NET Framework 4.x — already part of Windows, nothing to install |
 | OCR language pack | Simplified Chinese / English usually ship by default; otherwise enable the "Optical character recognition" optional feature for that language |
 | Size | One exe, no installer, no third-party dependencies. Settings and logs live in `%APPDATA%\SnapWheel` |
@@ -113,9 +115,9 @@ MIT — see [LICENSE](LICENSE).
 
 **SnapWheel 把截图变成了顺手的一件事**：`Ctrl+Shift+S` 框选，图**不弹保存框、直接滑进屏幕角落的环里**；要用的时候把缩略图**拖进聊天框 / 文件夹**就完事。反过来，从桌面或浏览器把图拖回环上就收着了。
 
-绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个 384 KB 的 exe，Windows 10 / 11 双击就跑。
+绿色免安装 · 单文件 C# / WinForms · **零第三方依赖** · 一个 384 KB 的 exe，Windows 10 / 11 双击就跑；**Windows 7 也能跑**（下 Release 里的 Win7 包，它自带一份本地取字组件）。
 
-![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4?style=flat-square)
+![platform](https://img.shields.io/badge/platform-Windows%207%20%7C%2010%20%7C%2011-0078d4?style=flat-square)
 ![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![version](https://img.shields.io/badge/version-v1.2.0-blue?style=flat-square)
@@ -130,7 +132,7 @@ MIT — see [LICENSE](LICENSE).
   <a href="https://github.com/ExpertKT/SnapWheel/releases/latest"><b>⬇️ 下载最新版</b></a>
   &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">完整版</a>（含万能键，推荐）
   &nbsp;·&nbsp; <a href="https://github.com/ExpertKT/SnapWheel/releases/latest">无万能键版</a>（0.2 线，已定稿）
-  <br><sub>解压双击 <code>SnapWheel.exe</code> 即用，不需要安装；两个 zip 在同一个 Release 里</sub>
+  <br><sub>解压双击 <code>SnapWheel.exe</code> 即用，不需要安装；两个 zip 在同一个 Release 里。**Windows 7 另下 <code>SnapWheel-Win7-x86.zip</code>（32 位）或 <code>-x64.zip</code>**，解压后让 <code>ocr\</code> 跟 exe 并排</sub>
 
   ![SnapWheel](docs/wheel.png)
 
@@ -148,14 +150,14 @@ MIT — see [LICENSE](LICENSE).
 | ↔️ **拖出去就是发出去** | 缩略图拖进微信 / Word / 资源管理器 / 任何程序，松手就到。**复制语义**：环上留着一份 |
 | 📌 **贴到屏幕上**（1.0 新增） | 截图浮层工具条最右边那颗**钉子**：框完点它，图钉在你框的位置，**同时照常进轮环** |
 | 📜 **滚动长截图** | 框一块区域，它自己滚、自己拼，翻到底自动停（**只框会滚的那块** —— 边栏和悬浮窗不跟着滚，会被重复拼进去）|
-| 🔍 **取字 + 翻译** | 圈住文字就能复制，一键翻成中文 / 英文。暗色小字也认得准 |
+| 🔍 **取字 + 翻译** | 圈住文字就能复制，一键翻成中文 / 英文。暗色小字也认得准；结果框里能切换取字引擎（系统自带快，随包的本地组件漏字少）|
 | ↩️ **删错了能后悔** | 撤销上一次删除（保留最近 8 次）。除了 `%APPDATA%`，不往任何地方写东西 |
 
 绿色免安装 · 免注册表（开机自启可选）· 不打包任何模型文件 · **零第三方依赖**。
 
 ### 最新版
 
-**最新版：滚动长截图重做。** 以前它抓的是整块屏幕、不是你框的那块，拼接位置也会算错。两样都修了，并且把用法边界写清楚了：**只框会跟着滚的那块内容**（边栏、悬浮窗不跟着滚，会被重复拼进去）。
+**最新版：支持 Windows 7，取字引擎自己挑。** 轮盘现在 Win7 上也能跑（Win7 包自带一份本地取字组件，系统那个要 Windows 10）；取字结果框里能切「系统自带 / 随包的本地组件」。另外修掉 125% 缩放被画成 100%，大截图取字前也不再被缩到 960 像素。上一版的滚动长截图重做见下面 `v1.1.0`。
 
 [全部更新内容 →](https://github.com/ExpertKT/SnapWheel/releases) ・ [CHANGELOG](CHANGELOG.md)
 
