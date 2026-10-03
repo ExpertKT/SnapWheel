@@ -6,6 +6,15 @@
 
 > “Maybe the best screenshot tool out there” — a line of self-praise. Decide for yourself once you've used it.
 
+![platform](https://img.shields.io/badge/platform-Windows%207%20%7C%2010%20%7C%2011-0078d4?style=flat-square)
+![.NET](https://img.shields.io/badge/.NET%20Framework-4.x-512bd4?style=flat-square)
+![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![version](https://img.shields.io/badge/version-v1.2.0-blue?style=flat-square)
+![status](https://img.shields.io/badge/status-stable-brightgreen?style=flat-square)
+![size](https://img.shields.io/badge/exe-384%20KB-lightgrey?style=flat-square)
+![downloads](https://img.shields.io/github/downloads/ExpertKT/SnapWheel/total?style=flat-square)
+![stars](https://img.shields.io/github/stars/ExpertKT/SnapWheel?style=flat-square)
+
 ![SnapWheel demo](docs/demo.gif)
 
 | | |
