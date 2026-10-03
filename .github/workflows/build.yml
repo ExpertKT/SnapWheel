@@ -53,7 +53,8 @@ jobs:
           # （build.ps1 只摘出失败那几行）。
           $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           $wr  = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll"
-          & $csc /nologo /target:exe /main:SnapWheel.UiProbe /out:$env:TEMP\uiprobe.exe /r:$wr src\*.cs tests\ui-probe.cs
+          $vb  = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Microsoft.VisualBasic.dll"
+          & $csc /nologo /target:exe /main:SnapWheel.UiProbe /out:$env:TEMP\uiprobe.exe /r:$wr /r:$vb src\*.cs tests\ui-probe.cs
           & "$env:TEMP\uiprobe.exe" | Tee-Object -FilePath uiprobe.txt
           Get-Content uiprobe.txt | Select-Object -Last 3
 

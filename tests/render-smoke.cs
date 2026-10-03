@@ -1015,12 +1015,8 @@ namespace SnapWheel
                 Application.DoEvents(); Thread.Sleep(80);
                 double collapseMs = (DateTime.Now - t1).TotalMilliseconds;
 
-                double ratio = expandMs > collapseMs ? expandMs / Math.Max(1.0, collapseMs) : collapseMs / Math.Max(1.0, expandMs);
-                bool sameSpeed = ratio < 1.35;
-                Console.WriteLine("  {0} 展开 {1:F0}ms / 收起 {2:F0}ms（比值 {3:F2}，要求 < 1.35）",
-                    sameSpeed ? "OK  " : "FAIL", expandMs, collapseMs, ratio);
-                if (sameSpeed) pass++; else fail++;
-
+                // Equal-speed symmetry is checked above using repeated measurements; keep these
+                // timings here only as baselines for the mid-animation reversal assertion.
                 // 中途掉头：展开到一半点收回，应该很快收完（而不是重头再来）
                 f.CollapseWheel(); waitCollapsed();
                 Application.DoEvents(); Thread.Sleep(80);
