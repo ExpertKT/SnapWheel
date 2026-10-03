@@ -68,12 +68,165 @@ namespace SnapWheel
             // ---------- ③b 换引擎之后**真的**重新识别并把原文换掉 ----------
             ProbeOcrSwitch();
 
+            // ---------- ④ 设置里那个新的「移进来」开关（1.3.0）----------
+            ProbeMoveInToggle();
+
+            // ---------- ⑤ 改名字那个小窗口里新的「这个环收什么」（1.3.0 的 takes）----------
+            ProbeWheelTakes();
+
             Console.WriteLine();
             Console.WriteLine(string.Format("结果：通过 {0}，失败 {1}", pass, fail));
             Environment.ExitCode = fail == 0 ? 0 : 1;
         }
 
-        // ---------- 【新】标记：只有"比用户上次看过的那版更新"的说明才该标 ----------
+        // ---------- ④ 设置里那个新的「移进来」开关（1.3.0）----------
+        //
+        // 为什么值得单独钉一条：新加一个勾选框最容易犯的错是**加了控件、忘了接保存**
+        // ——界面上能勾、确定之后什么都没发生，而且没有任何渲染/逻辑测试会红
+        //（这个项目在 0.9.x 踩过一次"确定后改动打回原形"，所以这类断言留在这儿）。
+        // 全链路：界面勾上 → SaveFromUi → Settings.MoveInOnDrop → WheelManager.ApplySettings → Store.MoveInOnDrop。
+        static void ProbeMoveInToggle()
+        {
+            SettingsForm f = null;
+            try
+            {
+                string ini = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapwheel_uiprobe_settings.ini");
+                string meta = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapwheel_uiprobe_wheels.txt");
+                try { if (System.IO.File.Exists(ini)) System.IO.File.Delete(ini); } catch { }
+                Settings.OverridePath = ini;
+                WheelManager.OverrideMetaPath = meta;
+
+                Settings s = new Settings();
+                s.MoveInOnDrop = true;          // 初始态必须**跟着设置走**，不能永远 false
+                f = new SettingsForm(s);
+                f.CreateControl();
+                IntPtr h = f.Handle;            // 强制建句柄，触发布局
+                f.PerformLayout();
+
+                FieldInfo fi = typeof(SettingsForm).GetField("_chkMoveIn", BindingFlags.Instance | BindingFlags.NonPublic);
+                Check("设置界面 · 第 1 页有「移进来」开关", fi != null, "找不到 _chkMoveIn 字段");
+                if (fi != null)
+                {
+                    CheckBox c = fi.GetValue(f) as CheckBox;
+                    // ⚠️ 这里**不能**判 c.Visible：窗口从来没 Show 过，WinForms 的 Visible getter 会连带父级一起算，
+                    // 于是永远回 false（假警报）。"看得见"这件事由下面那条几何断言负责（在不在客户区里）。
+                    Check("设置界面 · 开关挂在页面上、没被禁掉", c != null && c.Parent != null && c.Enabled,
+                          "控件没挂进布局 或 Enabled 为假");
+                    if (c != null)
+                    {
+                        Check("设置界面 · 开关初始状态跟着设置走", c.Checked, "MoveInOnDrop=true 但勾选框是空的");
+
+                        // 用户实测反馈（2026-09-27）："移进来的功能不生效"，而他 settings.ini 里 MoveInOnDrop=0。
+                        // 所以先钉住一件在真机上才会不同的事：**这一行到底在不在窗口里**。
+                        // 它是第 1 页最后一行，而窗口高度上限是工作区的 92%，页面又不会滚动 —— 长过头就被裁掉，
+                        // 裁掉 = 用户根本点不到，功能"不生效"。
+                        Control rowHost = c.Parent;
+                        while (rowHost != null && rowHost.Parent != f) rowHost = rowHost.Parent;   // 找到直接挂在窗体上的那一层
+                        if (rowHost != null)
+                        {
+                            Rectangle rb = InRoot(f, rowHost);
+                            Check("设置界面 · 「移进来」开关在窗口可见范围内（顶 " + rb.Top + " 底 " + rb.Bottom
+                                  + " 左 " + rb.Left + " 右 " + rb.Right + " / 客户区 " + f.ClientSize.Width + "×" + f.ClientSize.Height + "）",
+                                  rb.Bottom > 0 && rb.Bottom <= f.ClientSize.Height && rb.Left >= 0 && rb.Right <= f.ClientSize.Width,
+                                  "开关落在窗口外（被裁掉了），用户点不到它");
+                        }
+
+                        c.Checked = false;      // 用户把它关掉
+                        MethodInfo mi = typeof(SettingsForm).GetMethod("SaveFromUi", BindingFlags.Instance | BindingFlags.NonPublic);
+                        Check("设置界面 · 找得到保存函数（SaveFromUi）", mi != null, "没有 SaveFromUi");
+                        if (mi != null)
+                        {
+                            mi.Invoke(f, null);
+                            Check("设置界面 · 关掉之后真的写回了设置", !s.MoveInOnDrop, "点了确定 MoveInOnDrop 还是 true");
+                        }
+
+                        // 上面那条走的是反射调 SaveFromUi；用户走的是**真按钮**。两条路要都能到。
+                        // ⚠️ 不能用 ok.PerformClick()（没 Show 过的窗口 CanSelect 为假，不触发 Click），
+                        // 所以直接反射调 RoundButton.OnClick —— 跟 ProbeWheelTakes 里同一个坑。
+                        c.Checked = true;
+                        Button okBtn = null;
+                        Walk(f, delegate(Control cc)
+                        {
+                            Button b = cc as Button;
+                            if (okBtn == null && b != null && b.Text == Lang.T("确定", "OK")) okBtn = b;
+                        });
+                        Check("设置界面 · 找得到「确定」按钮", okBtn != null, "按钮树上没有「确定」");
+                        if (okBtn != null)
+                        {
+                            MethodInfo oc = typeof(Control).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic);
+                            if (oc != null) oc.Invoke(okBtn, new object[] { EventArgs.Empty });
+                            Check("设置界面 · 点真「确定」把开关写回设置", s.MoveInOnDrop,
+                                  "勾上「移进来」后点确定，MoveInOnDrop 还是 false");
+                        }
+                    }
+                }
+
+                // 设置 → 轮盘 → 格子：中间这两行如果写错（比如接成了 SaveToDisk），下面这条会红
+                Settings s2 = new Settings();
+                s2.MoveInOnDrop = true;
+                WheelManager wm = new WheelManager(s2);
+                wm.ApplySettings();
+                Check("设置 → 轮盘 → 格子：开关真的传到 Store 上（不是接错线）", wm.ActiveStore.MoveInOnDrop,
+                      "ApplySettings 没把 MoveInOnDrop 设下去");
+            }
+            catch (Exception ex) { Check("设置界面 · 移进来开关探针没炸", false, ex.GetType().Name + " " + ex.Message); }
+            finally { if (f != null) try { f.Dispose(); } catch { } }
+        }
+
+        // ---------- ⑤ 改名字那个小窗口里新的「这个环收什么」（1.3.0 的 takes）----------
+        //
+        // 钉的是**选择有没有真的交出去**：窗口里选好之后按「改好了」，RenameWheel 才会拿 rf.Takes
+        // 写回 Wheel.Takes 并落盘。这类"控件建了、值没接出来"的错和上一条（勾选框没接保存）是同一类。
+        static void ProbeWheelTakes()
+        {
+            RenameForm rf = null;
+            try
+            {
+                string ini = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapwheel_uiprobe_settings.ini");
+                string meta = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "snapwheel_uiprobe_wheels.txt");
+                Settings.OverridePath = ini;
+                WheelManager.OverrideMetaPath = meta;
+
+                rf = new RenameForm(Lang.T("项目", "Project"), Wheel.TakesAny);
+                rf.CreateControl();
+                IntPtr h = rf.Handle;      // 强制建句柄，触发布局
+                rf.PerformLayout();
+
+                FieldInfo fi = typeof(RenameForm).GetField("_cmbTakes", BindingFlags.Instance | BindingFlags.NonPublic);
+                Check("改名字窗口 · 有「这个环收什么」下拉框", fi != null, "找不到 _cmbTakes 字段");
+                if (fi != null)
+                {
+                    ComboBox cb = fi.GetValue(rf) as ComboBox;
+                    Check("改名字窗口 · 下拉框挂在窗口上、3 档、默认「什么都收」",
+                          cb != null && cb.Parent != null && cb.Items.Count == 3 && cb.SelectedIndex == Wheel.TakesAny,
+                          cb == null ? "控件没挂进布局" : cb.Items.Count + " 档，选中 " + cb.SelectedIndex);
+                    // 三档的**顺序**就是 takes 的取值顺序（0/1/2）：上面那条注释写死了这个约定，这里钉住它
+                    if (cb != null)
+                    {
+                        Button ok = null;
+                        Walk(rf, delegate(Control c)
+                        {
+                            Button b = c as Button;
+                            if (ok == null && b != null && b.Text == Lang.T("改好了", "Renamed")) ok = b;
+                        });
+                        Check("改名字窗口 · 找得到「改好了」按钮", ok != null, "没有 RoundButton");
+                        cb.SelectedIndex = Wheel.TakesImage;
+                        // ⚠️ 不能用 ok.PerformClick()：它内部有 CanSelect 这道门，窗口没 Show 过就**不会**触发 Click
+                        // （而这里特意不 Show —— 跑测试不该在用户屏幕上闪一个对话框）。
+                        // 直接触发 Click 事件本身：要钉的正是"挂在 Click 上那个委托有没有把值交出来"。
+                        if (ok != null)
+                        {
+                            MethodInfo oc = ok.GetType().GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic);
+                            if (oc != null) oc.Invoke(ok, new object[] { EventArgs.Empty });
+                        }
+                        Check("改名字窗口 · 按了「改好了」之后选择真的交出来了（RenameWheel 才能写回环上）",
+                              rf.Takes == Wheel.TakesImage, "Takes=" + rf.Takes);
+                    }
+                }
+            }
+            catch (Exception ex) { Check("改名字窗口 · 收什么探针没炸", false, ex.GetType().Name + " " + ex.Message); }
+            finally { if (rf != null) try { rf.Dispose(); } catch { } }
+        }
         //
         // 为什么要专门测它：原来的实现是一个**写死的布尔量**贴在 7 条说明上，
         // 于是每次升级那 7 条都重新标一遍【新】—— 升到 0.9.4 还在说「传递模式」是新的（那是 0.9.0 的东西）。

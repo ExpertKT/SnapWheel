@@ -261,6 +261,26 @@ namespace SnapWheel
             while (st.Items.Count > 0) st.Items.RemoveAt(0);
             ShotWheel(mgr, s, Path.Combine(outDir, "wheel_empty.png"), null);
 
+            // 非图片格一览（1.3.0）：文件格按类型上色 + 文字格。
+            // 单独出一张 kinds.png，而不是把它们混进上面那批 —— 上面那些图是别的功能拿来对照的金标准，
+            // 多塞几格会让"某张图变了"分不清是改坏了还是种子变了。
+            Console.WriteLine("纸格（文件类型配色 / 文字）:");
+            {
+                string kdir = Path.Combine(Path.GetTempPath(), "snapwheel_ui_kinds");
+                Directory.CreateDirectory(kdir);
+                string[] kn = { "方案.pdf", "预算.xlsx", "汇报.pptx", "备份.zip", "配乐.mp3", "补丁.exe", "随手记.xyz" };
+                foreach (string nm in kn)
+                {
+                    string p = Path.Combine(kdir, nm);
+                    File.WriteAllText(p, "内容无所谓，格子只看后缀");   // 引用原文件（SaveToDisk=false），不往环目录里拷
+                    string note; st.AddFile(p, false, out note);
+                }
+                st.AddText("拖进来的文字单独成格");
+                s.Slots = 8;                                   // 上面 7 个文件 + 1 格文字 = 8，刚好一页
+                ShotWheel(mgr, s, Path.Combine(outDir, "kinds.png"), null);
+                s.Slots = 5;
+            }
+
             Console.WriteLine("设置窗口:");
             ShotSettings(s, Path.Combine(outDir, "settings.png"));
 

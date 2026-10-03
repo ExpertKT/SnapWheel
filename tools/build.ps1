@@ -52,6 +52,16 @@ foreach ($cand in @(
 }
 
 if ($winrtRefs.Count -eq 0) { Write-Host "  [i] 没找到 System.Runtime.WindowsRuntime.dll —— OCR 会编译不进去" -ForegroundColor Yellow }
+
+# 「移进来」把文件送回收站用 Microsoft.VisualBasic（同样是框架自带的程序集，不是第三方依赖）
+$vbRefs = @()
+foreach ($cand in @(
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\Microsoft.VisualBasic.dll'),
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\Microsoft.VisualBasic.dll'))) {
+    if (Test-Path $cand) { $vbRefs = @("/r:$cand"); break }
+}
+if ($vbRefs.Count -eq 0) { Write-Host "  [i] 没找到 Microsoft.VisualBasic.dll —— 「移进来」会编译不进去" -ForegroundColor Yellow }
+$refs = $winrtRefs + $vbRefs
 if (-not (Test-Path $ico)) { Bad "找不到图标: $ico"; exit 1 }
 
 # ---- 找 csc.exe（.NET Framework 自带的编译器，无需装 Visual Studio）----
@@ -87,8 +97,8 @@ Info ""
 # ---- 编译两条线 ----
 function Invoke-Build($define, $exeName, $label) {
     $target = Join-Path $out $exeName
-    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target") + $winrtRefs + $sources
-    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target") + $winrtRefs + $sources }
+    $args = @('/nologo', '/optimize+', '/target:winexe', "/win32icon:$ico", "/out:$target") + $refs + $sources
+    if ($define) { $args = @('/nologo', '/optimize+', "/define:$define", '/target:winexe', "/win32icon:$ico", "/out:$target") + $refs + $sources }
     $log = & $csc @args 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $target)) {
         Bad "$label 编译失败"
@@ -142,7 +152,7 @@ if ($Test) {
         if ($define) { $a += "/define:$define" }
         if ($main)   { $a += "/main:$main" }
         $a += @("/out:$exe")
-        if ($main -or $define) { $a += $winrtRefs; $a += $sources }
+        if ($main -or $define) { $a += $refs; $a += $sources }
         $a += (Join-Path $root "tests\$file")
         & $csc @a 2>&1 | Where-Object { $_ -match ': error' } | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
         if (-not (Test-Path $exe)) { Bad "$name 编译失败"; return }
@@ -157,7 +167,17 @@ if ($Test) {
         $ErrorActionPreference = $prevEap
         $last = ($o | Where-Object { $_ -match '通过|ALL PASS|FAILURES' } | Select-Object -Last 1)
         $failed = ($o | Where-Object { $_ -match 'FAIL' }).Count
-        if ($failed -eq 0) { Ok ("{0,-22} {1}" -f $name, $last) }
+        # 没有结论行 = 这个测试没跑完（崩了、卡了、或者根本没输出）。
+        # 这条门是 2026-09-27 拿血换的：render-smoke 里一行反射拼构造的代码崩了
+        # （System.MissingMethodException），它**不吐任何 FAIL 字样**，于是这里
+        # `$failed -eq 0` 成立、$last 是空的，屏幕上就只有一行光秃秃的 `[OK] 绘制/风格/DPI`。
+        # 一个测试崩掉却在日志里长得像通过，比测试失败危险得多 —— 失败会有人修，静默的绿不会。
+        if (-not $last) {
+            Bad ("{0,-22} 没有结论行（这个测试没跑完 —— 崩了 / 卡了 / 没输出）" -f $name)
+            $o | Where-Object { $_ -ne '' } | Select-Object -Last 6 |
+                ForEach-Object { Write-Host ("      " + $_.Trim()) -ForegroundColor Red }
+        }
+        elseif ($failed -eq 0) { Ok ("{0,-22} {1}" -f $name, $last) }
         else {
             Bad ("{0,-22} {1}（有 {2} 处 FAIL）" -f $name, $last, $failed)
             # 把挂掉的那几条**原样打出来**。
@@ -247,6 +267,15 @@ if ($Test) {
     # 开发机上本来就没有那 21MB 组件，所以**正常情况下它是"跳过"**；只有带着组件跑（或用
     # SNAPWHEEL_OCR_DIR 指过去）时才有断言 —— 它红了才说明那一路真的坏了。
     Run-Test '取字-本地引擎'   'ocr-native-test.cs'       'SnapWheel.OcrNativeTest' $null
+    # 一格的种类 + 「移进来」（1.3.0）：盯的是盘上真的发生了什么 —— 留一份时原文件还在，
+    # 移进来时原文件消失且回收站条目 +1，拿不到回收站时**绝不动原文件**。
+    Run-Test '格子种类/移进来' 'store-kind-test.cs'       'SnapWheel.StoreKindTest' $null
+    # 重启之后格子回不回得来（1.3.0）。LoadImagesFromDisk 是**按文件名前缀**重建环的，
+    # 所以「落盘」和「回读」是两件事 —— "落盘回读"那条以前测的是 takes 那一列，不是格子。
+    Run-Test '重启/格子回读'   'ring-restart-test.cs'      'SnapWheel.RingRestartTest' $null
+    # 环的目录名是按显示名生成的，而显示名可以重复 —— 同名就共用一个目录，
+    # 删一个环时原来直接递归删目录，会把**另一个环**的图一起删掉（绕过 Owned 闸，真丢过数据）。
+    Run-Test '环目录不撞车'    'ring-dir-test.cs'          'SnapWheel.RingDirTest' $null
 
     # 「代码被注释吞掉」检查 —— 编译器和测试都看不见这类事故，但真出过：
     # v0.8.1 插入的 --apply-update 分支被挤进注释里，让「下载并安装更新」静默失效了好几个版本。

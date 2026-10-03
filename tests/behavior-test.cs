@@ -1525,7 +1525,20 @@ namespace SnapWheel
                 Call(f, "OnClipboardChanged");             // 模拟剪贴板监听被触发（反射，不碰鼠标键盘）
                 int n1 = st.Items.Count - before;
                 if (n1 != 1) return "一次截图收进了 " + n1 + " 张（应该是 1 张：App 加的那张，监听不该再加）";
-                if (SelfClipboard.Pending) return "跳过一次之后登记没清掉（会一直屏蔽下去）";
+                if (SelfClipboard.Pending)
+                {
+                    // 先分清"是我们没清登记"还是"剪贴板刚好被别的程序占着、监听根本没读成图"：
+                    // 后者不是这条回归要管的事（真机上微信/浏览器会短暂占着剪贴板），跳过不算失败。
+                    bool readable = false;
+                    try { readable = Clipboard.ContainsImage(); }
+                    catch (Exception) { readable = false; }
+                    if (!readable)
+                    {
+                        Console.WriteLine("  （跳过：剪贴板这次读不到图，监听没跑完，判不了登记清没清）");
+                        return null;
+                    }
+                    return "跳过一次之后登记没清掉（会一直屏蔽下去）";
+                }
 
                 // 同一张图再来一条通知（系统对一次写剪贴板可能通知不止一次）：也不该又收一张
                 Clipboard.SetImage(o.Result);

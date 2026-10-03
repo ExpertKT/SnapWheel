@@ -290,7 +290,10 @@ namespace SnapWheel
                 // 窗口没显示过，PerformClick 会因为 CanSelect=false 而不触发，这里直接走 OnClick
                 MethodInfo onClick = typeof(Control).GetMethod("OnClick", BindingFlags.NonPublic | BindingFlags.Instance);
                 Action<Button> press = delegate(Button b) { onClick.Invoke(b, new object[] { EventArgs.Empty }); };
-                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "项目1" }))
+                // ⚠️ RenameForm 现在多一个 takes 参数（这个环收什么）。这是反射拼的构造，
+                // 改了签名编译器不会提醒 —— 2026-09-27 就是这么把这个测试打崩的：
+                // 崩掉之后没有"通过 N / 失败 N"结论行，而 build.ps1 只看结论行 → 静默变绿。
+                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "项目1", Wheel.TakesAny }))
                 {
                     ((TextBox)boxF.GetValue(d)).Text = "  新项目  ";
                     press(okBtn(d));
@@ -299,7 +302,7 @@ namespace SnapWheel
                     Console.WriteLine("  {0} 输入「  新项目  」-> 存成「{1}」", ok ? "OK  " : "FAIL", got);
                     if (ok) pass++; else fail++;
                 }
-                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "项目2" }))
+                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "项目2", Wheel.TakesAny }))
                 {
                     ((TextBox)boxF.GetValue(d)).Text = "   ";
                     press(okBtn(d));
@@ -308,7 +311,7 @@ namespace SnapWheel
                     Console.WriteLine("  {0} 空名字 -> 回退原名「{1}」", ok ? "OK  " : "FAIL", got);
                     if (ok) pass++; else fail++;
                 }
-                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "x" }))
+                using (Form d = (Form)Activator.CreateInstance(rf, new object[] { "x", Wheel.TakesAny }))
                 {
                     ((TextBox)boxF.GetValue(d)).Text = new string('长', 80);
                     press(okBtn(d));

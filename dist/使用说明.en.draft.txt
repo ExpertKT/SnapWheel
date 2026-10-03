@@ -1,0 +1,118 @@
+﻿SnapWheel Snapshot Wheel v1.2.0
+========================================
+
+Author: exper7
+Portable and installation-free: Double-click SnapWheel.exe to use it without installing anything (Windows 7 / 10 / 11).
+On Windows 7, the "Text Capture" feature requires an additional local component included with the package; see the Win7 package on the Release page. (Windows 10 / 11 can use the system's built-in version.)
+
+
+[First Launch]
+  A beginner guide will automatically pop up once; just read it and close it.
+  ★ The guide window **can be resized by dragging its border**; the text will rewrap accordingly — if you cannot see all content on a small laptop screen, simply drag it larger.
+  Afterwards, it will hide in the system tray at the bottom-right corner, with a small wheel icon attached to the screen corner.
+
+
+[Basic Usage]
+  Screenshot    Ctrl+Shift+S → Drag to select an area, resize by dragging corners, rotate by dragging the rotation knob on top,
+                confirm with double-click or Enter; press Right Click while selecting to cancel (it will not pop up on the desktop).
+  Annotate      After taking a screenshot, do not rush to confirm: the toolbar above the floating layer has Arrow / Box / Mosaic / Text
+                (shortcuts A / R / M / T), available in four colors. Ctrl+Z to undo, Ctrl+Y to redo.
+                After typing text, you can drag its position and change size with the scroll wheel; press B to toggle off the white background if desired.
+  Stick to Screen The **nail at the far right of the floating layer toolbar**: after selecting an area, click it to instantly pin the image at your selected location,
+                while it is also saved normally to the wheel. You can also use the mouse middle button on thumbnails:
+                scroll to zoom, drag to move, double-click or press Esc to close; the tray offers a one-click option to remove all pinned images.
+  Text Capture (OCR) Click "Text" on the toolbar (or press O) → Drag a box around the text → It will be recognized and automatically copied.
+                In the result window, you can also translate the result to Chinese / English with one click.
+                If you don't want to take a screenshot: Right-click the tray → "Text Capture: Recognize image in clipboard".
+                In the result window, there is a line for "OCR Engine"; you can choose: Automatic (recommended) / System Built-in (fast, but short titles and small text may cause entire lines to be missed) / Included Local Component (slower, full screen takes 3~4 seconds, fewer missed characters). After selection, the same image will be recognized again.
+  Long Screenshot Click "Long Image" on the floating layer toolbar, then slowly scroll down the page yourself; it will stitch each screen into one long image.
+                ★ **Only the content that scrolls with your box is selected** — sidebar, browser tabs, and floating windows
+                  which **do not scroll** will be treated as new content and stitched in screen by screen.
+                  This is the boundary of this long screenshot method; similar tools behave the same way.
+                ★ The taskbar strip has been automatically excluded; no need to avoid it yourself.
+  Pass Mode     Ctrl+Alt+C — Send images without using the mouse:
+                First, use the scroll wheel to select the image you want to send, press the hotkey to enter Pass Mode, a "fake cursor" appears on screen,
+                and the selected thumbnail sticks to the bottom-right corner. Switch to WeChat / documents yourself via Alt+Tab,
+                move the fake cursor using **arrow keys** (Shift for acceleration), and press Space to place it.
+                [ ] Switch image, C to copy without pasting, Esc to cancel.
+                ★ Recommended to use arrow keys: WASD also works, but will type letters into the target window.
+  Save As       Press Ctrl+S on a thumbnail (select path and format); click a grid once to copy it itself
+                (image = image; text grid = that segment of text; file grid = that file); double-click to open.
+  Undo Delete   Don't panic if you delete by mistake: Right-click the tray → "Undo Last Deletion",
+                the batch just deleted (the whole batch if cleared at once) will be returned to the original disk, and up to the last 8 deletions are remembered.
+                (Only deletions during this session are remembered; exiting the program clears them — please drag images you want to keep long-term into a folder for safekeeping.)
+  Flip Image    Hover mouse over the wheel and scroll
+
+View Large Image      Hold on a thumbnail for about 0.3 seconds to enlarge the preview (zoom level adjustable)
+  Drag Out         Drag a tile to WeChat / folder / anywhere (dragging a text tile to the desktop creates a .txt file)
+                    ★ Default: "Keep a copy after dragging out" — the item does not disappear from the ring (dragging itself is a copy operation)
+  Drag Back         Drag from desktop / browser / anywhere into here: images become image tiles, other files (PDF, zip, documents)
+                    become "file tiles"; selecting and dragging **a segment of text** from a webpage or Notepad = "text tile".
+                    Tile appearance follows content: images = glass cards, text / files = a piece of paper.
+                    File tiles are color-coded by type for instant recognition: document=blue, spreadsheet=green, presentation=orange, archive=yellow,
+                    media=purple, program=gray; unrecognized items retain the natural paper color.
+  Move In           Settings on page 1 (bottom) can enable "Move In" for files dragged in: files are **moved** from their original location (not copied),
+                    recoverable from Recycle Bin; if unchecked, originals remain (default, and prompts will tell you where to open them after dragging in).
+                    ★ When Recycle Bin is unavailable (network drives, read-only locations), it **never deletes the original**, leaves a copy in the ring, and informs you directly.
+                    ★ "Move In" only moves from the original location when activated; if files are already in place (move failed or switch unchecked),
+                      deleting a tile simply removes that tile from the ring, **it does not affect files on your drive**.
+  Copy to Ring      "Copy" an image anywhere, and it automatically slides into the wheel (can be disabled in settings)
+  Change Wheel      Long-press the inner disk on the ring (universal key): Up=New, Right=Next, Down=Delete, Left=Previous;
+                    Release while on "Delete" turns left half green=Cancel / right half red=Confirm
+  Rename            Hover mouse over a name pill on the wheel, click once to rename, and select "What this ring collects"
+                    (Collect all / images only / text only — items not collected are blocked upon drag-in with a notification)
+                    ★ Screenshot hotkeys ignore this: pressing the key always produces an image; screenshots won't be lost even if "this ring doesn't collect images"
+  Import Images     Right-click tray → Import Images… (multiple selection allowed)
+  Show / Hide       Double-click tray, or tray menu "Show/Hide Wheel"
+
+
+【Supported Image Formats】
+  png / jpg / jpeg / bmp / gif / tif / ico / webp / heic / avif / jxl / camera RAW …
+  Dragging folders also works (automatically takes files from the first layer, max 50 at once); non-image files become "file tiles".
+  Opaque photos are saved as JPEG, transparent ones as PNG; large images over 4096px are automatically resized to 4096.
+
+
+【Settings Options】
+  Behavior         Save to disk, auto-start on boot, save directory, screenshot hotkey, ring corner position, delete method, Wheel switching mode,
+                    auto-collapse when idle, always on top, keep copy after dragging out, clipboard auto-collection, "Move In" for dragged-in files
+  Appearance       Thumbnail size, ring radius, arc tile count, serial number font size, long-press zoom level, startup animation toggle
+  Style            Interface style (Neumorphism+Glass / Pure Flat / High Contrast), theme color, glass opacity,
+                    card border radius, shadow intensity, animation speed, name/count label toggles,
+                    glass blur refresh timer, ripples, ring shadow, time perception (all can be individually disabled)
+  Advanced         Interface scaling, interface style details, translation interface
+  ★ "Make wheel visible during screen recording" at bottom of Style page:
+    Wheel is invisible to screen capture by default (so it won't appear in your own screenshots),
+    but the marker on Windows 10 2004+ **blocks even screen recording** — enable this if you want to record demo videos.
+    (This marker doesn't exist on Windows 7: wheel is always visible, so this option has no effect there.)
+    After enabling, the wheel will also appear in your screenshots; remember to turn it off after recording.
+
+
+【Resolution / Scaling】
+
+The entire wheel scales proportionally with the monitor's DPI (text and icons grow together), so it won't distort on 2K, 4K, or small laptop screens; using it across multiple monitors with different scaling settings is also fine.  
+To manually adjust: Settings → Advanced → Interface Scaling (Auto / 80% ~ 250%).  
+If the content doesn't fit, it will automatically scale down one more level and won't push content off-screen.
+
+
+【Two common pitfalls, clarified upfront】
+1. Do not run as "Run as administrator".  
+   Windows will block drag-and-drop between administrator programs and the desktop/Explorer, resulting in "no matter how you drag, it won't enter".  
+   If accidentally started as administrator, a bubble notification will appear in the tray; right-clicking the tray offers "Restart with normal privileges".
+2. When dragging an image into the wheel, if the wheel is in display state (hidden when no window is shown), it cannot accept the drag.
+3. When taking a screenshot, a certain window "disappears" (most typical is WeChat): that is because **that program itself prevents screenshots**  
+   (it sets Windows to "Exclude me from screenshots"), and this applies to any similar tool — including Win+Shift+S.  
+   It is not SnapWheel malfunctioning.
+
+
+【Automatic Updates】
+Right-click the tray → "Check for updates". If a new version is found, it will download and ask whether you want to restart and install now.  
+You can also disable automatic checks at startup in Settings.
+
+
+【Where Data Is Stored】
+Settings        %APPDATA%\SnapWheel\settings.ini  
+Wheel List     %APPDATA%\SnapWheel\wheels.ini  
+Error Log      %APPDATA%\SnapWheel\error.log (the program does not exit abnormally due to issues; all problems are recorded here)  
+Saved Screenshots   The "Save Directory" in Settings, defaulting to Pictures\SnapWheel (must enable "Save to Disk" in Settings)  
+Usage Statistics   Disabled by default. When enabled, it only records on the local machine which feature was used and how many images are on each ring; it does not record window titles, file names, or text on images, and **does not upload anything**  
+To Restore Defaults   Delete the entire %APPDATA%\SnapWheel folder and restart (equivalent to a fresh install)

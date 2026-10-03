@@ -306,7 +306,10 @@ namespace SnapWheel
                             S(f, "_show", 1f); S(f, "_intro", false); S(f, "_collapsing", false);
                             S(f, "_collapsed", false); S(f, "_showAnimating", false);
                             // 只摆当前这一条，另外两条必须**不出现**（它们共用状态区那一格）
-                            S(f, "_toast", k == 0 ? "松手把 3 张图加入「项目1」" : "");
+                            // 用**最长的那条真实提示**（"移进来"失败时带原因的文案）来量：
+                            // 用户实测"这句提示很长，左边一部分都出屏幕外了" —— 短样例量不出来。
+                            S(f, "_toast", k == 0 ? "已加入 1 格（图片 0 / 文件 1） · 原件没动 —— " +
+                                                    "环里留了一份副本（另一个程序正在使用此文件，进程无法访问。）" : "");
                             S(f, "_toastAt", DateTime.Now.AddSeconds(-0.35));
                             S(f, "_dropActive", k == 1); S(f, "_dropExternal", k == 1);
                             S(f, "_dropCount", 3);

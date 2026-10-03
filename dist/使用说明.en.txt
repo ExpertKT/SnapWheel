@@ -1,0 +1,118 @@
+﻿SnapWheel Snapshot Ring v1.2.0
+========================================
+
+Author: exper7
+Portable, no installation needed: double-click SnapWheel.exe and it just runs (Windows 7 / 10 / 11).
+On Windows 7, OCR needs the bundled local component that comes with the app. Get it from the Win7 package on the Release page. On Windows 10 / 11, the one built into the system is enough.
+
+
+[First Launch]
+  The first-run guide pops up once. Read it, then close it.
+  ★ You can **drag the border of the guide window to make it larger**. The text rewraps to fit. If you can't see it all on a small laptop screen, just drag it bigger.
+  After that it tucks itself into the tray at the bottom-right, with a small ring sitting in the corner of your screen.
+
+
+[Basic Usage]
+  Screenshot    Ctrl+Shift+S → Drag to select an area. Drag the corners to resize, and drag the rotation knob on top to turn it.
+                Double-click or press Enter to confirm. Right-click while selecting to cancel (it won't jump out to the desktop).
+  Annotate      Don't confirm the shot too soon. The toolbar above the overlay has Arrow / Box / Mosaic / Text
+                (shortcuts A / R / M / T), in four colors. Ctrl+Z undoes, Ctrl+Y redoes.
+                Once you type text, you can drag it around and resize it with the scroll wheel. Press B to drop the white background.
+  Pin to Screen The **pin at the far right of the overlay toolbar**: select your area, click it, and the image is pinned right where you framed it.
+                It is saved to the ring as usual. You can also press the middle mouse button on a thumbnail:
+                scroll to zoom, drag to move, double-click or press Esc to close. The tray can take down every pinned image in one click.
+  OCR           Click "OCR" on the toolbar (or press O) → drag a box around the text → it reads the text and copies it for you.
+                In the result window you can also translate it into Chinese or English with one click.
+                Don't feel like taking a screenshot? Right-click the tray → "OCR: recognize the image in the clipboard".
+                The result window has an "OCR engine" row where you can pick one: Automatic (recommended) / System built-in (fast, but it tends to drop whole lines of short titles and small text) / Bundled local component (slower, 3~4 seconds for a full screen, but it misses less).
+                After you choose, it runs OCR again on the same image.
+  Scrolling shot Click "long shot" on the overlay toolbar, then scroll down the page slowly yourself. It stitches each screen into one long shot.
+                 ★ **Only select the part that scrolls with your box**. Sidebars, browser tab bars and floating windows
+                   don't scroll along. They get treated as new content and stitched in again screen after screen.
+                   That is the limit of this way of capturing. Every tool like this works the same way.
+                 ★ The taskbar strip is already excluded for you. You don't have to dodge it.
+  Pass mode     Ctrl+Alt+C — send an image out without ever touching the mouse:
+                scroll to the image you want, press the hotkey, and a "fake cursor" appears on screen with that thumbnail docked at the bottom-right.
+                Alt+Tab over to WeChat or your document yourself, move the fake cursor with the **arrow keys** (hold Shift to speed up), and press Space to drop it.
+                [ ] switches to another image, C copies without pasting, Esc cancels.
+                ★ Use the arrow keys. WASD works too, but it types letters into the target window.
+  Save As       Press Ctrl+S on a thumbnail to pick a path and a format. Click a cell once to copy what it holds
+                (an image copies the image, a text cell copies that text, a file cell copies that file). Double-click to open it.
+  Undo Delete   Deleted something by mistake? Don't worry. Right-click the tray → "Undo Last Delete".
+                The batch you just deleted goes back to the ring it came from. Clear a ring in one go and the whole batch comes back. It remembers your last 8 deletions.
+                (It only covers deletions from this run. Quitting the program clears the list. To keep an image for good, drag it into a folder.)
+  Flip through  Put the mouse on the ring and scroll.
+  View Larger   Hold on a thumbnail for about 0.3 seconds to see a bigger preview (the zoom is adjustable).
+  Drag Out      Drag a cell to WeChat, a folder, or anywhere else. Drag a text cell to the desktop and you get a .txt file.
+                ★ It keeps a copy after you drag out, and that is the default. The cell doesn't vanish from the ring. Dragging means copy.
+  Drag In       Drag in from the desktop, a browser, or anywhere else: images become image cells, and other files (PDF, zip, documents)
+                become "file cells". Select **a piece of text** in a web page or Notepad and drag it in, and it becomes a "text cell".
+                Cells look like what they hold: an image is a glass card, and text or a file is a sheet of paper.
+                File cells are colored by type as well, so you can tell them apart at a glance: documents are blue, spreadsheets green, presentations orange, archives yellow,
+                media purple, and programs gray. Anything it can't recognize keeps the plain paper color.
+  Move in       Settings page 1 has "Move in" for files you drag in, at the bottom. Files are **moved** out of where they were, not copied.
+                You can get them back from the Recycle Bin. Leave it unchecked and the originals stay put (that's the default, and the prompt you get after dragging in tells you where to turn the switch on).
+                ★ When it can't reach the Recycle Bin (network drives, read-only locations), it **never deletes the original**. It keeps a copy on the ring and tells you straight out.
+                ★ Files only leave their old home when "Move in" is on. If a file never left (the move failed, or the switch is off),
+                  deleting the cell just takes that cell off the ring. It **does not touch the file on your disk**.
+  Copy & collect Copy an image anywhere and it slides into the ring on its own. You can turn this off in Settings.
+  Change Wheel  Press and hold the disk inside the ring (the Universal key): Up = new, Right = next, Down = delete, Left = previous.
+                Let go while you're on "Delete" and it splits into a green left half = cancel and a red right half = confirm.
+  Rename        Hover over the name pill on the ring and click it to rename. While you're there you can also pick "what this ring collects"
+                (anything / images only / text only — anything it doesn't collect is refused when you drag it in, and it tells you so).
+                ★ The screenshot hotkey ignores this. Press it and you always get an image. Your screenshot is never thrown away just because "this ring doesn't collect images".
+  Import Images Right-click the tray → Import Images… (you can select more than one).
+  Show / Hide   Double-click the tray, or use "Show / Hide Ring" in the tray menu.
+
+
+[Supported Image Formats]
+  png / jpg / jpeg / bmp / gif / tif / ico / webp / heic / avif / jxl / camera RAW …
+  You can drag in a folder too. It takes the files in the top level, up to 50 at a time. Files that aren't images are collected as "file cells".
+  Opaque photos are saved as JPEG, and images with transparency as PNG. Anything larger than 4096px is scaled down to 4096.
+
+
+[What You Can Change in Settings]
+  Behavior         Whether to save to disk, run at startup, the save folder, the screenshot hotkey, which corner the ring sticks to, how deletion works, how you switch Wheels,
+                   auto-collapse when idle, always on top, keep a copy after dragging out, collect from the clipboard, and "Move in" for files you drag in
+  Appearance       Thumbnail size, Ring radius, Items on the arc, size of the index numbers, long-press zoom, and the startup animation switch
+  Style            Interface style (Neumorphism + frosted glass / Pure flat / High contrast), theme color, glass opacity,
+                   card corner rounding, shadow strength, animation speed, the name and count labels,
+                   the frosted-glass refresh timer, ripples, the ring's shadow, and the sense of time. Each one can be switched off on its own.
+  Advanced         Interface scaling, interface style details, translation API
+  ★ "Let screen recording capture the ring" sits at the bottom of the Style page:
+    The ring hides from screen capture by default, so it won't show up in your own screenshots.
+    But on Windows 10 2004 and later, that flag **blocks screen recording as well**. Turn this on if you want to record a demo.
+    (Windows 7 has no such flag. There the ring can always be captured, so this option does nothing.)
+    Once it's on, the ring shows up in your own screenshots too. Turn it back off when you're done recording.
+
+
+[Resolution / Scaling]
+  The whole ring scales with your monitor's DPI. Text and icons grow together,
+  so nothing looks wrong on 2K, 4K, or a small laptop screen. Mixing different scaling across several monitors is fine too.
+  To set it by hand: Settings → Advanced → Interface scaling (Auto / 80% ~ 250%).
+  If it can't fit, it scales itself down one more step. It never pushes content off the screen.
+
+
+[Two Pitfalls, Explained Up Front]
+  1. Don't use "Run as administrator".
+     Windows blocks drag and drop between an administrator program and the desktop or File Explorer. It looks like nothing you drag ever goes in.
+     If it does start as administrator, the tray shows a balloon tip. Right-click the tray and pick "Restart with normal privileges".
+  2. The ring has to be showing when you drag an image into it. When it's hidden there is no window, so there's nothing to catch the drop.
+  3. A window that "disappears" from a screenshot (WeChat is the classic case) is **that program refusing to be captured**.
+     It tells Windows to "exclude me from screenshots", and every tool of this kind loses it too — Win+Shift+S included.
+     SnapWheel isn't broken.
+
+
+[Automatic Updates]
+  Right-click the tray → "Check for Updates". If a new version turns up, it downloads it and asks whether to restart and install now.
+  You can also turn off the automatic check at startup in Settings.
+
+
+[Where Your Data Is Stored]
+  Settings            %APPDATA%\SnapWheel\settings.ini
+  Wheel List          %APPDATA%\SnapWheel\wheels.ini
+  Error Log           %APPDATA%\SnapWheel\error.log (the program doesn't quit on errors; they're all written here)
+  Screenshots         The "Save folder" in Settings, My Pictures\SnapWheel by default. You need to turn on "Save to disk" in Settings first.
+  Usage Statistics    Off by default. When it's on, it only records on this machine which feature you used and how many items are on each ring.
+                      It doesn't record window titles, file names, or any text in your images, and it **uploads nothing**.
+  Restore Defaults    Delete the whole %APPDATA%\SnapWheel folder and start again. That's the same as a fresh install.
